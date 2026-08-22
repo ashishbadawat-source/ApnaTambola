@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 🛡️ Global Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 🔒 Core Helper Functions
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'ashishbadawat@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // 👤 Users Collection
+    match /users/{userId} {
+      allow get, list: if isValidId(userId) || true;
+      allow create, update: if isValidId(userId);
+      allow delete: if isAdmin();
+    }
+
+    // 🎮 Games Collection (Public lobby matches, Admin managed)
+    match /games/{gameId} {
+      allow get: if isValidId(gameId);
+      allow list: if true;
+      allow create, update, delete: if isValidId(gameId) && isAdmin();
+    }
+
+    // 🎟️ Tickets Collection
+    match /tickets/{ticketId} {
+      allow get: if isValidId(ticketId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(ticketId) && isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if isValidId(ticketId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow delete: if isValidId(ticketId) && isAdmin();
+    }
+
+    // 💳 Wallet Transactions
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(transactionId) && isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
+      allow update, delete: if isValidId(transactionId) && isAdmin();
+    }
+
+    // 📥 Deposit Requests (Recharge)
+    match /deposits/{depositId} {
+      allow get: if isValidId(depositId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(depositId) && isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isValidId(depositId) && isAdmin();
+    }
+
+    // 📤 Withdrawal Requests (Payout)
+    match /withdrawals/{withdrawalId} {
+      allow get: if isValidId(withdrawalId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(withdrawalId) && isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isValidId(withdrawalId) && isAdmin();
+    }
+
+    // 🏆 Winners Collection (Public leaderboards)
+    match /winners/{winnerId} {
+      allow get, list: if true;
+      allow create, update, delete: if isValidId(winnerId) && isAdmin();
+    }
+
+    // ⚙️ System settings / Admins
+    match /admins/{adminId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /system/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

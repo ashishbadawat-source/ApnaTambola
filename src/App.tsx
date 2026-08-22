@@ -1,0 +1,2543 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Lock, LogIn, UserPlus, Sparkles } from 'lucide-react';
+import { Navbar } from './components/Navbar';
+import { Footer } from './components/Footer';
+import { HomeView } from './views/HomeView';
+import { LiveGameView } from './views/LiveGameView';
+import { BuyTicketView } from './views/BuyTicketView';
+import { MyTicketsView } from './views/MyTicketsView';
+import { GamesLobbyView } from './views/GamesLobbyView';
+import { WinnersView } from './views/WinnersView';
+import { ReferralView } from './views/ReferralView';
+import { WalletView } from './views/WalletView';
+import { ProfileView } from './views/ProfileView';
+import { SupportView } from './views/SupportView';
+import { UserDashboardView } from './views/UserDashboardView';
+import { HowToPlayView } from './views/HowToPlayView';
+import { DailyBonusView } from './views/DailyBonusView';
+import { AdminDashboardView } from './views/AdminDashboardView';
+import { AdminLoginModal } from './views/AdminLoginModal';
+import { AuthModal } from './views/AuthModal';
+import { ProtectedViewGate } from './components/ProtectedViewGate';
+import { UserNotificationsDrawer, UserNotificationItem } from './components/UserNotificationsDrawer';
+import { MobileBottomNav } from './components/MobileBottomNav';
+import { AllOptionsModal } from './components/AllOptionsModal';
+import { TemplateSelectorModal } from './components/TemplateSelectorModal';
+import { initTawkScript, syncUserToTawk } from './utils/tawk';
+import { initBrevoConversations, syncUserToBrevoConversations } from './utils/brevoConversations';
+import { AppTemplateId, getAppTemplate } from './utils/appThemes';
+import {
+  INITIAL_GAMES,
+  INITIAL_USERS,
+  INITIAL_TICKETS,
+  INITIAL_WINNERS,
+  INITIAL_TRANSACTIONS,
+  INITIAL_WITHDRAWALS,
+  INITIAL_REFERRAL_MEMBERS,
+  INITIAL_COMMISSIONS,
+  INITIAL_SUPPORT_TICKETS,
+  INITIAL_ADMIN_STATS,
+  INITIAL_ACTIVITY_LOGS,
+  INITIAL_NOTIFICATIONS,
+  INITIAL_LOGIN_HISTORY,
+  INITIAL_SITE_SETTINGS,
+  INITIAL_USER_NOTIFICATIONS,
+} from './data/mockData';
+import {
+  User,
+  TambolaGame,
+  TambolaTicket,
+  GameWinner,
+  WalletTransaction,
+  WithdrawalRequest,
+  ReferralMember,
+  ReferralCommission,
+  SupportTicket,
+  AdminStats,
+  PrizeCode,
+  TicketColorThemeId,
+  ActivityLog,
+  AdminNotification,
+  LoginHistoryEntry,
+  SiteSettings,
+} from './types';
+import { generateTambolaTicketMatrix, generateTicketId, verifyClaim } from './utils/tambolaTicket';
+import { checkAndAutoTrackWinners } from './utils/autoWinnerTracker';
+import { FlashWinnerItem } from './components/LiveWinnerFlashTicker';
+import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
+import { playWinningFanfare, playNumberCallSound } from './utils/audio';
+import { calculateTambolaDynamicPrizes, calculateSplitWinning } from './utils/prizePoolCalculator';
+import { db } from './lib/firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+export function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<string>('home');
+  const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
+
+  // Core Applet State with LocalStorage Persistence
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_registered_users');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading users:', e);
+    }
+    return INITIAL_USERS;
+  });
+
+  // Strict visitor default: requires registered user to login with ID/Password
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_auth_user');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Error loading active user session:', e);
+    }
+    return null;
+  });
+
+  const [games, setGames] = useState<TambolaGame[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_games');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_GAMES;
+  });
+
+  const [tickets, setTickets] = useState<TambolaTicket[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_tickets');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_TICKETS;
+  });
+
+  const [winners, setWinners] = useState<GameWinner[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_winners');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_WINNERS;
+  });
+
+  const [transactions, setTransactions] = useState<WalletTransaction[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_transactions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_TRANSACTIONS;
+  });
+
+  const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_withdrawals');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_WITHDRAWALS;
+  });
+
+  const [referralMembers, setReferralMembers] = useState<ReferralMember[]>(INITIAL_REFERRAL_MEMBERS);
+  const [commissions, setCommissions] = useState<ReferralCommission[]>(INITIAL_COMMISSIONS);
+  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(INITIAL_SUPPORT_TICKETS);
+  const [adminStats, setAdminStats] = useState<AdminStats>(INITIAL_ADMIN_STATS);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(INITIAL_ACTIVITY_LOGS);
+  const [notifications, setNotifications] = useState<AdminNotification[]>(INITIAL_NOTIFICATIONS);
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryEntry[]>(INITIAL_LOGIN_HISTORY);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_site_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return { ...INITIAL_SITE_SETTINGS, ...parsed };
+      }
+    } catch (e) {}
+    return INITIAL_SITE_SETTINGS;
+  });
+  const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>(INITIAL_USER_NOTIFICATIONS);
+  const [showNotificationsDrawer, setShowNotificationsDrawer] = useState<boolean>(false);
+  const [adminActiveModule, setAdminActiveModule] = useState<string>('dashboard');
+  const [showAllOptionsModal, setShowAllOptionsModal] = useState<boolean>(false);
+  const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
+  const [activeTemplateId, setActiveTemplateId] = useState<AppTemplateId>(() => {
+    const saved = localStorage.getItem('apna_tambola_template');
+    return (saved as AppTemplateId) || 'royal_gold';
+  });
+  const [showTemplateModal, setShowTemplateModal] = useState<boolean>(false);
+
+  // Secret Admin Portal Direct Link Handler (?admin=true, #admin, or ?mode=admin)
+  // Keyboard Shortcut (Ctrl + Shift + A or Alt + Shift + A)
+  // and Referral Link Parameter Handler (?ref=... or ?referral=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const checkUrlParams = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash.toLowerCase();
+      const isAdminQuery =
+        urlParams.get('admin') === 'true' ||
+        urlParams.get('admin') === '1' ||
+        urlParams.get('mode') === 'admin' ||
+        urlParams.get('portal') === 'admin';
+      const isAdminHash = hash === '#admin' || hash === '#admin-portal';
+
+      if (isAdminQuery || isAdminHash) {
+        setShowAdminLoginModal(true);
+      }
+
+      // Check referral link
+      const refCode = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('r');
+      if (refCode && refCode.trim()) {
+        const cleanRef = refCode.trim().toUpperCase();
+        localStorage.setItem('apna_tambola_pending_referral', cleanRef);
+      }
+    };
+
+    // Secret Admin keyboard shortcut: Ctrl+Shift+A or Alt+Shift+A
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) ||
+          (e.altKey && e.shiftKey && (e.key === 'A' || e.key === 'a'))) {
+        e.preventDefault();
+        setShowAdminLoginModal(true);
+      }
+    };
+
+    checkUrlParams();
+    window.addEventListener('hashchange', checkUrlParams);
+    window.addEventListener('keydown', handleKeyDown);
+    
+    // Safely load live chat widgets in background
+    try {
+      initTawkScript();
+      initBrevoConversations();
+    } catch (e) {
+      console.warn('Chat init deferred:', e);
+    }
+
+    return () => {
+      window.removeEventListener('hashchange', checkUrlParams);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Sync visitor profile with Live Chat
+  useEffect(() => {
+    syncUserToTawk(currentUser);
+    syncUserToBrevoConversations(currentUser);
+  }, [currentUser]);
+
+  // Real-time Firestore synchronizer for users across multiple devices and browsers
+  useEffect(() => {
+    try {
+      const unsubscribeUsers = onSnapshot(
+        collection(db, 'users'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const firestoreUsers: User[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data() as User;
+              firestoreUsers.push({ ...data, id: docSnap.id });
+            });
+
+            setUsers((prev) => {
+              const map = new Map<string, User>();
+              // Keep pre-existing and initial
+              prev.forEach((u) => map.set(u.id, u));
+              // Merge incoming Firestore users
+              firestoreUsers.forEach((u) => map.set(u.id, u));
+              const merged = Array.from(map.values());
+              return merged.sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+              });
+            });
+
+            // If current logged-in user is updated in Firestore, keep currentUser state live
+            setCurrentUser((prevUser) => {
+              if (!prevUser) return null;
+              const updated = firestoreUsers.find(
+                (u) => u.id === prevUser.id || (prevUser.phone && u.phone === prevUser.phone)
+              );
+              return updated ? { ...prevUser, ...updated } : prevUser;
+            });
+          }
+        },
+        (error) => {
+          console.warn('Firestore real-time sync notice:', error);
+        }
+      );
+
+      // Real-time commissions sync
+      const unsubscribeCommissions = onSnapshot(
+        collection(db, 'commissions'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const firestoreComms: ReferralCommission[] = [];
+            snapshot.forEach((docSnap) => {
+              firestoreComms.push({ ...(docSnap.data() as ReferralCommission), id: docSnap.id });
+            });
+            setCommissions((prev) => {
+              const map = new Map<string, ReferralCommission>();
+              prev.forEach((c) => map.set(c.id, c));
+              firestoreComms.forEach((c) => map.set(c.id, c));
+              return Array.from(map.values());
+            });
+          }
+        },
+        () => {}
+      );
+
+      // Real-time site settings sync
+      const unsubscribeSettings = onSnapshot(
+        doc(db, 'system', 'site_settings'),
+        (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data() as Partial<SiteSettings>;
+            setSiteSettings((prev) => {
+              const updated = { ...prev, ...data };
+              try {
+                localStorage.setItem('apna_tambola_site_settings', JSON.stringify(updated));
+              } catch (e) {}
+              return updated;
+            });
+          }
+        },
+        (err) => console.warn('Firestore settings listener:', err)
+      );
+
+      // Real-time games sync
+      const unsubscribeGames = onSnapshot(
+        collection(db, 'games'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const firestoreGames: TambolaGame[] = [];
+            snapshot.forEach((docSnap) => {
+              firestoreGames.push({ ...(docSnap.data() as TambolaGame), id: docSnap.id });
+            });
+            setGames((prev) => {
+              const map = new Map<string, TambolaGame>();
+              prev.forEach((g) => map.set(g.id, g));
+              firestoreGames.forEach((g) => map.set(g.id, g));
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem('apna_tambola_games', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        },
+        (err) => console.warn('Firestore games listener:', err)
+      );
+
+      // Real-time tickets sync
+      const unsubscribeTickets = onSnapshot(
+        collection(db, 'tickets'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const firestoreTickets: TambolaTicket[] = [];
+            snapshot.forEach((docSnap) => {
+              firestoreTickets.push({ ...(docSnap.data() as TambolaTicket), id: docSnap.id });
+            });
+            setTickets((prev) => {
+              const map = new Map<string, TambolaTicket>();
+              prev.forEach((t) => map.set(t.id, t));
+              firestoreTickets.forEach((t) => map.set(t.id, t));
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem('apna_tambola_tickets', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        },
+        (err) => console.warn('Firestore tickets listener:', err)
+      );
+
+      return () => {
+        unsubscribeUsers();
+        unsubscribeCommissions();
+        unsubscribeSettings();
+        unsubscribeGames();
+        unsubscribeTickets();
+      };
+    } catch (err) {
+      console.warn('Firestore onSnapshot listener error:', err);
+    }
+  }, []);
+
+  // Sync games to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_games', JSON.stringify(games));
+    } catch (e) {}
+  }, [games]);
+
+  // Sync tickets to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_tickets', JSON.stringify(tickets));
+    } catch (e) {}
+  }, [tickets]);
+
+  // Sync winners to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_winners', JSON.stringify(winners));
+    } catch (e) {}
+  }, [winners]);
+
+  // Sync transactions to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_transactions', JSON.stringify(transactions));
+    } catch (e) {}
+  }, [transactions]);
+
+  // Sync withdrawals to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(withdrawals));
+    } catch (e) {}
+  }, [withdrawals]);
+
+  // Sync siteSettings to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_site_settings', JSON.stringify(siteSettings));
+    } catch (e) {}
+  }, [siteSettings]);
+
+  // Sync users to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('apna_tambola_registered_users', JSON.stringify(users));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [users]);
+
+  // Sync active user session to localStorage
+  useEffect(() => {
+    try {
+      if (currentUser) {
+        localStorage.setItem('apna_tambola_auth_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('apna_tambola_auth_user');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [currentUser]);
+
+  // Dynamically compute 8-level real-time referral network for currentUser from registered users
+  const computedReferralMembers = React.useMemo<ReferralMember[]>(() => {
+    if (!currentUser) return [];
+
+    const isDirectMatch = (targetReferredBy: string | undefined, parent: User) => {
+      if (!targetReferredBy || !parent) return false;
+      const clean = targetReferredBy.trim().toUpperCase();
+      const pCode = (parent.referralCode || '').trim().toUpperCase();
+      const pId = (parent.id || '').trim().toUpperCase();
+      const pPhone = parent.phone ? parent.phone.replace(/\D/g, '') : '';
+      const cleanDigits = clean.replace(/\D/g, '');
+
+      // 1. Direct referralCode or ID exact match
+      if (pCode && clean === pCode) return true;
+      if (pId && clean === pId) return true;
+
+      // 2. Contains referralCode or ID (in case full referral URL was pasted or prefix attached)
+      if (pCode && clean.includes(pCode)) return true;
+      if (pId && clean.includes(pId)) return true;
+
+      // 3. Phone matching
+      if (pPhone && cleanDigits) {
+        if (cleanDigits === pPhone || pPhone.endsWith(cleanDigits) || cleanDigits.endsWith(pPhone)) return true;
+        if (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6)) return true;
+      }
+
+      // 4. Name match (case-insensitive)
+      if (parent.name && clean === parent.name.trim().toUpperCase()) return true;
+
+      return false;
+    };
+
+    const results: ReferralMember[] = [];
+    const addedUserIds = new Set<string>();
+
+    // Level 1: Direct Referrals (Users who signed up with currentUser's referral code)
+    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectMatch(u.referredBy, currentUser));
+    l1Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      const userTickets = tickets.filter((t) => t.userId === u.id).length;
+      const userComms = commissions
+        .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+        .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
+
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 1,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: userTickets,
+        commissionEarned: userComms,
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 2: Users referred by Level 1
+    const l2Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l2Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 2,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 3: Users referred by Level 2
+    const l3Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l3Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 3,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 4: Users referred by Level 3
+    const l4Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l4Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 4,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 5: Users referred by Level 4
+    const l5Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l5Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 5,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 6: Users referred by Level 5
+    const l6Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l6Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 6,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 7: Users referred by Level 6
+    const l7Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l7Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 7,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    // Level 8: Users referred by Level 7
+    const l8Users = users.filter(
+      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectMatch(u.referredBy, p))
+    );
+    l8Users.forEach((u) => {
+      addedUserIds.add(u.id);
+      results.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        phone: u.phone,
+        level: 8,
+        joinedDate: u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today',
+        ticketsBought: tickets.filter((t) => t.userId === u.id).length,
+        commissionEarned: commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id)
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0),
+        avatar: u.avatar || 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=160&q=80',
+      });
+    });
+
+    return results;
+  }, [currentUser, users, tickets, commissions]);
+
+  // Live Flash Ticker State (Real-time announcement for all players)
+  const [activeWinnerFlash, setActiveWinnerFlash] = useState<FlashWinnerItem | null>(null);
+
+  // Sound & Modals State
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [celebrationData, setCelebrationData] = useState<{
+    prizeName: string;
+    prizeAmount: number;
+    userName: string;
+    ticketId: string;
+    winningNumber?: number;
+    ticket?: TambolaTicket;
+    calledNumbers?: number[];
+    isCurrentUser?: boolean;
+  } | null>(null);
+
+  const autoCallTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const liveGame = games.find((g) => g.id === selectedGameId) || games.find((g) => g.status === 'live') || games[0];
+
+  const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
+    setAuthModalMode(mode);
+    setShowAuthModal(true);
+  };
+
+  const handleOpenAdminLogin = () => {
+    setShowAdminLoginModal(true);
+  };
+
+  const handleAdminLoginSuccess = (adminUser: User) => {
+    setCurrentUser(adminUser);
+    setActiveTab('admin');
+    setUsers((prev) => {
+      if (prev.some((u) => u.id === adminUser.id)) {
+        return prev.map((u) => (u.id === adminUser.id ? adminUser : u));
+      }
+      return [adminUser, ...prev];
+    });
+  };
+
+  const handleUserLogin = (user: User) => {
+    setCurrentUser(user);
+    // Add user to list if newly registered
+    setUsers((prev) => {
+      if (prev.some((u) => u.id === user.id)) {
+        return prev.map((u) => (u.id === user.id ? user : u));
+      }
+      return [user, ...prev];
+    });
+  };
+
+  const handleRegisterUser = (newUser: User) => {
+    const completeUser: User = {
+      ...newUser,
+      status: newUser.status || 'active',
+      isBlocked: false,
+      createdAt: newUser.createdAt || new Date().toISOString(),
+    };
+
+    // Save to Firestore
+    try {
+      setDoc(doc(db, 'users', completeUser.id), completeUser, { merge: true });
+    } catch (e) {
+      console.warn('Firestore user save notice:', e);
+    }
+
+    // Add new registered user to state at top
+    setUsers((prev) => {
+      const filtered = prev.filter((u) => u.id !== completeUser.id && u.phone !== completeUser.phone);
+      const updated = [completeUser, ...filtered];
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // If registered through someone's referral code, trigger real-time notification & credit for that referrer
+    if (completeUser.referredBy) {
+      const cleanRef = completeUser.referredBy.trim().toUpperCase();
+      const referrerUser = users.find(
+        (u) =>
+          (u.referralCode && u.referralCode.trim().toUpperCase() === cleanRef) ||
+          (u.id && u.id.trim().toUpperCase() === cleanRef) ||
+          (u.phone && u.phone.replace(/\D/g, '').endsWith(cleanRef))
+      );
+
+      if (referrerUser) {
+        const notif: UserNotificationItem = {
+          id: `un_ref_${Date.now()}`,
+          category: 'referral_commission',
+          title: '🎉 नया डायरेक्ट रेफरल!',
+          message: `${completeUser.name} आपके रेफरल लिंक से सफलतापूर्वक रजिस्टर हो गए हैं! वे आपके डायरेक्ट (Level 1) टीम में शामिल हो गए हैं।`,
+          timestamp: 'Just now',
+          read: false,
+          actionTab: 'referral',
+        };
+        setUserNotifications((prev) => [notif, ...prev]);
+
+        // If referrer is currently logged in user on this device, update live state
+        if (currentUser && currentUser.id === referrerUser.id) {
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              referralBalance: (prev.referralBalance || 0) + 10,
+              walletBalance: (prev.walletBalance || 0) + 10,
+            };
+          });
+        }
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    // Clean logout: set currentUser to null, clear session, return to public visitor home page
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('apna_tambola_auth_user');
+    } catch {}
+    setActiveTab('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Auto caller interval handler
+  useEffect(() => {
+    if (liveGame && liveGame.autoCalling && liveGame.status === 'live') {
+      autoCallTimerRef.current = setInterval(() => {
+        handleCallNextNumber();
+      }, 6000);
+    } else {
+      if (autoCallTimerRef.current) {
+        clearInterval(autoCallTimerRef.current);
+      }
+    }
+    return () => {
+      if (autoCallTimerRef.current) {
+        clearInterval(autoCallTimerRef.current);
+      }
+    };
+  }, [liveGame?.autoCalling, liveGame?.calledNumbers.length, liveGame?.status]);
+
+  // ⚡ Automatic Winner Tracking Engine (Includes Online, Auto Mode & Offline tickets)
+  useEffect(() => {
+    if (!liveGame || !liveGame.currentNumber || liveGame.calledNumbers.length === 0) return;
+
+    const gameTickets = tickets.filter((t) => t.gameId === liveGame.id || !t.gameId);
+
+    const trackingResult = checkAndAutoTrackWinners({
+      gameId: liveGame.id,
+      gameTitle: liveGame.title,
+      currentNumber: liveGame.currentNumber,
+      calledNumbers: liveGame.calledNumbers,
+      prizes: liveGame.prizes,
+      tickets: gameTickets,
+      currentUser,
+    });
+
+    if (trackingResult.newWins.length > 0) {
+      // Update Game Prizes in state
+      setGames((prevGames) =>
+        prevGames.map((g) => {
+          if (g.id !== liveGame.id) return g;
+          return {
+            ...g,
+            prizes: trackingResult.updatedPrizes,
+          };
+        })
+      );
+
+      // Process each win
+      trackingResult.newWins.forEach((win) => {
+        const newWinnerRecord: GameWinner = {
+          id: win.id,
+          gameId: win.gameId,
+          gameTitle: win.gameTitle,
+          prizeId: win.prizeId,
+          prizeCode: win.prizeCode,
+          prizeName: win.prizeName,
+          prizeAmount: win.splitPrizeAmount,
+          userId: win.userId,
+          userName: win.userName,
+          ticketId: win.ticketId,
+          ticketNumber: win.ticketNumber,
+          winningNumber: win.winningNumber,
+          date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        };
+        setWinners((prev) => [newWinnerRecord, ...prev]);
+
+        // Broadcast to Live Flash Ticker for all players
+        setActiveWinnerFlash({
+          id: win.id,
+          winnerName: win.userName,
+          prizeName: win.prizeName,
+          prizeAmount: win.splitPrizeAmount,
+          winningNumber: win.winningNumber,
+          ticketNumber: win.ticketNumber,
+          ticketId: win.ticketId,
+          isCurrentUser: win.isCurrentUser,
+          isAutoClaimed: win.isAutoClaimed,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ticket: win.ticket,
+        });
+
+        if (win.isCurrentUser) {
+          playWinningFanfare();
+
+          // Credit into Withdrawal Wallet (winningBalance)
+          setCurrentUser((prev) => {
+            const newWinning = prev.winningBalance + win.splitPrizeAmount;
+            const newTotal = prev.depositBalance + newWinning + prev.referralBalance;
+            return {
+              ...prev,
+              winningBalance: newWinning,
+              walletBalance: newTotal,
+            };
+          });
+
+          // Create credit transaction
+          const winTxn: WalletTransaction = {
+            id: `txn_auto_${Date.now()}_${win.prizeCode}`,
+            userId: currentUser.id,
+            type: 'prize_won',
+            amount: win.splitPrizeAmount,
+            balanceAfter: currentUser.walletBalance + win.splitPrizeAmount,
+            description: win.isEqualSplit
+              ? `🏆 ऑटो-ट्रैक जीत: ${win.prizeName} (${win.totalSplitWinners} विजेताओं में विभाजित) - ${win.gameTitle}`
+              : `🏆 ऑटो-ट्रैक जीत: ${win.prizeName} - ${win.gameTitle}`,
+            referenceId: win.ticketId,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'completed',
+          };
+          setTransactions((prev) => [winTxn, ...prev]);
+
+          // Push in-app winning notification
+          const winNotif: UserNotificationItem = {
+            id: `un_win_${Date.now()}_${win.prizeCode}`,
+            category: 'winning',
+            title: `🏆 बधाई! आप ₹${win.splitPrizeAmount.toLocaleString('en-IN')} जीत गए!`,
+            message: `सिस्टम ने आपके टिकट #${win.ticketNumber} (${win.ticketId}) पर ${win.prizeName} ऑटो-ट्रैक कर लिया है। राशि आपके विथड्रॉल वॉलेट में जमा कर दी गई है।`,
+            timestamp: 'Just now',
+            read: false,
+            actionTab: 'wallet',
+            amount: win.splitPrizeAmount,
+            ticketId: win.ticketId,
+          };
+          setUserNotifications((prev) => [winNotif, ...prev]);
+
+          // Show celebration popup
+          setCelebrationData({
+            prizeName: win.prizeName,
+            prizeAmount: win.splitPrizeAmount,
+            userName: currentUser.name,
+            ticketId: win.ticketId,
+            ticketNumber: win.ticketNumber,
+            winningNumber: win.winningNumber,
+            ticket: win.ticket,
+            calledNumbers: liveGame.calledNumbers,
+            isCurrentUser: true,
+          });
+        }
+      });
+    }
+  }, [liveGame?.calledNumbers, liveGame?.currentNumber]);
+
+  // Toggle Ticket Auto Mode
+  const handleToggleTicketAutoMode = (ticketId: string) => {
+    setTickets((prev) =>
+      prev.map((t) => (t.id === ticketId ? { ...t, autoMode: !t.autoMode } : t))
+    );
+  };
+
+  // Navigation Helper
+  const handleNavigate = (tab: string, gameId?: string) => {
+    setActiveTab(tab);
+    if (gameId) {
+      setSelectedGameId(gameId);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 1. Call Next Number Handler
+  const handleCallNextNumber = (forcedNumber?: number) => {
+    setGames((prevGames) => {
+      return prevGames.map((g) => {
+        if (g.id !== liveGame?.id) return g;
+        if (g.calledNumbers.length >= 90) {
+          return { ...g, autoCalling: false, status: 'completed' };
+        }
+
+        let nextNum: number;
+        if (forcedNumber && !g.calledNumbers.includes(forcedNumber)) {
+          nextNum = forcedNumber;
+        } else {
+          const available = Array.from({ length: 90 }, (_, i) => i + 1).filter(
+            (n) => !g.calledNumbers.includes(n)
+          );
+          if (available.length === 0) {
+            return { ...g, autoCalling: false, status: 'completed' };
+          }
+          nextNum = available[Math.floor(Math.random() * available.length)];
+        }
+
+        const newCalled = [...g.calledNumbers, nextNum];
+        const newPrev = [nextNum, ...g.previousNumbers].slice(0, 5);
+
+        return {
+          ...g,
+          currentNumber: nextNum,
+          calledNumbers: newCalled,
+          previousNumbers: newPrev,
+        };
+      });
+    });
+  };
+
+  // 2. Toggle Auto Caller
+  const handleToggleAutoCaller = () => {
+    if (!liveGame) return;
+    setGames((prevGames) =>
+      prevGames.map((g) =>
+        g.id === liveGame.id ? { ...g, autoCalling: !g.autoCalling } : g
+      )
+    );
+  };
+
+  // 3. Reset Game Match
+  const handleResetGame = () => {
+    if (!liveGame) return;
+    setGames((prevGames) =>
+      prevGames.map((g) =>
+        g.id === liveGame.id
+          ? {
+              ...g,
+              currentNumber: undefined,
+              calledNumbers: [],
+              previousNumbers: [],
+              autoCalling: false,
+              prizes: g.prizes.map((p) => ({ ...p, claimedWinners: [] })),
+            }
+          : g
+      )
+    );
+  };
+
+  // 4. 8-Level Referral Commission Engine (Ticket Purchase Only: 2%, 1%, 0.5%, 0.4%, 0.3%, 0.2%, 0.1%, 0.1%)
+  const distributeReferralCommissions = (totalPurchaseAmount: number) => {
+    if (!currentUser || totalPurchaseAmount <= 0) return;
+
+    const RATES = [
+      { level: 1, rate: 0.02, label: 'Level 1 Direct (2.0%)' },
+      { level: 2, rate: 0.01, label: 'Level 2 Downline (1.0%)' },
+      { level: 3, rate: 0.005, label: 'Level 3 Downline (0.5%)' },
+      { level: 4, rate: 0.004, label: 'Level 4 Downline (0.4%)' },
+      { level: 5, rate: 0.003, label: 'Level 5 Downline (0.3%)' },
+      { level: 6, rate: 0.002, label: 'Level 6 Downline (0.2%)' },
+      { level: 7, rate: 0.001, label: 'Level 7 Downline (0.1%)' },
+      { level: 8, rate: 0.001, label: 'Level 8 Downline (0.1%)' },
+    ];
+
+    const newComms: ReferralCommission[] = [];
+    let totalPaidOut = 0;
+
+    // Helper to find upline parent
+    const findParent = (refCodeOrId?: string): User | undefined => {
+      if (!refCodeOrId) return undefined;
+      const clean = refCodeOrId.trim().toUpperCase();
+      return users.find(
+        (u) =>
+          (u.referralCode && u.referralCode.trim().toUpperCase() === clean) ||
+          (u.id && u.id.trim().toUpperCase() === clean) ||
+          (u.phone && u.phone.replace(/\D/g, '').endsWith(clean))
+      );
+    };
+
+    let uplineUser = findParent(currentUser.referredBy);
+
+    for (let i = 0; i < RATES.length; i++) {
+      const tier = RATES[i];
+      if (!uplineUser) {
+        // No further upline parent found in chain
+        break;
+      }
+
+      const commAmount = Number((totalPurchaseAmount * tier.rate).toFixed(2));
+      if (commAmount > 0) {
+        totalPaidOut += commAmount;
+
+        const commRecord: ReferralCommission = {
+          id: `comm_${Date.now()}_${tier.level}_${Math.floor(Math.random() * 1000)}`,
+          transactionId: `TXN-REF-${Math.floor(100000 + Math.random() * 900000)}`,
+          userId: uplineUser.id,
+          userName: uplineUser.name,
+          sourceUserId: currentUser.id,
+          sourceUserName: currentUser.name,
+          gameId: liveGame?.id || 'game_live_101',
+          gameTitle: liveGame?.title || 'Tambola Live',
+          ticketId: 'TKT-BATCH-REF',
+          level: tier.level,
+          percentage: tier.rate * 100,
+          baseAmount: totalPurchaseAmount,
+          commissionAmount: commAmount,
+          status: 'approved',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        };
+        newComms.push(commRecord);
+
+        // Update upline user's referral balance and wallet in state
+        const updatedUpline: User = {
+          ...uplineUser,
+          referralBalance: Number(((uplineUser.referralBalance || 0) + commAmount).toFixed(2)),
+          walletBalance: Number(((uplineUser.walletBalance || 0) + commAmount).toFixed(2)),
+        };
+
+        setUsers((prev) => prev.map((u) => (u.id === updatedUpline.id ? updatedUpline : u)));
+
+        // Persist to Firestore
+        try {
+          setDoc(doc(db, 'commissions', commRecord.id), commRecord);
+          setDoc(doc(db, 'users', updatedUpline.id), updatedUpline, { merge: true });
+        } catch (e) {
+          console.warn('Firestore commission persistence warning:', e);
+        }
+
+        // If upline is currently active on this screen, update currentUser
+        if (currentUser.id === uplineUser.id) {
+          setCurrentUser(updatedUpline);
+        }
+      }
+
+      // Move to next higher level upline
+      uplineUser = findParent(uplineUser.referredBy);
+    }
+
+    if (newComms.length > 0) {
+      setCommissions((prev) => [...newComms, ...prev]);
+      setAdminStats((prev) => ({
+        ...prev,
+        totalReferralCommissionsPaid: prev.totalReferralCommissionsPaid + totalPaidOut,
+      }));
+    }
+  };
+
+  // 5. Buy Tickets Handler (Strictly requires funded deposit wallet from Admin recharge)
+  const handleBuyTickets = async (gameId: string, quantity: number): Promise<boolean> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return false;
+    }
+    const game = games.find((g) => g.id === gameId);
+    if (!game) return false;
+
+    // Exact total cost calculation (e.g., ₹5, ₹10, ₹15, ₹50 etc. * quantity)
+    const totalCost = game.ticketPrice * quantity;
+
+    // User CANNOT buy tickets until deposit wallet is funded by admin / recharge
+    if (currentUser.depositBalance < totalCost) {
+      const errorNotif: UserNotificationItem = {
+        id: `un_err_${Date.now()}`,
+        category: 'wallet_credit',
+        title: '⚠️ टिकट खरीदने हेतु फंड आवश्यक',
+        message: `टिकट खरीदने के लिए टिकट वॉलेट (Deposit Wallet) में कम से कम ₹${totalCost} होना आवश्यक है। (वर्तमान टिकट बैलेंस: ₹${currentUser.depositBalance})। जब तक एडमिन से फंड ऐड (Recharge) नहीं होता, तब तक टिकट नहीं खरीदा जा सकता।`,
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'wallet',
+      };
+      setUserNotifications((prev) => [errorNotif, ...prev]);
+      return false;
+    }
+
+    // Determine ticket colors (Prioritizes per-game color theme, falls back to Admin siteSettings)
+    const newTickets: TambolaTicket[] = [];
+    const activeColorSetting = game.ticketColorTheme || siteSettings.defaultTicketTheme || 'multi';
+
+    for (let i = 0; i < quantity; i++) {
+      const ticketNum = game.totalTicketsSold + i + 1;
+      
+      let assignedColor: TicketColorThemeId = 'ruby';
+      if (!activeColorSetting || activeColorSetting === 'multi') {
+        // Rotates and changes every ticket dynamically across palettes
+        assignedColor = COLOR_KEYS[(ticketNum - 1 + i) % COLOR_KEYS.length];
+      } else {
+        assignedColor = activeColorSetting;
+      }
+
+      newTickets.push({
+        id: `tkt_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+        gameId: game.id,
+        gameTitle: game.title,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        ticketNumber: ticketNum,
+        ticketId: generateTicketId(),
+        numbers: generateTambolaTicketMatrix(),
+        markedNumbers: [],
+        price: game.ticketPrice,
+        colorTheme: assignedColor,
+        purchaseDate: new Date().toISOString(),
+      });
+    }
+
+    // Deduct exact payment amount from user deposit balance and update wallet balance
+    setCurrentUser((prev) => {
+      const newDeposit = prev.depositBalance - totalCost;
+      const newWallet = newDeposit + prev.winningBalance + (prev.referralBalance || 0);
+      return {
+        ...prev,
+        depositBalance: newDeposit,
+        walletBalance: newWallet,
+      };
+    });
+
+    // Record wallet transaction
+    const newTxn: WalletTransaction = {
+      id: `txn_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'ticket_purchase',
+      amount: -totalCost,
+      balanceAfter: (currentUser.depositBalance - totalCost) + currentUser.winningBalance + (currentUser.referralBalance || 0),
+      description: `Bought ${quantity} ticket(s) @ ₹${game.ticketPrice} each (Total: -₹${totalCost}) for ${game.title}`,
+      referenceId: newTickets[0].ticketId,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
+    setTransactions((prev) => [newTxn, ...prev]);
+
+    // Update game tickets sold count & dynamically re-calculate standard 7-prize pool
+    setGames((prev) =>
+      prev.map((g) => {
+        if (g.id !== gameId) return g;
+        const newTicketsSold = g.totalTicketsSold + quantity;
+        const { prizePool, prizes } = calculateTambolaDynamicPrizes(
+          newTicketsSold,
+          g.ticketPrice,
+          g.prizes
+        );
+        return {
+          ...g,
+          totalTicketsSold: newTicketsSold,
+          registeredPlayers: g.registeredPlayers + 1,
+          prizePool,
+          prizes,
+        };
+      })
+    );
+
+    setTickets((prev) => [...newTickets, ...prev]);
+
+    // Update admin stats
+    setAdminStats((prev) => ({
+      ...prev,
+      ticketsSold: prev.ticketsSold + quantity,
+      totalRevenue: prev.totalRevenue + totalCost,
+    }));
+
+    // Distribute 5-Level Referral commissions
+    distributeReferralCommissions(totalCost);
+
+    // Push notification to user notifications list
+    const ticketNotif: UserNotificationItem = {
+      id: `un_${Date.now()}`,
+      category: 'ticket_confirmation',
+      title: `🎟️ ${quantity} Ticket(s) Confirmed for ${game.title}`,
+      message: `Your ${quantity} ticket(s) (IDs: ${newTickets.map((t) => t.ticketId).join(', ')}) are generated. Good luck!`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'my-tickets',
+      ticketId: newTickets[0].ticketId,
+    };
+    setUserNotifications((prev) => [ticketNotif, ...prev]);
+
+    return true;
+  };
+
+  // 6. Claim Prize Handler with instant verification & Equal Split Logic
+  const handleClaimPrize = (ticketId: string, prizeCode: PrizeCode) => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return;
+    }
+    const ticket = tickets.find((t) => t.id === ticketId);
+    if (!ticket || !liveGame) return;
+
+    const prize = liveGame.prizes.find((p) => p.code === prizeCode);
+    if (!prize) return;
+
+    // Check if current user already claimed this prize on this ticket
+    const alreadyClaimedOnThisTicket = prize.claimedWinners.some(
+      (w) => w.ticketId === ticket.ticketId && w.userId === currentUser.id
+    );
+    if (alreadyClaimedOnThisTicket) {
+      alert(`You have already claimed ${prize.name} on Ticket #${ticket.ticketNumber}!`);
+      return;
+    }
+
+    if (prize.claimedWinners.length >= prize.maxWinners) {
+      alert(`The ${prize.name} has already reached maximum winners (${prize.maxWinners})!`);
+      return;
+    }
+
+    // Check validity against called numbers
+    const result = verifyClaim(prizeCode, ticket.numbers, liveGame.calledNumbers, liveGame.currentNumber);
+    if (!result.valid) {
+      alert(`Claim Rejected: ${result.reason}`);
+      return;
+    }
+
+    // Equal Split Calculation: If multiple winners, divide prize pool equally (e.g. ₹400 / 2 = ₹200 each)
+    const existingWinnersCount = prize.claimedWinners.length;
+    const totalWinnersForPrize = existingWinnersCount + 1;
+    const splitInfo = calculateSplitWinning(prize.amount, totalWinnersForPrize);
+    const splitAmount = splitInfo.perWinnerAmount;
+    const isSplit = splitInfo.isSplit;
+
+    // Valid Claim! Add winner
+    const newWinner: GameWinner = {
+      id: `win_${Date.now()}`,
+      gameId: liveGame.id,
+      gameTitle: liveGame.title,
+      prizeId: prize.id,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      prizeName: prize.name,
+      prizeCode,
+      prizeAmount: splitAmount,
+      ticketId: ticket.ticketId,
+      ticketNumber: ticket.ticketNumber,
+      winningNumber: liveGame.currentNumber || 47,
+      date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+    };
+
+    setWinners((prev) => [newWinner, ...prev]);
+
+    // Credit split winning amount to user
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        walletBalance: prev.walletBalance + splitAmount,
+        winningBalance: prev.winningBalance + splitAmount,
+      };
+    });
+
+    // Record transaction
+    const winTxn: WalletTransaction = {
+      id: `txn_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'prize_won',
+      amount: splitAmount,
+      balanceAfter: currentUser.walletBalance + splitAmount,
+      description: isSplit
+        ? `Won ${prize.name} in ${liveGame.title} (Split 1/${totalWinnersForPrize} of ₹${prize.amount})`
+        : `Won ${prize.name} in ${liveGame.title}`,
+      referenceId: ticket.ticketId,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
+    setTransactions((prev) => [winTxn, ...prev]);
+
+    // Update prize claim state in game
+    setGames((prev) =>
+      prev.map((g) => {
+        if (g.id !== liveGame.id) return g;
+        return {
+          ...g,
+          prizes: g.prizes.map((p) =>
+            p.code === prizeCode
+              ? {
+                  ...p,
+                  claimedWinners: [
+                    ...p.claimedWinners,
+                    {
+                      userId: currentUser.id,
+                      userName: currentUser.name,
+                      ticketId: ticket.ticketId,
+                      ticketNumber: ticket.ticketNumber,
+                      winningNumber: liveGame.currentNumber || 47,
+                      claimedAt: new Date().toISOString(),
+                    },
+                  ],
+                }
+              : p
+          ),
+        };
+      })
+    );
+
+    // Trigger fireworks, fanfare, and live ticket flash
+    setCelebrationData({
+      prizeName: isSplit ? `${prize.name} (Equal Split)` : prize.name,
+      prizeAmount: splitAmount,
+      userName: currentUser.name,
+      ticketId: ticket.ticketId,
+      ticketNumber: ticket.ticketNumber,
+      winningNumber: liveGame.currentNumber,
+      ticket: ticket,
+      calledNumbers: liveGame.calledNumbers,
+      isCurrentUser: true,
+    });
+
+    // Add winning notification
+    const winNotif: UserNotificationItem = {
+      id: `un_${Date.now()}`,
+      category: 'winning',
+      title: `🏆 Congratulations! You Won ₹${splitAmount.toLocaleString('en-IN')}!`,
+      message: isSplit
+        ? `Your claim for ${prize.name} was verified! Prize of ₹${prize.amount} was split equally (${totalWinnersForPrize} winners = ₹${splitAmount} each). ₹${splitAmount} added to your wallet.`
+        : `Your claim for ${prize.name} in ${liveGame.title} was verified! ₹${splitAmount} added to your winning balance.`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'wallet',
+      amount: splitAmount,
+      ticketId: ticket.ticketId,
+    };
+    setUserNotifications((prev) => [winNotif, ...prev]);
+  };
+
+  // 7. Wallet Deposit Handler (With 10% Daily Reward Bonus Auto-Unlock from Spin/Scratch Wallet)
+  const handleDeposit = async (
+    amount: number,
+    method: string,
+    utrNumber?: string,
+    proofUrl?: string
+  ): Promise<boolean> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return false;
+    }
+    // 10% Daily Reward Bonus Unlock Rule:
+    const availableReward = currentUser.bonusRewardBalance || 0;
+    const maxTenPercent = amount * 0.10;
+    const unlockedReward = Math.min(maxTenPercent, availableReward);
+    const roundedUnlocked = Math.round(unlockedReward * 100) / 100;
+
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      const currentReward = prev.bonusRewardBalance || 0;
+      const newRewardBalance = Math.max(0, currentReward - roundedUnlocked);
+      const newDeposit = prev.depositBalance + amount + roundedUnlocked;
+      const newTotal = newDeposit + prev.winningBalance + prev.referralBalance;
+      return {
+        ...prev,
+        depositBalance: newDeposit,
+        bonusRewardBalance: newRewardBalance,
+        walletBalance: newTotal,
+      };
+    });
+
+    const newTxn: WalletTransaction = {
+      id: `txn_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'deposit',
+      amount,
+      balanceAfter: currentUser.walletBalance + amount + roundedUnlocked,
+      description: `Deposit via ${method}${utrNumber ? ` (UTR: ${utrNumber})` : ''}`,
+      paymentMethod: method,
+      referenceId: utrNumber || `UPI-DEP-${Math.floor(100000 + Math.random() * 900000)}`,
+      utrNumber,
+      proofImageUrl: proofUrl,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
+
+    const txnsToAdd: WalletTransaction[] = [newTxn];
+
+    if (roundedUnlocked > 0) {
+      const bonusTxn: WalletTransaction = {
+        id: `txn_reward_bonus_${Date.now()}`,
+        userId: currentUser.id,
+        type: 'reward_bonus_unlock',
+        amount: roundedUnlocked,
+        balanceAfter: currentUser.walletBalance + amount + roundedUnlocked,
+        description: `🎁 दैनिक रिवार्ड अनलॉक (10% डिपॉजिट बोनस): ₹${amount} के रिचार्ज पर ₹${roundedUnlocked.toFixed(2)} रिवार्ड वॉलेट से टिकट वॉलेट में जोड़ा गया`,
+        paymentMethod: 'Daily Reward Wallet',
+        referenceId: `REW-UNL-${Math.floor(100000 + Math.random() * 900000)}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'completed',
+      };
+      txnsToAdd.unshift(bonusTxn);
+
+      const bonusNotif: UserNotificationItem = {
+        id: `un_rew_${Date.now()}`,
+        category: 'wallet_credit',
+        title: `🎁 10% रिवार्ड बोनस अनलॉक: ₹${roundedUnlocked.toFixed(2)} टिकट वॉलेट में जुड़ा!`,
+        message: `बधाई! आपके ₹${amount} रिचार्ज पर आपके दैनिक रिवार्ड वॉलेट (स्पिन/स्क्रैच) से ₹${roundedUnlocked.toFixed(2)} टिकट वॉलेट में सफलतापूर्वक ट्रांसफर हो गए हैं।`,
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'wallet',
+        amount: roundedUnlocked,
+      };
+      setUserNotifications((prev) => [bonusNotif, ...prev]);
+    }
+
+    setTransactions((prev) => [...txnsToAdd, ...prev]);
+    return true;
+  };
+
+  // 7b. Claim Daily Spin / Scratch / Check-in Rewards into Daily Bonus Wallet
+  const handleClaimDailyReward = async (
+    amount: number,
+    source: string
+  ): Promise<boolean> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return false;
+    }
+    const rounded = Math.round(amount * 100) / 100;
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      const newReward = (prev.bonusRewardBalance || 0) + rounded;
+      return {
+        ...prev,
+        bonusRewardBalance: newReward,
+      };
+    });
+
+    const rewTxn: WalletTransaction = {
+      id: `txn_rew_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'daily_reward_claim',
+      amount: rounded,
+      balanceAfter: currentUser.walletBalance,
+      description: `🎁 दैनिक रिवार्ड: ₹${rounded.toFixed(2)} (${source}) - रिवार्ड वॉलेट में सुरक्षित (10% एडमिन पेमेंट पर अनलॉक)`,
+      paymentMethod: source,
+      referenceId: `REW-${Math.floor(100000 + Math.random() * 900000)}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
+    setTransactions((prev) => [rewTxn, ...prev]);
+
+    const rewNotif: UserNotificationItem = {
+      id: `un_rew_cl_${Date.now()}`,
+      category: 'wallet_credit',
+      title: `🎁 दैनिक रिवार्ड प्राप्त: ₹${rounded.toFixed(2)}`,
+      message: `${source} से ₹${rounded.toFixed(2)} आपके 'दैनिक रिवार्ड वॉलेट' में जुड़ गए हैं। अगली बार एडमिन को पेमेंट/डिपॉजिट करने पर इसका 10% सीधे आपके टिकट वॉलेट में अनलॉक हो जाएगा!`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'daily-bonus',
+      amount: rounded,
+    };
+    setUserNotifications((prev) => [rewNotif, ...prev]);
+
+    return true;
+  };
+
+  // 8. Wallet Withdrawal Handler with 10% TDS & 5% Admin Charges
+  const handleWithdrawal = async (data: {
+    amount: number;
+    paymentMethod: 'upi' | 'bank';
+    upiId?: string;
+    bankName?: string;
+    accountNumber?: string;
+    ifsc?: string;
+    accountHolder?: string;
+  }): Promise<boolean> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return false;
+    }
+    const tdsPercentage = siteSettings.tdsPercentage ?? 10;
+    const adminFeePercentage = siteSettings.adminFeePercentage ?? 5;
+    const tdsAmount = Math.round((data.amount * tdsPercentage) / 100);
+    const adminFeeAmount = Math.round((data.amount * adminFeePercentage) / 100);
+    const totalDeductions = tdsAmount + adminFeeAmount;
+    const netAmount = data.amount - totalDeductions;
+
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        walletBalance: prev.walletBalance - data.amount,
+        winningBalance: prev.winningBalance - data.amount,
+      };
+    });
+
+    const newReq: WithdrawalRequest = {
+      id: `req_${Date.now()}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      userPhone: currentUser.phone,
+      amount: data.amount,
+      tdsPercentage,
+      tdsAmount,
+      adminFeePercentage,
+      adminFeeAmount,
+      totalDeductions,
+      netAmount,
+      paymentMethod: data.paymentMethod,
+      upiId: data.upiId,
+      bankName: data.bankName,
+      accountNumber: data.accountNumber,
+      ifsc: data.ifsc,
+      accountHolder: data.accountHolder,
+      status: 'pending',
+      requestDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+    };
+    setWithdrawals((prev) => [newReq, ...prev]);
+
+    const newTxn: WalletTransaction = {
+      id: `txn_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'withdrawal',
+      amount: -data.amount,
+      balanceAfter: currentUser.walletBalance - data.amount,
+      description: `Withdrawal ₹${data.amount} (Net Payout: ₹${netAmount} after 10% TDS & 5% Admin Charges) to ${
+        data.paymentMethod === 'upi' ? data.upiId : data.bankName
+      }`,
+      referenceId: newReq.id,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'pending',
+    };
+    setTransactions((prev) => [newTxn, ...prev]);
+    return true;
+  };
+
+  // 8.1 User-to-User (P2P) Fund Transfer with 5% Platform Fee
+  const handleP2PTransfer = async (
+    recipientQuery: string,
+    amount: number,
+    note?: string
+  ): Promise<{ success: boolean; message: string; data?: any }> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return { success: false, message: 'कृपया पहले लॉगिन करें' };
+    }
+    const feeRate = siteSettings.p2pTransferFeePercentage ?? 5;
+    const feeAmount = Math.round((amount * feeRate) / 100);
+    const totalDeduction = amount + feeAmount; // E.g., 100 + 5 = 105
+
+    if (amount <= 0) {
+      return { success: false, message: 'कृपया मान्य ट्रांसफर राशि दर्ज करें (Please enter a valid amount).' };
+    }
+
+    if (currentUser.walletBalance < totalDeduction) {
+      return {
+        success: false,
+        message: `अपर्याप्त वॉलेट बैलेंस! ₹${amount} भेजने के लिए 5% ट्रांसफर शुल्क (₹${feeAmount}) सहित कुल ₹${totalDeduction} की आवश्यकता है। आपका बैलेंस: ₹${currentUser.walletBalance.toLocaleString('en-IN')}`,
+      };
+    }
+
+    const clean = recipientQuery.trim().toLowerCase();
+    const cleanPhone = clean.replace(/[\s+-]/g, '');
+
+    // Search recipient in registered users
+    const foundUser = users.find(
+      (u) =>
+        u.id.toLowerCase() === clean ||
+        u.email.toLowerCase() === clean ||
+        u.phone.replace(/[\s+-]/g, '') === cleanPhone ||
+        (u.referralCode && u.referralCode.toLowerCase() === clean) ||
+        u.name.toLowerCase() === clean
+    );
+
+    if (foundUser && foundUser.id === currentUser.id) {
+      return { success: false, message: 'आप स्वयं को फंड ट्रांसफर नहीं कर सकते (Cannot transfer money to yourself).' };
+    }
+
+    const recipientName = foundUser ? foundUser.name : `User (${recipientQuery})`;
+    const recipientId = foundUser ? foundUser.id : `usr_p2p_${Date.now()}`;
+    const recipientPhone = foundUser ? foundUser.phone : recipientQuery;
+    const refCode = `P2P-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Deduct total amount (₹100 + ₹5 = ₹105) from Sender's wallet
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        walletBalance: prev.walletBalance - totalDeduction,
+        depositBalance: Math.max(0, prev.depositBalance - totalDeduction),
+      };
+    });
+
+    // Credit exact fund amount (₹100) to recipient if in users list
+    if (foundUser) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === foundUser.id
+            ? {
+                ...u,
+                walletBalance: u.walletBalance + amount,
+                depositBalance: u.depositBalance + amount,
+              }
+            : u
+        )
+      );
+
+      // Create transaction record for recipient
+      const recipientTxn: WalletTransaction = {
+        id: `txn_recv_${Date.now()}`,
+        userId: foundUser.id,
+        type: 'p2p_transfer_received',
+        amount: amount,
+        balanceAfter: foundUser.walletBalance + amount,
+        description: `P2P Fund Received from ${currentUser.name}${note ? ` - ${note}` : ''}`,
+        paymentMethod: 'P2P Wallet Transfer',
+        referenceId: refCode,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'completed',
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        netTransferAmount: amount,
+      };
+      setTransactions((prev) => [recipientTxn, ...prev]);
+    }
+
+    // Create transaction record for sender
+    const senderTxn: WalletTransaction = {
+      id: `txn_send_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'p2p_transfer_sent',
+      amount: -totalDeduction,
+      balanceAfter: currentUser.walletBalance - totalDeduction,
+      description: `P2P Transfer to ${recipientName} (Fund: ₹${amount}, 5% Fee: ₹${feeAmount})${note ? ` [${note}]` : ''}`,
+      paymentMethod: 'P2P Wallet Transfer',
+      referenceId: refCode,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+      recipientId,
+      recipientName,
+      recipientPhone,
+      transferFee: feeAmount,
+      netTransferAmount: amount,
+    };
+    setTransactions((prev) => [senderTxn, ...prev]);
+
+    // Admin Activity Log
+    const newLog: ActivityLog = {
+      id: `log_${Date.now()}`,
+      adminName: currentUser.name,
+      action: `P2P Transfer: ${currentUser.name} sent ₹${amount} to ${recipientName} (5% Fee: ₹${feeAmount}, Total: ₹${totalDeduction})`,
+      category: 'wallet',
+      ipAddress: '192.168.1.55',
+      device: 'P2P Transfer Module',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'success',
+    };
+    setActivityLogs((prev) => [newLog, ...prev]);
+
+    // Push notification to sender
+    const p2pNotif: UserNotificationItem = {
+      id: `un_${Date.now()}`,
+      category: 'wallet_credit',
+      title: `💸 P2P Transfer Successful: ₹${amount.toLocaleString('en-IN')} Sent`,
+      message: `₹${amount} transferred to ${recipientName}. Total ₹${totalDeduction} deducted (incl. 5% fee ₹${feeAmount}). Ref: ${refCode}`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'wallet',
+      amount: -totalDeduction,
+    };
+    setUserNotifications((prev) => [p2pNotif, ...prev]);
+
+    return {
+      success: true,
+      message: `सफलतापूर्वक ₹${amount} ट्रांसफर किया गया! 5% शुल्क (₹${feeAmount}) मिलाकर आपके वॉलेट से कुल ₹${totalDeduction} कटे।`,
+      data: {
+        amount,
+        feeAmount,
+        totalDeduction,
+        recipientName,
+        recipientPhone,
+        refCode,
+      },
+    };
+  };
+
+  // 8b. Two-Wallet System: Transfer from Withdrawal Wallet (Winning) to Ticket Wallet (Deposit)
+  const handleTransferWinningToTicketWallet = async (
+    amount: number
+  ): Promise<{ success: boolean; message: string }> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return { success: false, message: 'कृपया पहले लॉगिन करें' };
+    }
+    if (amount <= 0) {
+      return { success: false, message: 'कृपया वैध राशि दर्ज करें (कम से कम ₹10)' };
+    }
+    if (amount > currentUser.winningBalance) {
+      return {
+        success: false,
+        message: `अपर्याप्त विथड्रॉल बैलेंस! आपके पास केवल ₹${currentUser.winningBalance.toLocaleString('en-IN')} उपलब्ध है।`,
+      };
+    }
+
+    const refId = `CONV-WIN2TKT-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // Update balances: deduct winningBalance, add to depositBalance
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        winningBalance: prev.winningBalance - amount,
+        depositBalance: prev.depositBalance + amount,
+      };
+    });
+
+    // Record internal transfer transaction
+    const txn: WalletTransaction = {
+      id: `txn_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'internal_transfer',
+      amount: amount,
+      balanceAfter: currentUser.walletBalance,
+      description: `विथड्रॉल वॉलेट से टिकट वॉलेट में ट्रांसफर (100% उपयोगिता - कोई शुल्क नहीं)`,
+      referenceId: refId,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
+    setTransactions((prev) => [txn, ...prev]);
+
+    // Push in-app user notification
+    const convNotif: UserNotificationItem = {
+      id: `un_conv_${Date.now()}`,
+      category: 'wallet_credit',
+      title: `🔄 वॉलेट ट्रांसफर सफल: ₹${amount.toLocaleString('en-IN')}`,
+      message: `₹${amount} आपके विथड्रॉल वॉलेट से टिकट वॉलेट में ट्रांसफर हो गए हैं। अब आप सीधे नए टिकट खरीद सकते हैं!`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'wallet',
+      amount: amount,
+    };
+    setUserNotifications((prev) => [convNotif, ...prev]);
+
+    return {
+      success: true,
+      message: `सफलतापूर्वक ₹${amount} विथड्रॉल वॉलेट से टिकट वॉलेट में ट्रांसफर हो गए हैं! अब आप इस बैलेंस से टिकट खरीद सकते हैं।`,
+    };
+  };
+
+  // 9. Admin Approve Withdrawal
+  const handleApproveWithdrawal = async (id: string): Promise<boolean> => {
+    setWithdrawals((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, status: 'approved' } : w))
+    );
+    setTransactions((prev) =>
+      prev.map((t) => (t.referenceId === id ? { ...t, status: 'completed' } : t))
+    );
+    return true;
+  };
+
+  // 10. Admin Reject Withdrawal (refunds user)
+  const handleRejectWithdrawal = async (id: string): Promise<boolean> => {
+    const req = withdrawals.find((w) => w.id === id);
+    if (req) {
+      setCurrentUser((prev) => ({
+        ...prev,
+        walletBalance: prev.walletBalance + req.amount,
+        winningBalance: prev.winningBalance + req.amount,
+      }));
+    }
+    setWithdrawals((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, status: 'rejected' } : w))
+    );
+    setTransactions((prev) =>
+      prev.map((t) => (t.referenceId === id ? { ...t, status: 'failed' } : t))
+    );
+    return true;
+  };
+
+  // 11. Admin Create Game (With Admin-decided Rate, Prizes, and Ticket Color Theme)
+  const handleCreateGame = async (gameData: Partial<TambolaGame>): Promise<boolean> => {
+    const code = `TL-${Math.floor(100 + Math.random() * 900)}`;
+    const newGame: TambolaGame = {
+      id: `game_${Date.now()}`,
+      title: gameData.title || 'New Tambola Match',
+      gameCode: code,
+      startTime: gameData.startTime || '10:00 PM',
+      date: gameData.date || 'Today',
+      ticketPrice: gameData.ticketPrice || 50,
+      prizePool: gameData.prizePool || 10000,
+      ticketColorTheme: gameData.ticketColorTheme || 'multi',
+      totalTicketsSold: 0,
+      registeredPlayers: 0,
+      maxPlayers: 500,
+      status: 'upcoming',
+      isActive: true,
+      bookingOpen: true,
+      calledNumbers: [],
+      currentNumber: null,
+      previousNumbers: [],
+      autoCalling: false,
+      callIntervalSeconds: 6,
+      createdAt: new Date().toISOString(),
+      prizes: gameData.prizes || [
+        { id: `p1_${Date.now()}`, name: 'Early Five', code: 'early5', amount: 500, description: 'First to strike any 5 numbers', maxWinners: 1, claimedWinners: [] },
+        { id: `p2_${Date.now()}`, name: 'Top Line', code: 'top_line', amount: 1000, description: 'First to complete top row (5 numbers)', maxWinners: 1, claimedWinners: [] },
+        { id: `p3_${Date.now()}`, name: 'Middle Line', code: 'mid_line', amount: 1000, description: 'First to complete middle row (5 numbers)', maxWinners: 1, claimedWinners: [] },
+        { id: `p4_${Date.now()}`, name: 'Bottom Line', code: 'bot_line', amount: 1000, description: 'First to complete bottom row (5 numbers)', maxWinners: 1, claimedWinners: [] },
+        { id: `p5_${Date.now()}`, name: '1st Full House', code: 'full_house', amount: 5000, description: 'First to complete all 15 numbers', maxWinners: 1, claimedWinners: [] },
+      ],
+      rules: 'Standard 90-ball Indian Tambola rules apply. Numbers 1-90 drawn by RNG.',
+    };
+
+    setGames((prev) => [newGame, ...prev]);
+    try {
+      const gameRef = doc(db, 'games', newGame.id);
+      await setDoc(gameRef, newGame);
+    } catch (e) {
+      console.warn('Firestore create game notice:', e);
+    }
+    return true;
+  };
+
+  // 12. Admin Update Game (Rate, Prizes, Colors, Timings, Game ON/OFF, Booking ON/OFF)
+  const handleUpdateGame = async (gameId: string, updates: Partial<TambolaGame>): Promise<boolean> => {
+    setGames((prev) =>
+      prev.map((g) => (g.id === gameId ? { ...g, ...updates } : g))
+    );
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      setDoc(gameRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore game update notice:', e);
+    }
+    return true;
+  };
+
+  // 13. Admin Delete Game
+  const handleDeleteGame = async (gameId: string): Promise<boolean> => {
+    setGames((prev) => prev.filter((g) => g.id !== gameId));
+    try {
+      const gameRef = doc(db, 'games', gameId);
+      deleteDoc(gameRef);
+    } catch (e) {}
+    return true;
+  };
+
+  // 14. Admin Generate Batch Tickets
+  const handleAdminGenerateTickets = async (gameId: string, count: number, colorTheme?: TicketColorThemeId): Promise<boolean> => {
+    const game = games.find((g) => g.id === gameId);
+    if (!game) return false;
+
+    const newTkts: TambolaTicket[] = [];
+    for (let i = 0; i < count; i++) {
+      const ticketNum = game.totalTicketsSold + i + 1;
+      let assignedColor = colorTheme || game.ticketColorTheme || 'ruby';
+      if (assignedColor === 'multi') {
+        assignedColor = COLOR_KEYS[(ticketNum - 1 + i) % COLOR_KEYS.length];
+      }
+
+      const generatedTicket: TambolaTicket = {
+        id: `tkt_adm_${Date.now()}_${i}`,
+        gameId: game.id,
+        gameTitle: game.title,
+        userId: currentUser.id,
+        userName: `${currentUser.name} (Admin Generated)`,
+        ticketNumber: ticketNum,
+        ticketId: generateTicketId(),
+        numbers: generateTambolaTicketMatrix(),
+        markedNumbers: [],
+        price: game.ticketPrice,
+        colorTheme: assignedColor,
+        purchaseDate: new Date().toISOString(),
+        isActive: true,
+        status: 'active',
+      };
+      newTkts.push(generatedTicket);
+
+      try {
+        setDoc(doc(db, 'tickets', generatedTicket.id), generatedTicket);
+      } catch (e) {}
+    }
+
+    setTickets((prev) => [...newTkts, ...prev]);
+    setGames((prev) =>
+      prev.map((g) => (g.id === gameId ? { ...g, totalTicketsSold: g.totalTicketsSold + count } : g))
+    );
+    return true;
+  };
+
+  // 14b. Admin Toggle Single Ticket ON / OFF (चालू / बंद)
+  const handleAdminToggleTicketStatus = async (ticketId: string, isActive: boolean): Promise<boolean> => {
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId
+          ? {
+              ...t,
+              isActive,
+              status: isActive ? 'active' : 'disabled',
+              disabledReason: isActive ? undefined : 'Disabled by Admin',
+            }
+          : t
+      )
+    );
+    try {
+      const tktRef = doc(db, 'tickets', ticketId);
+      setDoc(
+        tktRef,
+        {
+          isActive,
+          status: isActive ? 'active' : 'disabled',
+          disabledReason: isActive ? null : 'Disabled by Admin',
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (e) {
+      console.warn('Firestore ticket toggle notice:', e);
+    }
+    return true;
+  };
+
+  // 14c. Admin Batch Toggle Tickets ON / OFF (बैच टिकट चालू / बंद)
+  const handleAdminBatchToggleTickets = async (ticketIds: string[], isActive: boolean): Promise<boolean> => {
+    const idSet = new Set(ticketIds);
+    setTickets((prev) =>
+      prev.map((t) =>
+        idSet.has(t.id)
+          ? {
+              ...t,
+              isActive,
+              status: isActive ? 'active' : 'disabled',
+              disabledReason: isActive ? undefined : 'Disabled by Admin',
+            }
+          : t
+      )
+    );
+    for (const tid of ticketIds) {
+      try {
+        const tktRef = doc(db, 'tickets', tid);
+        setDoc(
+          tktRef,
+          {
+            isActive,
+            status: isActive ? 'active' : 'disabled',
+            disabledReason: isActive ? null : 'Disabled by Admin',
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (e) {}
+    }
+    return true;
+  };
+
+  // 15. Admin Update User Wallet
+  const handleUpdateWalletBalance = async (userId: string, amount: number, type: 'credit' | 'debit'): Promise<boolean> => {
+    setCurrentUser((prev) => {
+      const delta = type === 'credit' ? amount : -amount;
+      return {
+        ...prev,
+        walletBalance: Math.max(0, prev.walletBalance + delta),
+        depositBalance: Math.max(0, prev.depositBalance + delta),
+      };
+    });
+    return true;
+  };
+
+  // 16. Admin Toggle KYC
+  const handleToggleKYC = async (userId: string): Promise<boolean> => {
+    setCurrentUser((prev) => ({
+      ...prev,
+      kycStatus: prev.kycStatus === 'verified' ? 'pending' : 'verified',
+    }));
+    return true;
+  };
+
+  // 17. Admin User Management Handlers
+  const handleToggleBlockUser = async (userId: string): Promise<boolean> => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, isBlocked: !u.isBlocked } : u))
+    );
+    return true;
+  };
+
+  const handleResetPassword = async (userId: string): Promise<boolean> => {
+    // Simulated secure reset
+    return true;
+  };
+
+  // 18. Admin Referral Commission Handlers
+  const handleApproveCommission = (commissionId: string) => {
+    setCommissions((prev) =>
+      prev.map((c) => (c.id === commissionId ? { ...c, status: 'approved' } : c))
+    );
+  };
+
+  const handleReverseCommission = (commissionId: string) => {
+    setCommissions((prev) =>
+      prev.map((c) => (c.id === commissionId ? { ...c, status: 'reversed' } : c))
+    );
+  };
+
+  // 19. Admin Notifications
+  const handleSendNotification = async (notification: Omit<AdminNotification, 'id' | 'sentAt'>): Promise<boolean> => {
+    const newNotif: AdminNotification = {
+      ...notification,
+      id: `notif_${Date.now()}`,
+      sentAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    return true;
+  };
+
+  const handleDeleteNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+    // 20. Admin Site Settings Update
+  const handleUpdateSettings = async (updates: Partial<SiteSettings>): Promise<boolean> => {
+    setSiteSettings((prev) => {
+      const nextSettings = { ...prev, ...updates };
+      try {
+        localStorage.setItem('apna_tambola_site_settings', JSON.stringify(nextSettings));
+      } catch (e) {}
+      return nextSettings;
+    });
+
+    try {
+      const settingsRef = doc(db, 'system', 'site_settings');
+      await setDoc(settingsRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore settings update notice:', e);
+    }
+    return true;
+  };
+
+  // 21. Support Ticket Actions
+  const handleCreateSupportTicket = async (subject: string, category: 'wallet' | 'game' | 'ticket' | 'referral' | 'kyc' | 'other', message: string): Promise<boolean> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return false;
+    }
+    const newTkt: SupportTicket = {
+      id: `sup_${Date.now()}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userEmail: currentUser.email,
+      category,
+      subject,
+      priority: 'medium',
+      status: 'open',
+      createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      messages: [
+        {
+          id: `msg_${Date.now()}`,
+          sender: 'user',
+          senderName: currentUser.name,
+          text: message,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ],
+    };
+    setSupportTickets((prev) => [newTkt, ...prev]);
+    return true;
+  };
+
+  const handleSendSupportReply = async (ticketId: string, text: string): Promise<boolean> => {
+    if (!currentUser) {
+      handleOpenAuth('login');
+      return false;
+    }
+    setSupportTickets((prev) =>
+      prev.map((t) => {
+        if (t.id !== ticketId) return t;
+        return {
+          ...t,
+          messages: [
+            ...t.messages,
+            {
+              id: `msg_${Date.now()}`,
+              sender: 'user',
+              senderName: currentUser.name,
+              text,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            },
+          ],
+        };
+      })
+    );
+    return true;
+  };
+
+  // 22. User Notifications Handlers
+  const handleMarkNotificationRead = (id: string) => {
+    setUserNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const handleMarkAllNotificationsRead = () => {
+    setUserNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const handleDeleteUserNotification = (id: string) => {
+    setUserNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleClearAllUserNotifications = () => {
+    setUserNotifications([]);
+  };
+
+  const currentTemplate = getAppTemplate(activeTemplateId);
+
+  return (
+    <div className={`min-h-screen ${currentTemplate.bodyBgClass} text-slate-100 flex flex-col font-sans selection:bg-amber-400 selection:text-slate-950 transition-colors duration-500`}>
+      {/* Top Navigation */}
+      <Navbar
+        currentUser={currentUser}
+        activeTab={activeTab}
+        onNavigate={handleNavigate}
+        soundEnabled={soundEnabled}
+        setSoundEnabled={setSoundEnabled}
+        onOpenDeposit={() => handleNavigate('wallet')}
+        onOpenAuth={(mode) => handleOpenAuth(mode || 'login')}
+        onOpenAdminLogin={handleOpenAdminLogin}
+        onLogout={handleLogout}
+        onOpenNotifications={() => setShowNotificationsDrawer(true)}
+        unreadNotificationCount={userNotifications.filter((n) => !n.read).length}
+        activeTemplateId={activeTemplateId}
+        onOpenTemplateSelector={() => setShowTemplateModal(true)}
+        onSelectAdminModule={(modKey) => {
+          setActiveTab('admin');
+          setAdminActiveModule(modKey);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        {/* Home Page: Always shows the complete, rich Landing Page with all platform overviews, ticket, deposit, withdrawal, and income details */}
+        {(activeTab === 'home' || activeTab === 'landing') && (
+          <HomeView
+            games={games}
+            winners={winners}
+            currentUser={currentUser}
+            onNavigate={handleNavigate}
+            onOpenDeposit={() => handleNavigate('wallet')}
+            onOpenAuth={handleOpenAuth}
+            onOpenAdminLogin={handleOpenAdminLogin}
+            activeTemplateId={activeTemplateId}
+            onOpenTemplateSelector={() => setShowTemplateModal(true)}
+          />
+        )}
+
+        {/* Dedicated User Dashboard Tab (11-Box Colorful Dashboard) */}
+        {activeTab === 'dashboard' && (
+          currentUser ? (
+            <UserDashboardView
+              currentUser={currentUser}
+              games={games}
+              tickets={tickets}
+              winners={winners}
+              referralMembers={computedReferralMembers}
+              onNavigate={handleNavigate}
+              onOpenDeposit={() => handleNavigate('wallet')}
+              onOpenAuth={handleOpenAuth}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="यूज़र डैशबोर्ड (User Dashboard)"
+              subtitle="डैशबोर्ड, टिकट स्टेटस, इनकम और वॉलेट बैलेंस देखने के लिए कृपया अपने आईडी और पासवर्ड से लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'live' && (
+          <LiveGameView
+            game={liveGame}
+            userTickets={tickets}
+            currentUser={currentUser || INITIAL_USERS[0]}
+            soundEnabled={soundEnabled}
+            setSoundEnabled={setSoundEnabled}
+            isAdmin={currentUser?.role === 'admin'}
+            onCallNext={handleCallNextNumber}
+            onToggleAuto={handleToggleAutoCaller}
+            onResetGame={handleResetGame}
+            onClaimPrize={handleClaimPrize}
+            onBuyTickets={(gId) => handleNavigate('buy-ticket', gId)}
+            celebrationData={celebrationData}
+            setCelebrationData={setCelebrationData}
+            onGoToWallet={() => handleNavigate('wallet')}
+            onToggleAutoMode={handleToggleTicketAutoMode}
+            activeWinnerFlash={activeWinnerFlash}
+          />
+        )}
+
+        {activeTab === 'buy-ticket' && (
+          currentUser ? (
+            <BuyTicketView
+              games={games}
+              selectedGameId={selectedGameId}
+              currentUser={currentUser}
+              onBuyTickets={handleBuyTickets}
+              onOpenDeposit={() => handleNavigate('wallet')}
+              onNavigate={handleNavigate}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="टिकट बुक करें (Buy Tambola Tickets)"
+              subtitle="लाइव तंबोला टूर्नामेंट टिकट खरीदने और जीतने के लिए कृपया अपने आईडी व पासवर्ड से लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'my-tickets' && (
+          currentUser ? (
+            <MyTicketsView
+              tickets={tickets}
+              games={games}
+              onNavigate={handleNavigate}
+              onToggleAutoMode={handleToggleTicketAutoMode}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="मेरे टिकट & पासबुक (My Tickets)"
+              subtitle="अपने खरीदे गए लाइव और पिछले टिकट देखने के लिए कृपया लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'games' && (
+          <GamesLobbyView
+            games={games}
+            onNavigate={handleNavigate}
+          />
+        )}
+
+        {activeTab === 'winners' && (
+          <WinnersView
+            winners={winners}
+          />
+        )}
+
+        {activeTab === 'referral' && (
+          currentUser ? (
+            <ReferralView
+              currentUser={currentUser}
+              referralMembers={computedReferralMembers}
+              commissions={commissions}
+              onOpenDeposit={() => handleNavigate('wallet')}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="8-लेवल रेफरल नेटवर्क (Referral Program)"
+              subtitle="अपना व्यक्तिगत रेफरल लिंक, QR कोड और डायरेक्ट टीम देखने के लिए कृपया लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'wallet' && (
+          currentUser ? (
+            <WalletView
+              currentUser={currentUser}
+              transactions={transactions}
+              withdrawals={withdrawals}
+              settings={siteSettings}
+              users={users}
+              onDeposit={handleDeposit}
+              onWithdraw={handleWithdrawal}
+              onTransferFund={handleP2PTransfer}
+              onTransferWinningToTicketWallet={handleTransferWinningToTicketWallet}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="माई वॉलेट & विथड्रॉल (Wallet & Payouts)"
+              subtitle="वॉलेट रिचार्ज, राशि निकासी, P2P ट्रांसफर और बैंक डिटेल्स मैनेज करने के लिए लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'profile' && (
+          currentUser ? (
+            <ProfileView
+              currentUser={currentUser}
+              onUpdateProfile={(updated) => {
+                if (currentUser) {
+                  setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
+                }
+              }}
+              onTransferFund={handleP2PTransfer}
+              users={users}
+              transactions={transactions}
+              settings={siteSettings}
+              tickets={tickets}
+              winners={winners}
+              games={games}
+              onNavigate={handleNavigate}
+              onOpenAuth={(mode) => handleOpenAuth(mode || 'login')}
+              onLogout={handleLogout}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="यूज़र प्रोफाइल & KYC (Profile)"
+              subtitle="अपनी प्रोफाइल जानकारी, पासवर्ड और KYC स्टेटस देखने के लिए लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'daily-bonus' && (
+          currentUser ? (
+            <DailyBonusView
+              currentUser={currentUser}
+              onClaimDailyReward={handleClaimDailyReward}
+              onDeposit={handleDeposit}
+              onNavigate={handleNavigate}
+            />
+          ) : (
+            <ProtectedViewGate
+              title="दैनिक स्पिन & स्क्रैच रिवार्ड्स (Daily Bonus)"
+              subtitle="मुफ्त डेली लकी स्पिन और स्क्रैच कार्ड खेलकर रिवार्ड्स पाने के लिए लॉगिन करें।"
+              onOpenAuth={handleOpenAuth}
+              onNavigate={handleNavigate}
+            />
+          )
+        )}
+
+        {activeTab === 'how-to-play' && (
+          <HowToPlayView
+            onNavigate={handleNavigate}
+          />
+        )}
+
+        {activeTab === 'support' && (
+          <SupportView
+            currentUser={currentUser || INITIAL_USERS[0]}
+            tickets={supportTickets}
+            onCreateTicket={handleCreateSupportTicket}
+            onSendReply={handleSendSupportReply}
+          />
+        )}
+
+        {activeTab === 'admin' && currentUser?.role === 'admin' && (
+          <AdminDashboardView
+            stats={adminStats}
+            games={games}
+            users={users}
+            withdrawals={withdrawals}
+            commissions={commissions}
+            tickets={tickets}
+            transactions={transactions}
+            activityLogs={activityLogs}
+            notifications={notifications}
+            loginHistory={loginHistory}
+            siteSettings={siteSettings}
+            activeModule={adminActiveModule}
+            onModuleChange={setAdminActiveModule}
+            onCallNext={handleCallNextNumber}
+            onToggleAuto={handleToggleAutoCaller}
+            onResetGame={handleResetGame}
+            onCreateGame={handleCreateGame}
+            onUpdateGame={handleUpdateGame}
+            onDeleteGame={handleDeleteGame}
+            onApproveWithdrawal={handleApproveWithdrawal}
+            onRejectWithdrawal={handleRejectWithdrawal}
+            onUpdateWalletBalance={handleUpdateWalletBalance}
+            onToggleKYC={handleToggleKYC}
+            onToggleBlockUser={handleToggleBlockUser}
+            onResetPassword={handleResetPassword}
+            onAdminGenerateTickets={handleAdminGenerateTickets}
+            onAdminToggleTicketStatus={handleAdminToggleTicketStatus}
+            onAdminBatchToggleTickets={handleAdminBatchToggleTickets}
+            onApproveCommission={handleApproveCommission}
+            onReverseCommission={handleReverseCommission}
+            onSendNotification={handleSendNotification}
+            onDeleteNotification={handleDeleteNotification}
+            onUpdateSettings={handleUpdateSettings}
+            onRegisterUser={handleRegisterUser}
+          />
+        )}
+
+        {/* If on Admin tab but not logged in as Admin, show direct portal entry prompt */}
+        {activeTab === 'admin' && currentUser?.role !== 'admin' && (
+          <div className="max-w-xl mx-auto py-12 text-center space-y-6">
+            <div className="p-8 rounded-3xl bg-slate-900/90 border-2 border-red-500/50 shadow-2xl shadow-red-950/60 space-y-4">
+              <div className="w-16 h-16 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center mx-auto text-red-400">
+                <span className="text-3xl">👑</span>
+              </div>
+              <h2 className="text-2xl font-black text-white">व्यवस्थापक (एडमिन) लॉगिन आवश्यक</h2>
+              <p className="text-sm text-slate-300">
+                एडमिन डैशबोर्ड में प्रवेश करने के लिए कृपया अधिकृत क्रेडेंशियल्स (ashishbadawat@gmail.com या Google Sign-In) से लॉगिन करें।
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                <button
+                  onClick={handleOpenAdminLogin}
+                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-sm shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>👑 एडमिन लॉगिन पोर्टल खोलें</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('home')}
+                  className="px-6 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm cursor-pointer"
+                >
+                  मुख्य पृष्ठ पर जाएं
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <Footer
+        onNavigate={handleNavigate}
+        onOpenAdminLogin={handleOpenAdminLogin}
+        onOpenAuth={handleOpenAuth}
+      />
+
+      {/* Mobile Sticky Bottom Navigation */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        currentUser={currentUser}
+        onNavigate={handleNavigate}
+        onOpenAllOptions={() => setShowAllOptionsModal(true)}
+        onOpenAuth={handleOpenAuth}
+      />
+
+      {/* Auth Modal (Login / Register & 1-Click Demo switch) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onLogin={handleUserLogin}
+        onRegisterUser={handleRegisterUser}
+        allUsers={users}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        initialMode={authModalMode}
+      />
+
+      {/* Admin Login Dedicated Modal */}
+      <AdminLoginModal
+        isOpen={showAdminLoginModal}
+        onClose={() => setShowAdminLoginModal(false)}
+        onAdminLoginSuccess={handleAdminLoginSuccess}
+        allUsers={users}
+      />
+
+      {/* User Real-Time Notifications Drawer */}
+      <UserNotificationsDrawer
+        isOpen={showNotificationsDrawer}
+        onClose={() => setShowNotificationsDrawer(false)}
+        notifications={userNotifications}
+        onMarkAsRead={handleMarkNotificationRead}
+        onMarkAllAsRead={handleMarkAllNotificationsRead}
+        onDeleteNotification={handleDeleteUserNotification}
+        onClearAll={handleClearAllUserNotifications}
+        onNavigate={handleNavigate}
+      />
+
+      {/* All Options Hub Modal */}
+      <AllOptionsModal
+        isOpen={showAllOptionsModal}
+        onClose={() => setShowAllOptionsModal(false)}
+        currentTab={activeTab}
+        onNavigate={handleNavigate}
+        isAdminView={currentUser?.role === 'admin'}
+        onSelectAdminModule={(modKey) => {
+          setActiveTab('admin');
+          setAdminActiveModule(modKey);
+        }}
+      />
+
+      {/* 🎨 Apna Tambola Visual Template Selector Modal */}
+      <TemplateSelectorModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        currentTemplateId={activeTemplateId}
+        onSelectTemplate={(newTpl) => {
+          setActiveTemplateId(newTpl);
+          try {
+            localStorage.setItem('apna_tambola_template', newTpl);
+          } catch {
+            // fallback
+          }
+        }}
+      />
+    </div>
+  );
+}
+export default App;

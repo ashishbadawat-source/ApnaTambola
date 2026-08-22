@@ -1,0 +1,387 @@
+@import "tailwindcss";
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    width: 100%;
+    max-width: 100vw;
+    min-height: 100vh;
+    background-color: #080c18;
+    color: #f1f5f9;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    overflow-x: hidden;
+    background-image: 
+      radial-gradient(circle at 15% 15%, rgba(239, 68, 68, 0.08) 0%, transparent 35%),
+      radial-gradient(circle at 85% 20%, rgba(245, 158, 11, 0.1) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+      radial-gradient(circle at 80% 85%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 20% 80%, rgba(236, 72, 153, 0.08) 0%, transparent 35%);
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+}
+
+/* Glassmorphism Classes */
+.glass-panel {
+  background: rgba(15, 22, 41, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-panel-gold {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.16) 0%, rgba(18, 24, 43, 0.92) 100%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+}
+
+.glass-panel-purple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(18, 24, 43, 0.92) 100%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(139, 92, 246, 0.35);
+}
+
+.glass-panel-crimson {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(18, 24, 43, 0.92) 100%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(239, 68, 68, 0.35);
+}
+
+.glass-panel-emerald {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(6, 25, 20, 0.92) 100%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(16, 185, 129, 0.35);
+}
+
+.glass-panel-vintage {
+  background: linear-gradient(135deg, rgba(180, 83, 9, 0.2) 0%, rgba(26, 17, 10, 0.94) 100%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(217, 119, 6, 0.4);
+}
+
+.glass-panel-platinum {
+  background: linear-gradient(135deg, rgba(226, 232, 240, 0.15) 0%, rgba(15, 23, 42, 0.92) 100%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(203, 213, 225, 0.4);
+}
+
+.glass-panel-rainbow {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(245, 158, 11, 0.12) 25%, rgba(16, 185, 129, 0.12) 50%, rgba(59, 130, 246, 0.12) 75%, rgba(168, 85, 247, 0.15) 100%);
+  backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+}
+
+/* Template Themes */
+.theme-royal-gold {
+  background-color: #070a14;
+  background-image: 
+    radial-gradient(circle at 10% 15%, rgba(245, 158, 11, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 90% 15%, rgba(234, 179, 8, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 50% 60%, rgba(120, 53, 15, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 20% 85%, rgba(217, 119, 6, 0.1) 0%, transparent 40%);
+}
+
+.theme-festive-mela {
+  background-color: #04120e;
+  background-image: 
+    radial-gradient(circle at 10% 15%, rgba(16, 185, 129, 0.16) 0%, transparent 40%),
+    radial-gradient(circle at 90% 15%, rgba(245, 158, 11, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(13, 148, 136, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 80% 85%, rgba(234, 88, 12, 0.14) 0%, transparent 40%);
+}
+
+.theme-cyber-neon {
+  background-color: #060814;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(217, 70, 239, 0.16) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.12) 0%, transparent 60%),
+    radial-gradient(circle at 20% 80%, rgba(236, 72, 153, 0.14) 0%, transparent 40%);
+}
+
+.theme-vintage-club {
+  background-color: #120b06;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(217, 119, 6, 0.18) 0%, transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(180, 83, 9, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(120, 53, 15, 0.14) 0%, transparent 60%),
+    radial-gradient(circle at 80% 85%, rgba(146, 64, 14, 0.12) 0%, transparent 40%);
+}
+
+.theme-kohinoor-diamond {
+  background-color: #080d1a;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(199, 210, 254, 0.14) 0%, transparent 40%),
+    radial-gradient(circle at 85% 20%, rgba(147, 197, 253, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 60%),
+    radial-gradient(circle at 20% 80%, rgba(165, 180, 252, 0.12) 0%, transparent 40%);
+}
+
+/* Authentic Perforated Ticket Edges */
+.ticket-perforated {
+  position: relative;
+}
+
+.ticket-perforated::before,
+.ticket-perforated::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  background-color: #070a14;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ticket-perforated::before {
+  left: -7px;
+}
+
+.ticket-perforated::after {
+  right: -7px;
+}
+
+/* Hologram Strip */
+.hologram-strip {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(245, 158, 11, 0.5) 25%,
+    rgba(236, 72, 153, 0.5) 50%,
+    rgba(6, 182, 212, 0.5) 75%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+  background-size: 200% 200%;
+  animation: hologram-shimmer 4s ease infinite;
+}
+
+@keyframes hologram-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* 3D Dabber Stamp */
+.stamp-dabbed {
+  animation: dab-pop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes dab-pop {
+  0% { transform: scale(0.6); opacity: 0.5; }
+  70% { transform: scale(1.15); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Gold Metallic Foil Text */
+.gold-foil-text {
+  background: linear-gradient(to bottom right, #fef08a 0%, #eab308 40%, #ca8a04 70%, #fef9c3 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+/* 3D Glossy Tambola Number Balls */
+.tambola-ball-3d {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-weight: 900;
+  box-shadow: 
+    inset 0 4px 6px rgba(255, 255, 255, 0.6),
+    inset 0 -6px 8px rgba(0, 0, 0, 0.5),
+    0 8px 16px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  user-select: none;
+  transition: all 0.25s ease;
+}
+
+.tambola-ball-3d::before {
+  content: '';
+  position: absolute;
+  top: 10%;
+  left: 18%;
+  width: 32%;
+  height: 22%;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0) 75%);
+  border-radius: 50%;
+  transform: rotate(-30deg);
+  pointer-events: none;
+}
+
+/* Vibrant Ball Color Themes */
+.ball-red {
+  background: radial-gradient(circle at 35% 35%, #ff4b4b 0%, #dc2626 50%, #7f1d1d 100%);
+  color: #ffffff;
+}
+
+.ball-gold {
+  background: radial-gradient(circle at 35% 35%, #fef08a 0%, #eab308 45%, #854d0e 100%);
+  color: #1a1003;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+.ball-green {
+  background: radial-gradient(circle at 35% 35%, #4ade80 0%, #16a34a 50%, #14532d 100%);
+  color: #ffffff;
+}
+
+.ball-blue {
+  background: radial-gradient(circle at 35% 35%, #60a5fa 0%, #2563eb 50%, #1e3a8a 100%);
+  color: #ffffff;
+}
+
+.ball-purple {
+  background: radial-gradient(circle at 35% 35%, #c084fc 0%, #9333ea 50%, #4c1d95 100%);
+  color: #ffffff;
+}
+
+.ball-pink {
+  background: radial-gradient(circle at 35% 35%, #f472b6 0%, #db2777 50%, #831843 100%);
+  color: #ffffff;
+}
+
+.ball-orange {
+  background: radial-gradient(circle at 35% 35%, #fb923c 0%, #ea580c 50%, #7c2d12 100%);
+  color: #ffffff;
+}
+
+.ball-cyan {
+  background: radial-gradient(circle at 35% 35%, #67e8f9 0%, #0891b2 50%, #164e63 100%);
+  color: #ffffff;
+}
+
+/* Glowing text and shadows */
+.text-glow-gold {
+  text-shadow: 0 0 18px rgba(245, 158, 11, 0.8), 0 0 30px rgba(245, 158, 11, 0.4);
+}
+
+.text-glow-purple {
+  text-shadow: 0 0 18px rgba(168, 85, 247, 0.8), 0 0 30px rgba(168, 85, 247, 0.4);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 18px rgba(239, 68, 68, 0.8), 0 0 30px rgba(239, 68, 68, 0.4);
+}
+
+.text-glow-green {
+  text-shadow: 0 0 18px rgba(34, 197, 94, 0.8), 0 0 30px rgba(34, 197, 94, 0.4);
+}
+
+.glow-box-gold {
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.35);
+}
+
+.glow-box-purple {
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.35);
+}
+
+.glow-box-rainbow {
+  box-shadow: 0 0 35px rgba(234, 179, 8, 0.3), 0 0 50px rgba(147, 51, 234, 0.25);
+}
+
+/* Shimmer animations */
+@keyframes jackpot-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg, #f59e0b 0%, #ffffff 50%, #f59e0b 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: jackpot-shimmer 3s infinite linear;
+}
+
+@keyframes float-ball {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(6deg); }
+}
+
+.animate-float-ball {
+  animation: float-ball 3.5s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.1); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(11, 15, 25, 0.8);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.5);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.8);
+}
+
+/* Tambola Ticket Print Styles */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-ticket-container {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+    margin-bottom: 20px;
+  }
+  .print-ticket-cell {
+    border: 1px solid #333333 !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+  }
+  .print-ticket-cell.marked {
+    background: #e2e8f0 !important;
+    font-weight: bold;
+  }
+}
+

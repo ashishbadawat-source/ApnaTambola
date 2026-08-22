@@ -1,0 +1,163 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with wallets, KYC and referral tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "walletBalance": { "type": "number" },
+        "depositBalance": { "type": "number" },
+        "winningBalance": { "type": "number" },
+        "referralBalance": { "type": "number" },
+        "kycStatus": { "type": "string", "enum": ["verified", "pending", "rejected", "unverified"] },
+        "referralCode": { "type": "string", "maxLength": 50 },
+        "referredBy": { "type": "string", "maxLength": 50 },
+        "avatar": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "name", "role", "walletBalance", "depositBalance", "winningBalance", "referralBalance", "referralCode", "createdAt"]
+    },
+    "TambolaGame": {
+      "title": "TambolaGame",
+      "description": "Match room game tournament instance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 },
+        "gameCode": { "type": "string", "maxLength": 50 },
+        "date": { "type": "string", "maxLength": 50 },
+        "startTime": { "type": "string", "maxLength": 50 },
+        "ticketPrice": { "type": "number" },
+        "prizePool": { "type": "number" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "completed", "cancelled"] },
+        "calledNumbers": { "type": "array" },
+        "currentNumber": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "title", "ticketPrice", "prizePool", "status", "createdAt"]
+    },
+    "TambolaTicket": {
+      "title": "TambolaTicket",
+      "description": "Purchased Tambola match ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "gameId": { "type": "string", "maxLength": 128 },
+        "gameTitle": { "type": "string", "maxLength": 200 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "ticketNumber": { "type": "number" },
+        "ticketId": { "type": "string", "maxLength": 50 },
+        "numbers": { "type": "array" },
+        "markedNumbers": { "type": "array" },
+        "price": { "type": "number" },
+        "purchaseDate": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "gameId", "userId", "ticketNumber", "numbers", "price", "purchaseDate"]
+    },
+    "WalletTransaction": {
+      "title": "WalletTransaction",
+      "description": "Financial transaction history record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["completed", "pending", "failed", "reversed"] },
+        "description": { "type": "string", "maxLength": 300 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "balanceAfter": { "type": "number" }
+      },
+      "required": ["id", "userId", "type", "amount", "status", "timestamp", "balanceAfter"]
+    },
+    "DepositRequest": {
+      "title": "DepositRequest",
+      "description": "Deposit and recharge request submitted by player",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userPhone": { "type": "string", "maxLength": 20 },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "utrNumber": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "requestDate": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "amount", "paymentMethod", "status", "requestDate"]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Withdrawal payout request submitted by player",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userPhone": { "type": "string", "maxLength": 20 },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["upi", "bank"] },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "requestDate": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "amount", "paymentMethod", "status", "requestDate"]
+    },
+    "GameWinner": {
+      "title": "GameWinner",
+      "description": "Tambola match prize winning record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "gameId": { "type": "string", "maxLength": 128 },
+        "gameTitle": { "type": "string", "maxLength": 200 },
+        "prizeId": { "type": "string", "maxLength": 128 },
+        "prizeCode": { "type": "string", "maxLength": 50 },
+        "prizeName": { "type": "string", "maxLength": 100 },
+        "prizeAmount": { "type": "number" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "ticketId": { "type": "string", "maxLength": 50 },
+        "winningNumber": { "type": "number" },
+        "date": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "gameId", "prizeId", "prizeName", "prizeAmount", "userId", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Stores user profiles, roles, and balances"
+    },
+    "/games/{gameId}": {
+      "schema": "TambolaGame",
+      "description": "Stores match details, status, and called numbers"
+    },
+    "/tickets/{ticketId}": {
+      "schema": "TambolaTicket",
+      "description": "Stores player tickets for matches"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "WalletTransaction",
+      "description": "Stores wallet transaction logs"
+    },
+    "/deposits/{depositId}": {
+      "schema": "DepositRequest",
+      "description": "Stores user deposit recharge proofs"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": "WithdrawalRequest",
+      "description": "Stores withdrawal requests"
+    },
+    "/winners/{winnerId}": {
+      "schema": "GameWinner",
+      "description": "Stores public winner records"
+    }
+  }
+}
