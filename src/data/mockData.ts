@@ -16,10 +16,10 @@ import {
 import { generateTambolaTicketMatrix } from '../utils/tambolaTicket';
 
 export const DEFAULT_USER: User = {
-  id: 'usr_ashish_101',
-  name: 'Ashish Badawat',
-  email: 'ashishbadawat@gmail.com',
-  phone: '+91 98765 43210',
+  id: 'usr_demo_101',
+  name: 'Demo Player',
+  email: 'demo@apnatambola.com',
+  phone: '+91 00000 00000',
   password: 'password123',
   role: 'user',
   walletBalance: 1250,
@@ -28,16 +28,16 @@ export const DEFAULT_USER: User = {
   referralBalance: 280,
   bonusRewardBalance: 14.50,
   kycStatus: 'verified',
-  referralCode: 'REF-ASH772',
-  referredBy: 'REF-VIKRAM01',
+  referralCode: 'REF-DEMO1',
+  referredBy: 'REF-ADMIN',
   avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
   createdAt: '2026-06-15T10:30:00.000Z',
   bankDetails: {
-    accountName: 'Ashish Badawat',
+    accountName: 'Demo Player',
     accountNumber: 'XXXXXX5892',
     ifsc: 'HDFC0001234',
     bankName: 'HDFC Bank',
-    upiId: 'ashishbadawat@okhdfcbank',
+    upiId: 'demoplayer@okhdfcbank',
   },
 };
 
@@ -58,57 +58,7 @@ export const ADMIN_USER: User = {
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-export const VIP_USER: User = {
-  id: 'usr_neha_202',
-  name: 'Neha Sharma',
-  email: 'neha@tambolalive.com',
-  phone: '+91 98222 11111',
-  password: 'password123',
-  role: 'user',
-  walletBalance: 4500,
-  depositBalance: 2000,
-  winningBalance: 2100,
-  referralBalance: 400,
-  kycStatus: 'verified',
-  referralCode: 'REF-NEHA88',
-  referredBy: 'REF-ASH772',
-  avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=160&q=80',
-  createdAt: '2026-07-01T12:00:00.000Z',
-  bankDetails: {
-    accountName: 'Neha Sharma',
-    accountNumber: 'XXXXXX4123',
-    ifsc: 'ICIC0002345',
-    bankName: 'ICICI Bank',
-    upiId: 'nehasharma@okicici',
-  },
-};
-
-export const PRO_USER: User = {
-  id: 'usr_rajesh_303',
-  name: 'Rajesh Verma',
-  email: 'rajesh@tambolalive.com',
-  phone: '+91 98333 22222',
-  password: 'password123',
-  role: 'user',
-  walletBalance: 8900,
-  depositBalance: 3500,
-  winningBalance: 4800,
-  referralBalance: 600,
-  kycStatus: 'verified',
-  referralCode: 'REF-RAJESH99',
-  referredBy: 'REF-ASH772',
-  avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=160&q=80',
-  createdAt: '2026-05-10T14:15:00.000Z',
-  bankDetails: {
-    accountName: 'Rajesh Verma',
-    accountNumber: 'XXXXXX7890',
-    ifsc: 'SBIN0006789',
-    bankName: 'State Bank of India',
-    upiId: 'rajeshverma@oksbi',
-  },
-};
-
-export const INITIAL_USERS: User[] = [DEFAULT_USER, ADMIN_USER, VIP_USER, PRO_USER];
+export const INITIAL_USERS: User[] = [ADMIN_USER];
 
 // Initial called numbers for the active Live Game
 export const INITIAL_CALLED_NUMBERS = [12, 35, 8, 63, 21, 47, 74, 19, 52, 88, 3, 31, 67, 82, 15, 41, 59, 90, 24, 76];

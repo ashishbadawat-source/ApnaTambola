@@ -82,7 +82,15 @@ export function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          // Filter out legacy mock placeholder records that held ashishbadawat email/dummy phone
+          const cleaned = parsed.filter(
+            (u) =>
+              u.id !== 'usr_ashish_101' &&
+              !(u.email === 'ashishbadawat@gmail.com' && u.createdAt === '2026-06-15T10:30:00.000Z')
+          );
+          if (cleaned.length > 0) {
+            return cleaned;
+          }
         }
       }
     } catch (e) {

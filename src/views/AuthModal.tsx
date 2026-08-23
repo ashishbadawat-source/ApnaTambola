@@ -85,6 +85,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [otpTimer, setOtpTimer] = useState(30);
 
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [existingUserFound, setExistingUserFound] = useState<User | null>(null);
+  const [isResetPasswordMode, setIsResetPasswordMode] = useState(false);
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
   const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
   const [asyncReferrer, setAsyncReferrer] = useState<User | null>(null);
   const [isCheckingReferral, setIsCheckingReferral] = useState(false);
@@ -488,14 +492,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Check if phone or email already registered
-    const existingPhone = allUsers.find((u) => u.phone.replace(/\D/g, '').endsWith(phoneDigits));
+    const existingPhone = allUsers.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
     if (existingPhone) {
+      setExistingUserFound(existingPhone);
       setStatusMessage({
         type: 'error',
         text:
           lang === 'hi'
-            ? '⚠️ यह मोबाइल नंबर पहले से रजिस्टर है! कृपया पासवर्ड डालकर लॉगिन करें।'
-            : '⚠️ This mobile number is already registered! Please sign in with your password.',
+            ? `⚠️ मोबाइल नंबर (+91 ${phoneDigits}) पहले से रजिस्टर है (${existingPhone.name})! कृपया नीचे दिए गए बटनों से सीधे लॉगिन करें या नया पासवर्ड सेट करें।`
+            : `⚠️ Mobile (+91 ${phoneDigits}) is already registered (${existingPhone.name})! Please sign in or reset password below.`,
       });
       return;
     }
@@ -503,12 +508,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (email) {
       const existingEmail = allUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
       if (existingEmail) {
+        setExistingUserFound(existingEmail);
         setStatusMessage({
           type: 'error',
           text:
             lang === 'hi'
-              ? '⚠️ यह ईमेल पता पहले से रजिस्टर है! कृपया लॉगिन करें।'
-              : '⚠️ This email is already registered! Please sign in.',
+              ? `⚠️ ईमेल पता (${email}) पहले से रजिस्टर है (${existingEmail.name})! कृपया नीचे दिए गए बटनों से लॉगिन करें।`
+              : `⚠️ Email (${email}) is already registered (${existingEmail.name})! Please sign in below.`,
         });
         return;
       }
@@ -572,6 +578,74 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     playWinningFanfare();
     onLogin(newUser);
     onClose();
+  };
+
+  // ==================== PASSWORD RESET HANDLER ====================
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatusMessage(null);
+
+    const entered = otpDigits.join('');
+    if (entered.length < 4) {
+      setStatusMessage({
+        type: 'error',
+        text: lang === 'hi' ? 'कृपया पूरा 4-अंकीय ओटीपी दर्ज करें।' : 'Please enter the complete 4-digit OTP.',
+      });
+      return;
+    }
+
+    if (!resetNewPassword || resetNewPassword.length < 4) {
+      setStatusMessage({
+        type: 'error',
+        text: lang === 'hi' ? 'नया पासवर्ड कम से कम 4 अक्षरों का होना चाहिए।' : 'New password must be at least 4 chars long.',
+      });
+      return;
+    }
+
+    if (resetNewPassword !== resetConfirmPassword) {
+      setStatusMessage({
+        type: 'error',
+        text: lang === 'hi' ? 'दोनों पासवर्ड एक समान नहीं हैं।' : 'Passwords do not match.',
+      });
+      return;
+    }
+
+    const digits = cleanPhone(otpPhone);
+    const targetUser = allUsers.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(digits));
+
+    if (!targetUser) {
+      setStatusMessage({
+        type: 'error',
+        text: lang === 'hi' ? '❌ यूजर खाता नहीं मिला।' : '❌ User account not found.',
+      });
+      return;
+    }
+
+    const updatedUser: User = {
+      ...targetUser,
+      password: resetNewPassword,
+    };
+
+    try {
+      await setDoc(doc(db, 'users', updatedUser.id), updatedUser, { merge: true });
+    } catch (e) {
+      console.warn('Firestore password reset save notice:', e);
+    }
+
+    if (onRegisterUser) {
+      onRegisterUser(updatedUser);
+    }
+
+    playWinningFanfare();
+    setStatusMessage({
+      type: 'success',
+      text: lang === 'hi' ? '✓ नया पासवर्ड सफलतापूर्वक सेट हो गया! लॉगिन हो रहे हैं...' : '✓ Password reset successfully! Logging in...',
+    });
+
+    setTimeout(() => {
+      onLogin(updatedUser);
+      onClose();
+    }, 600);
   };
 
   // ==================== GOOGLE SIGN-IN ====================
@@ -771,23 +845,209 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Notification / Error / Success Message */}
         {statusMessage && (
           <div
-            className={`p-3 rounded-2xl text-xs font-bold flex items-start gap-2.5 ${
+            className={`p-3 rounded-2xl text-xs font-bold flex flex-col gap-2 ${
               statusMessage.type === 'success'
                 ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-300'
                 : 'bg-red-950/90 border border-red-500/50 text-red-200 leading-relaxed'
             }`}
           >
-            {statusMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5">
+              {statusMessage.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              )}
+              <span className="flex-1">{statusMessage.text}</span>
+            </div>
+
+            {/* Quick Action Options when already registered */}
+            {existingUserFound && (
+              <div className="mt-2 pt-2 border-t border-red-800/60 flex flex-col sm:flex-row items-stretch gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegister(false);
+                    setIsResetPasswordMode(false);
+                    setLoginMethod('password');
+                    setLoginIdentifier(existingUserFound.phone.replace(/\D/g, '') || existingUserFound.email);
+                    setStatusMessage(null);
+                    setExistingUserFound(null);
+                  }}
+                  className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>{lang === 'hi' ? 'सीधे लॉगिन करें' : 'Sign In Now'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = cleanPhone(existingUserFound.phone);
+                    setIsRegister(false);
+                    setIsResetPasswordMode(false);
+                    setLoginMethod('otp');
+                    setOtpPhone(digits);
+                    const generated = Math.floor(1000 + Math.random() * 9000).toString();
+                    setMockGeneratedOtp(generated);
+                    setOtpStep(true);
+                    setOtpTimer(30);
+                    playNumberCallSound();
+                    setStatusMessage({
+                      type: 'success',
+                      text:
+                        lang === 'hi'
+                          ? `रजिस्टर्ड मोबाइल नंबर पर OTP ${generated} भेजा गया!`
+                          : `OTP ${generated} sent to registered mobile!`,
+                    });
+                    setExistingUserFound(null);
+                  }}
+                  className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>{lang === 'hi' ? 'OTP से लॉगिन' : 'OTP Login'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const digits = cleanPhone(existingUserFound.phone);
+                    setIsResetPasswordMode(true);
+                    setIsRegister(false);
+                    setOtpPhone(digits);
+                    const generated = Math.floor(1000 + Math.random() * 9000).toString();
+                    setMockGeneratedOtp(generated);
+                    setOtpStep(true);
+                    setOtpTimer(30);
+                    playNumberCallSound();
+                    setStatusMessage({
+                      type: 'success',
+                      text:
+                        lang === 'hi'
+                          ? `पासवर्ड रीसेट हेतु OTP ${generated} भेजा गया!`
+                          : `OTP ${generated} sent for password reset!`,
+                    });
+                    setExistingUserFound(null);
+                  }}
+                  className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{lang === 'hi' ? 'पासवर्ड बदलें' : 'Reset Pwd'}</span>
+                </button>
+              </div>
             )}
-            <span className="flex-1">{statusMessage.text}</span>
           </div>
         )}
 
+        {/* ======================= RESET PASSWORD SCREEN ======================= */}
+        {isResetPasswordMode ? (
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-3.5 relative z-10 animate-in fade-in">
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-400/40 text-xs text-amber-200 flex items-center justify-between">
+              <div>
+                <p className="font-bold">{lang === 'hi' ? '🔑 नया पासवर्ड सेट करें' : '🔑 Set New Password'}</p>
+                <p className="text-[11px] text-slate-300 font-mono">+91 {otpPhone}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResetPasswordMode(false);
+                  setStatusMessage(null);
+                }}
+                className="text-xs text-slate-400 hover:text-white underline"
+              >
+                {lang === 'hi' ? 'रद्द करें' : 'Cancel'}
+              </button>
+            </div>
+
+            {/* OTP Code Display & Auto-fill */}
+            <div className="p-3 rounded-2xl bg-purple-950/60 border border-purple-500/40 text-center space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-950 rounded-xl border border-amber-400/40 text-xs">
+                <span className="text-slate-400">OTP Code:</span>
+                <strong className="text-amber-400 font-mono font-black text-sm tracking-widest">
+                  {mockGeneratedOtp}
+                </strong>
+                <button
+                  type="button"
+                  onClick={handleAutoFillOtp}
+                  className="ml-1 text-[10px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                >
+                  {t.autoFillOtp}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 pt-1">
+                {otpDigits.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    id={`otp-reset-box-${idx}`}
+                    type="text"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      const newDigits = [...otpDigits];
+                      newDigits[idx] = val;
+                      setOtpDigits(newDigits);
+                      if (val && idx < 3) {
+                        const nextInput = document.getElementById(`otp-reset-box-${idx + 1}`);
+                        nextInput?.focus();
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Backspace' && !otpDigits[idx] && idx > 0) {
+                        const prevInput = document.getElementById(`otp-reset-box-${idx - 1}`);
+                        prevInput?.focus();
+                      }
+                    }}
+                    className="w-10 h-12 rounded-xl bg-slate-950 border-2 border-amber-400/50 text-center text-xl font-black text-amber-300 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* New Password */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-200">
+                {lang === 'hi' ? 'नया पासवर्ड (New Password)' : 'New Password'}
+              </label>
+              <input
+                type="password"
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+                placeholder="New Password (min 4 chars)"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/90 border border-slate-700 text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                required
+                minLength={4}
+              />
+            </div>
+
+            {/* Confirm New Password */}
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-slate-200">
+                {lang === 'hi' ? 'कन्फर्म नया पासवर्ड (Confirm Password)' : 'Confirm Password'}
+              </label>
+              <input
+                type="password"
+                value={resetConfirmPassword}
+                onChange={(e) => setResetConfirmPassword(e.target.value)}
+                placeholder="Confirm New Password"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/90 border border-slate-700 text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                required
+                minLength={4}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-sm shadow-xl shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{lang === 'hi' ? 'पासवर्ड अपडेट करें और लॉगिन करें' : 'Update Password & Sign In'}</span>
+            </button>
+          </form>
+        ) : null}
+
         {/* ======================= LOGIN FORM ======================= */}
-        {!isRegister && (
+        {!isRegister && !isResetPasswordMode && (
           <div className="space-y-4 relative z-10">
             {/* Login Method Toggle: Password vs OTP */}
             <div className="flex items-center justify-center gap-4 text-xs font-bold text-slate-400 pb-1">
@@ -864,6 +1124,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="w-full px-4 py-3 rounded-2xl bg-slate-950/90 border border-slate-700 text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                     required
                   />
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const digits = cleanPhone(loginIdentifier);
+                        if (digits.length === 10) {
+                          setOtpPhone(digits);
+                          const generated = Math.floor(1000 + Math.random() * 9000).toString();
+                          setMockGeneratedOtp(generated);
+                          setOtpStep(true);
+                          setOtpTimer(30);
+                          playNumberCallSound();
+                          setStatusMessage({
+                            type: 'success',
+                            text:
+                              lang === 'hi'
+                                ? `पासवर्ड रीसेट हेतु OTP ${generated} भेजा गया!`
+                                : `OTP ${generated} sent for password reset!`,
+                          });
+                        }
+                        setIsResetPasswordMode(true);
+                      }}
+                      className="text-xs text-amber-400 hover:text-amber-300 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{lang === 'hi' ? '🔑 पासवर्ड भूल गए? (Reset Password)' : '🔑 Forgot Password?'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 <button
