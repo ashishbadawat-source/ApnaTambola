@@ -34,11 +34,16 @@ service cloud.firestore {
       );
     }
 
-    // 👤 Users Collection
+    // 👤 Users Collection (Allows cross-device registration, login and profile updates)
     match /users/{userId} {
-      allow get, list: if isValidId(userId) || true;
-      allow create, update: if isValidId(userId);
-      allow delete: if isAdmin();
+      allow get, list: if true;
+      allow create, update, delete: if isValidId(userId);
+    }
+
+    // 🤝 Referral Commissions Collection
+    match /commissions/{commissionId} {
+      allow get, list: if true;
+      allow create, update, delete: if isValidId(commissionId);
     }
 
     // 🎮 Games Collection (Public lobby matches, Admin managed)

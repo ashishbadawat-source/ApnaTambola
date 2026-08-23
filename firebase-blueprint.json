@@ -128,12 +128,35 @@
         "date": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "gameId", "prizeId", "prizeName", "prizeAmount", "userId", "date"]
+    },
+    "ReferralCommission": {
+      "title": "ReferralCommission",
+      "description": "Multi-tier referral commission credit records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "sourceUserId": { "type": "string", "maxLength": 128 },
+        "sourceUserName": { "type": "string", "maxLength": 100 },
+        "level": { "type": "number" },
+        "percentage": { "type": "number" },
+        "baseAmount": { "type": "number" },
+        "commissionAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["approved", "pending"] },
+        "timestamp": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "userId", "level", "commissionAmount", "timestamp"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "Stores user profiles, roles, and balances"
+    },
+    "/commissions/{commissionId}": {
+      "schema": "ReferralCommission",
+      "description": "Stores multi-tier affiliate referral commissions"
     },
     "/games/{gameId}": {
       "schema": "TambolaGame",
