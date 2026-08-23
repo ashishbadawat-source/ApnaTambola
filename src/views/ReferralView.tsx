@@ -31,12 +31,24 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | 'all'>('all');
 
-  const referralLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/?ref=${currentUser.referralCode}`;
+  const getReferralLink = () => {
+    if (typeof window === 'undefined') return `/?ref=${currentUser.referralCode}`;
+    const baseUrl = window.location.origin + window.location.pathname;
+    return `${baseUrl.replace(/\/$/, '')}/?ref=${currentUser.referralCode}`;
+  };
+
+  const referralLink = getReferralLink();
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(referralLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      navigator.clipboard.writeText(referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      // Fallback
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleShareWhatsApp = () => {

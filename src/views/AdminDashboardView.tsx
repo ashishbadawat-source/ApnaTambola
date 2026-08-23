@@ -81,6 +81,8 @@ interface AdminDashboardViewProps {
   onDeleteNotification?: (id: string) => void;
   onUpdateSettings?: (settings: Partial<SiteSettings>) => Promise<boolean>;
   onRegisterUser?: (newUser: User) => void;
+  onDeleteUser?: (userId: string) => Promise<boolean> | void;
+  onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -126,6 +128,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onDeleteNotification,
   onUpdateSettings,
   onRegisterUser,
+  onDeleteUser,
+  onBatchDeleteUsers,
 }) => {
   const [internalTab, setInternalTab] = useState<string>('dashboard');
   const activeTab = activeModule || internalTab;
@@ -250,6 +254,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onResetPassword={onResetPassword || (async () => true)}
             onUpdateWalletBalance={onUpdateWalletBalance}
             onRegisterUser={onRegisterUser}
+            onDeleteUser={onDeleteUser}
+            onBatchDeleteUsers={onBatchDeleteUsers}
           />
         )}
 

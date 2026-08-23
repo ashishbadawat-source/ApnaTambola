@@ -20,7 +20,7 @@ import {
   LogIn,
   LogOut,
 } from 'lucide-react';
-import { User } from '../types';
+import { User, ReferralCommission } from '../types';
 import { playWinningFanfare, playNumberCallSound } from '../utils/audio';
 import { auth, googleProvider, signInWithPopup, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -93,14 +93,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [asyncReferrer, setAsyncReferrer] = useState<User | null>(null);
   const [isCheckingReferral, setIsCheckingReferral] = useState(false);
 
-  // Pre-fill referral code from URL query parameters (?ref=... or ?referral=...) or localStorage
+  // Pre-fill referral code from URL query parameters (?ref=... or ?referral=...) or localStorage or hash
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
+      let refFound = '';
       const urlParams = new URLSearchParams(window.location.search);
-      const refFromUrl = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('r');
-      if (refFromUrl && refFromUrl.trim()) {
-        const cleanRef = refFromUrl.trim().toUpperCase();
+      refFound = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('r') || '';
+
+      if (!refFound && window.location.hash) {
+        const hashStr = window.location.hash;
+        const match = hashStr.match(/[?&#](ref|referral|r)=([^&#]+)/i) || hashStr.match(/#ref=([^&#]+)/i);
+        if (match && match[2]) refFound = decodeURIComponent(match[2]);
+        else if (match && match[1] && !hashStr.includes('=')) refFound = decodeURIComponent(match[1]);
+      }
+
+      if (refFound && refFound.trim()) {
+        const cleanRef = refFound.trim().toUpperCase();
         setReferralCodeInput(cleanRef);
         localStorage.setItem('apna_tambola_pending_referral', cleanRef);
       } else {
@@ -121,26 +130,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const cleanRef = cleanRaw.includes('REF=') ? cleanRaw.split('REF=')[1]?.split('&')[0] || cleanRaw : cleanRaw;
     const digitsOnly = cleanRaw.replace(/\D/g, '');
 
-    return allUsers.find((u) => {
-      const uCode = (u.referralCode || '').trim().toUpperCase();
-      const uId = (u.id || '').trim().toUpperCase();
-      const uPhone = (u.phone || '').replace(/\D/g, '');
-      const uName = (u.name || '').trim().toUpperCase();
+    return (
+      allUsers.find((u) => {
+        const uCode = (u.referralCode || '').trim().toUpperCase();
+        const uId = (u.id || '').trim().toUpperCase();
+        const uPhone = (u.phone || '').replace(/\D/g, '');
+        const uName = (u.name || '').trim().toUpperCase();
 
-      // 1. Direct referral code or user id match
-      if (uCode && (uCode === cleanRef || cleanRef.includes(uCode) || uCode.includes(cleanRef))) return true;
-      if (uId && (uId === cleanRef || cleanRef.includes(uId) || uId.includes(cleanRef))) return true;
+        // 1. Direct referral code or user id match
+        if (uCode && (uCode === cleanRef || cleanRef.includes(uCode) || uCode.includes(cleanRef))) return true;
+        if (uId && (uId === cleanRef || cleanRef.includes(uId) || uId.includes(cleanRef))) return true;
 
-      // 2. Phone match
-      if (digitsOnly.length >= 6 && uPhone) {
-        if (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone)) return true;
-      }
+        // 2. Phone match
+        if (digitsOnly.length >= 6 && uPhone) {
+          if (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone)) return true;
+        }
 
-      // 3. Name match
-      if (uName && cleanRef === uName) return true;
+        // 3. Name match
+        if (uName && cleanRef === uName) return true;
 
-      return false;
-    }) || null;
+        return false;
+      }) || null
+    );
   }, [referralCodeInput, allUsers]);
 
   // If not found in local state, fetch from Firestore in real-time
@@ -520,30 +531,74 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     }
 
-    // Resolve referredBy code
-    const cleanRefCode = referralCodeInput ? referralCodeInput.trim().toUpperCase() : undefined;
+    // Resolve referredBy code and exact referrer profile
+    const cleanRefCode = referralCodeInput ? referralCodeInput.trim().toUpperCase() : '';
+    let finalReferrer: User | null = matchedReferrer || null;
+
+    if (!finalReferrer && cleanRefCode) {
+      // 1. Check local loaded users
+      finalReferrer =
+        allUsers.find((u) => {
+          const uCode = (u.referralCode || '').trim().toUpperCase();
+          const uId = (u.id || '').trim().toUpperCase();
+          const uPhone = (u.phone || '').replace(/\D/g, '');
+          const cleanDigits = cleanRefCode.replace(/\D/g, '');
+
+          if (uCode && (uCode === cleanRefCode || cleanRefCode.includes(uCode) || uCode.includes(cleanRefCode))) return true;
+          if (uId && (uId === cleanRefCode || cleanRefCode.includes(uId) || uId.includes(cleanRefCode))) return true;
+          if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+          return false;
+        }) || null;
+
+      // 2. Proactively search Firestore directly if not yet in local allUsers memory
+      if (!finalReferrer) {
+        try {
+          // By referral code
+          const qRef = query(collection(db, 'users'), where('referralCode', '==', cleanRefCode));
+          const snapRef = await getDocs(qRef);
+          if (!snapRef.empty) {
+            finalReferrer = { ...(snapRef.docs[0].data() as User), id: snapRef.docs[0].id };
+          } else {
+            // By doc ID
+            const docSnap = await getDoc(doc(db, 'users', cleanRefCode.toLowerCase()));
+            if (docSnap.exists()) {
+              finalReferrer = { ...(docSnap.data() as User), id: docSnap.id };
+            }
+          }
+        } catch (err) {
+          console.warn('Direct referrer search in Firestore notice:', err);
+        }
+      }
+    }
+
+    const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
+    const finalReferredByCode = finalReferrer ? (finalReferrer.referralCode || finalReferrer.id || cleanRefCode) : cleanRefCode;
+    const finalReferredByUserId = finalReferrer ? finalReferrer.id : '';
 
     // Create New Registered User with ₹10 Free Bonus in winning/withdrawal wallet
     const formattedPhone = `+91 ${phoneDigits}`;
     const newUser: User = {
-      id: `usr_${Date.now()}`,
-      name: name,
-      email: email || `${name.toLowerCase().replace(/\s+/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
+      id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+      name: name.trim(),
+      email: email ? email.trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
       phone: formattedPhone,
       password: pwd,
       role: 'user',
+      status: 'active',
+      isBlocked: false,
       walletBalance: 10, // ₹10 Signup Bonus
       depositBalance: 0,
       winningBalance: 10, // ₹10 Free Withdrawal Bonus!
       referralBalance: 0,
       bonusRewardBalance: 0,
-      referralCode: `REF-${name.slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
-      referredBy: cleanRefCode,
+      referralCode: resolvedReferralCode,
+      referredBy: finalReferredByCode || '',
+      referredByUserId: finalReferredByUserId || '',
       kycStatus: 'verified',
-      avatar: selectedAvatar,
+      avatar: selectedAvatar || AVATAR_OPTIONS[0],
       createdAt: new Date().toISOString(),
       bankDetails: {
-        accountName: name,
+        accountName: name.trim(),
         accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
         ifsc: 'SBIN0001234',
         bankName: 'State Bank of India',
@@ -551,26 +606,88 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       },
     };
 
-    // Save to Firestore users collection so all other devices receive this new user in real-time
+    // Save to server backend via REST API for instant cross-device and cross-browser sync
     try {
-      await setDoc(doc(db, 'users', newUser.id), newUser);
-    } catch (err) {
-      console.warn('Firestore write warning:', err);
+      fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUser.name,
+          phone: newUser.phone,
+          email: newUser.email,
+          password: newUser.password,
+          referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
+          selectedAvatar: newUser.avatar,
+        }),
+      }).catch((e) => console.warn('Server registration notice:', e));
+    } catch (e) {
+      console.warn('Fetch error:', e);
     }
 
-    // If referred by another user, update the referrer in Firestore and award direct referral bonus
-    if (matchedReferrer) {
+    // Save to Firestore users collection so all other devices receive this new user in real-time
+    // Wrap in non-blocking timeout so registration NEVER gets stuck if Firestore is slow or offline
+    try {
+      const sanitizedUser = JSON.parse(JSON.stringify(newUser));
+      const firestoreSavePromise = setDoc(doc(db, 'users', newUser.id), sanitizedUser);
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
+      Promise.race([firestoreSavePromise, timeoutPromise]).catch((e) =>
+        console.warn('Firestore user save notice:', e)
+      );
+    } catch (err) {
+      console.error('Firestore user save error:', err);
+    }
+
+    // If referred by another user, update the referrer in Firestore and award direct referral bonus & commission doc
+    if (finalReferrer) {
       try {
         const updatedReferrer: User = {
-          ...matchedReferrer,
-          referralBalance: (matchedReferrer.referralBalance || 0) + 10,
-          walletBalance: (matchedReferrer.walletBalance || 0) + 10,
+          ...finalReferrer,
+          referralBalance: (finalReferrer.referralBalance || 0) + 10,
+          walletBalance: (finalReferrer.walletBalance || 0) + 10,
         };
-        await setDoc(doc(db, 'users', matchedReferrer.id), updatedReferrer, { merge: true });
+        const sanitizedReferrer = JSON.parse(JSON.stringify(updatedReferrer));
+        setDoc(doc(db, 'users', finalReferrer.id), sanitizedReferrer, { merge: true }).catch(() => {});
+
+        // Create direct commission record
+        const joinCommission: ReferralCommission = {
+          id: `comm_join_${Date.now()}_${newUser.id}`,
+          userId: finalReferrer.id,
+          userName: finalReferrer.name,
+          sourceUserId: newUser.id,
+          sourceUserName: newUser.name,
+          gameId: 'signup_bonus',
+          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+          ticketId: 'REG-DIRECT',
+          level: 1,
+          percentage: 10,
+          baseAmount: 10,
+          commissionAmount: 10,
+          transactionId: `TXN-REF-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          status: 'approved',
+        };
+        const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
+        setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
+
+        // Also post commission to server
+        fetch('/api/commissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sanitizedComm),
+        }).catch(() => {});
       } catch (err) {
-        console.warn('Could not update referrer in Firestore:', err);
+        console.warn('Could not update referrer notice:', err);
       }
     }
+
+    // Broadcast registration event across local tabs and windows
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: newUser });
+        bc.close();
+      }
+    } catch (e) {}
 
     if (onRegisterUser) {
       onRegisterUser(newUser);
@@ -670,6 +787,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         appUser = userDoc.data() as User;
       } else {
         const isAdmin = fbUser.email === 'ashishbadawat@gmail.com';
+        const cleanGRef = referralCodeInput ? referralCodeInput.trim().toUpperCase() : '';
+        let googleReferrer = matchedReferrer || null;
+        if (!googleReferrer && cleanGRef) {
+          googleReferrer = allUsers.find((u) => {
+            const uCode = (u.referralCode || '').trim().toUpperCase();
+            const uId = (u.id || '').trim().toUpperCase();
+            return uCode === cleanGRef || uId === cleanGRef;
+          }) || null;
+        }
+
         appUser = {
           id: fbUser.uid,
           name: fbUser.displayName || 'Google Player',
@@ -684,7 +811,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           referralBalance: 0,
           bonusRewardBalance: 0,
           referralCode: `REF-${(fbUser.displayName || 'GOOG').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
-          referredBy: referralCodeInput ? referralCodeInput.toUpperCase() : undefined,
+          referredBy: googleReferrer ? (googleReferrer.referralCode || googleReferrer.id || cleanGRef) : (cleanGRef || ''),
+          referredByUserId: googleReferrer ? googleReferrer.id : '',
           kycStatus: 'verified',
           createdAt: new Date().toISOString(),
           bankDetails: {
@@ -697,7 +825,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         };
 
         try {
-          await setDoc(userDocRef, appUser);
+          const sanitizedGoogleUser = JSON.parse(JSON.stringify(appUser));
+          await setDoc(userDocRef, sanitizedGoogleUser);
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `users/${fbUser.uid}`);
         }

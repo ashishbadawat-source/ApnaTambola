@@ -49,6 +49,10 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
   // Local commission state for approval / reversal simulation
   const [commList, setCommList] = useState<ReferralCommission[]>(commissions);
 
+  React.useEffect(() => {
+    setCommList(commissions);
+  }, [commissions]);
+
   const totalCommissionsPaid = commList
     .filter((c) => c.status === 'approved')
     .reduce((sum, c) => sum + c.commissionAmount, 0);

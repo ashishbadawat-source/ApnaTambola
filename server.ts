@@ -106,19 +106,158 @@ async function startServer() {
     res.json({ status: 'ok', serverTime: new Date().toISOString() });
   });
 
-  // 1. Initial State / Bootstrap
-  app.get('/api/state', (req: Request, res: Response) => {
+  // 1b. Users API - Cross-device sync, Registration & Referral linking
+  app.get('/api/users', (req: Request, res: Response) => {
+    res.json(users);
+  });
+
+  app.post('/api/users/register', (req: Request, res: Response) => {
+    try {
+      const { name, phone, email, password, referralCodeInput, selectedAvatar } = req.body;
+      if (!name || !phone) {
+        return res.status(400).json({ success: false, error: 'Name and phone are required.' });
+      }
+
+      const phoneDigits = String(phone).replace(/\D/g, '');
+      const existingUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          error: `Mobile number ${phone} is already registered (${existingUser.name}).`,
+          existingUser,
+        });
+      }
+
+      // Resolve referrer
+      const cleanRef = referralCodeInput ? String(referralCodeInput).trim().toUpperCase() : '';
+      let referrer: User | null = null;
+
+      if (cleanRef) {
+        referrer =
+          users.find((u) => {
+            const uCode = (u.referralCode || '').trim().toUpperCase();
+            const uId = (u.id || '').trim().toUpperCase();
+            const uPhone = (u.phone || '').replace(/\D/g, '');
+            const uName = (u.name || '').trim().toUpperCase();
+            const cleanDigits = cleanRef.replace(/\D/g, '');
+
+            if (uCode && (uCode === cleanRef || cleanRef.includes(uCode) || uCode.includes(cleanRef))) return true;
+            if (uId && (uId === cleanRef || cleanRef.includes(uId) || uId.includes(cleanRef))) return true;
+            if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+            if (uName && cleanRef === uName) return true;
+            return false;
+          }) || null;
+      }
+
+      const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
+      const newUser: User = {
+        id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+        name: String(name).trim(),
+        email: email ? String(email).trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
+        phone: `+91 ${phoneDigits}`,
+        password: password || '123456',
+        role: 'user',
+        status: 'active',
+        isBlocked: false,
+        walletBalance: 10,
+        depositBalance: 0,
+        winningBalance: 10,
+        referralBalance: 0,
+        bonusRewardBalance: 0,
+        referralCode: resolvedReferralCode,
+        referredBy: referrer ? (referrer.referralCode || referrer.id || cleanRef) : cleanRef,
+        referredByUserId: referrer ? referrer.id : '',
+        kycStatus: 'verified',
+        avatar: selectedAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+        createdAt: new Date().toISOString(),
+        bankDetails: {
+          accountName: String(name).trim(),
+          accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
+          ifsc: 'SBIN0001234',
+          bankName: 'State Bank of India',
+          upiId: `${phoneDigits}@upi`,
+        },
+      };
+
+      users.unshift(newUser);
+
+      // Award referrer bonus & commission record
+      let joinComm: ReferralCommission | null = null;
+      if (referrer) {
+        referrer.walletBalance = (referrer.walletBalance || 0) + 10;
+        referrer.referralBalance = (referrer.referralBalance || 0) + 10;
+
+        joinComm = {
+          id: `comm_join_${Date.now()}_${newUser.id}`,
+          userId: referrer.id,
+          userName: referrer.name,
+          sourceUserId: newUser.id,
+          sourceUserName: newUser.name,
+          gameId: 'signup_bonus',
+          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+          ticketId: 'REG-DIRECT',
+          level: 1,
+          percentage: 10,
+          baseAmount: 10,
+          commissionAmount: 10,
+          transactionId: `TXN-REF-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          status: 'approved',
+        };
+        commissions.unshift(joinComm);
+      }
+
+      res.json({
+        success: true,
+        user: newUser,
+        referrer,
+        commission: joinComm,
+        message: 'User registered successfully!',
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message || 'Registration failed' });
+    }
+  });
+
+  app.post('/api/users/sync', (req: Request, res: Response) => {
+    const incomingUsers: User[] = req.body.users || [];
+    const map = new Map<string, User>();
+    users.forEach((u) => map.set(u.id, u));
+    incomingUsers.forEach((u) => {
+      if (u && u.id) {
+        map.set(u.id, { ...(map.get(u.id) || {}), ...u });
+      }
+    });
+    users = Array.from(map.values());
+    res.json({ success: true, totalUsers: users.length, users });
+  });
+
+  app.get('/api/commissions', (req: Request, res: Response) => {
+    res.json(commissions);
+  });
+
+  app.post('/api/commissions', (req: Request, res: Response) => {
+    const comm = req.body;
+    if (comm && comm.id) {
+      const idx = commissions.findIndex((c) => c.id === comm.id);
+      if (idx >= 0) commissions[idx] = comm;
+      else commissions.unshift(comm);
+    }
+    res.json({ success: true, commissions });
+  });
+
+  // Comprehensive Real-Time Sync endpoint for cross-device sync
+  app.get('/api/sync/all', (req: Request, res: Response) => {
     res.json({
-      currentUser: users[0],
-      games,
-      tickets,
-      winners,
-      referralMembers,
+      users,
       commissions,
+      games,
+      winners,
       transactions,
       withdrawals,
       supportTickets,
       siteSettings,
+      serverTime: new Date().toISOString(),
     });
   });
 

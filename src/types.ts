@@ -18,6 +18,7 @@ export interface User {
   kycStatus: 'verified' | 'pending' | 'rejected' | 'unverified';
   referralCode: string;
   referredBy?: string; // referrer's referralCode
+  referredByUserId?: string; // referrer's User ID for direct linkage
   avatar: string;
   createdAt: string;
   lastLoginAt?: string;

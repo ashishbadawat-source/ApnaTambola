@@ -33,6 +33,9 @@ import {
   Coins,
   RefreshCw,
   Trophy,
+  Download,
+  FileArchive,
+  ExternalLink,
 } from 'lucide-react';
 import { SiteSettings, ActivityLog, LoginHistoryEntry, TicketColorThemeId, TambolaGame } from '../../types';
 import { speakNumberCall, setCallerVoiceLanguage } from '../../utils/audio';
@@ -272,6 +275,54 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
           <p className="text-xs sm:text-sm text-slate-400">
             गेम चालू/बंद (Game ON/OFF), एडमिन यूपीआई आईडी (UPI ID), क्यूआर कोड (QR Code), आवाज एवं वित्तीय सेटिंग्स।
           </p>
+        </div>
+
+        {/* Quick ZIP Export Direct Download Button */}
+        <a
+          href="/apna-tambola-latest.zip"
+          download="apna-tambola-latest.zip"
+          className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer border border-amber-300"
+        >
+          <Download className="w-4 h-4" />
+          <span>📥 Download Latest Code ZIP</span>
+        </a>
+      </div>
+
+      {/* 📦 Direct ZIP Download Notification Card for Vercel/Hosting Update */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-blue-950/80 via-indigo-950/80 to-purple-950/80 border-2 border-blue-500/50 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="p-3 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-400/40 shrink-0">
+            <FileArchive className="w-6 h-6 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-black text-white">📦 नया अपडेट ZIP फ़ाइल (Vercel लाइव डिप्लॉयमेंट)</h3>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/40">
+                READY TO DOWNLOAD
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1">
+              आपकी लाइव वेबसाइट (<strong className="text-amber-300">apna-tambola-five.vercel.app</strong>) पर नया आईडी डिलीट फीचर और रेफरल अपडेट डालने के लिए नीचे दिए गए बटन से ZIP फाइल सीधे डाउनलोड करें।
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full md:w-auto">
+          <a
+            href="/apna-tambola-latest.zip"
+            download="apna-tambola-latest.zip"
+            className="flex-1 md:flex-initial px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-blue-500/30 active:scale-95 transition-all cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>डाउनलोड ZIP (.zip)</span>
+          </a>
+          <a
+            href="/project-update.tar.gz"
+            download="project-update.tar.gz"
+            className="flex-1 md:flex-initial px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <span>.tar.gz</span>
+          </a>
         </div>
       </div>
 

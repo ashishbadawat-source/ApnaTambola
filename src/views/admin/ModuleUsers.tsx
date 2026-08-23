@@ -26,6 +26,12 @@ import {
   UserPlus,
   Sparkles,
   ArrowUpDown,
+  Trash2,
+  AlertTriangle,
+  CheckSquare,
+  Square,
+  RefreshCw,
+  UserX,
 } from 'lucide-react';
 import { User, WalletTransaction } from '../../types';
 
@@ -34,7 +40,10 @@ interface ModuleUsersProps {
   onToggleKYC: (userId: string) => Promise<boolean>;
   onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
   onToggleBlockUser?: (userId: string) => void;
+  onResetPassword?: (userId: string) => void;
   onRegisterUser?: (newUser: User) => void;
+  onDeleteUser?: (userId: string) => Promise<boolean> | void;
+  onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
   transactions?: WalletTransaction[];
 }
 
@@ -43,7 +52,10 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   onToggleKYC,
   onUpdateWalletBalance,
   onToggleBlockUser,
+  onResetPassword,
   onRegisterUser,
+  onDeleteUser,
+  onBatchDeleteUsers,
   transactions = [],
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +82,15 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   const [newUserBonus, setNewUserBonus] = useState<number>(10);
   const [newUserReferredBy, setNewUserReferredBy] = useState('');
   const [addUserSuccess, setAddUserSuccess] = useState<string | null>(null);
+
+  // Delete User Confirmation Modal State
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
+
+  // Batch Selection State
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
 
   // Local blocked status tracker for optimistic updates
   const [blockedMap, setBlockedMap] = useState<Record<string, boolean>>({});
@@ -142,8 +163,65 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   };
 
   const handleResetPassword = (user: User) => {
+    if (onResetPassword) {
+      onResetPassword(user.id);
+    }
     setResetPassMsg(`Temporary PIN sent to ${user.phone} and ${user.email}: 884219`);
     setTimeout(() => setResetPassMsg(null), 5000);
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return;
+    setDeleteLoading(true);
+    try {
+      if (onDeleteUser) {
+        await onDeleteUser(userToDelete.id);
+      }
+      setSelectedUserIds((prev) => prev.filter((id) => id !== userToDelete.id));
+      setDeleteSuccessMsg(`✓ यूज़र "${userToDelete.name}" (ID: ${userToDelete.id}) को सफलतापूर्वक हटा दिया गया!`);
+      setTimeout(() => {
+        setDeleteSuccessMsg(null);
+        setUserToDelete(null);
+      }, 1200);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleConfirmBatchDelete = async () => {
+    if (selectedUserIds.length === 0) return;
+    setDeleteLoading(true);
+    try {
+      if (onBatchDeleteUsers) {
+        await onBatchDeleteUsers(selectedUserIds);
+      } else if (onDeleteUser) {
+        for (const uid of selectedUserIds) {
+          await onDeleteUser(uid);
+        }
+      }
+      setDeleteSuccessMsg(`✓ ${selectedUserIds.length} बेकार/चयनित ID सफलतापूर्वक हटा दी गईं!`);
+      setSelectedUserIds([]);
+      setTimeout(() => {
+        setDeleteSuccessMsg(null);
+        setShowBatchDeleteModal(false);
+      }, 1400);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleToggleSelectUser = (userId: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedUserIds.length === filteredUsers.length) {
+      setSelectedUserIds([]);
+    } else {
+      setSelectedUserIds(filteredUsers.map((u) => u.id));
+    }
   };
 
   const handleExecuteWalletAdjust = async () => {
@@ -310,12 +388,52 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
         </div>
       )}
 
+      {/* Batch Action Toolbar when items are selected */}
+      {selectedUserIds.length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-500/40 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-400 animate-ping" />
+            <span className="text-xs font-black text-white">
+              {selectedUserIds.length} यूज़र / ID सेलेक्ट किए गए हैं (Selected)
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSelectedUserIds([])}
+              className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold transition-all cursor-pointer"
+            >
+              Deselect All
+            </button>
+            <button
+              onClick={() => setShowBatchDeleteModal(true)}
+              className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-red-500/20 active:scale-95 transition-all cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>🗑️ सेलेक्टेड {selectedUserIds.length} ID डिलीट करें</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Users Master Table */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950/80 text-slate-400 uppercase font-black text-[10px] tracking-wider border-b border-slate-800">
               <tr>
+                <th className="px-3 py-3.5 w-10 text-center">
+                  <button
+                    onClick={handleToggleSelectAll}
+                    className="cursor-pointer text-slate-400 hover:text-amber-400 transition-colors"
+                    title="Select All Filtered"
+                  >
+                    {filteredUsers.length > 0 && selectedUserIds.length === filteredUsers.length ? (
+                      <CheckSquare className="w-4 h-4 text-amber-400" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </th>
                 <th className="px-4 py-3.5">User / Player</th>
                 <th className="px-4 py-3.5">Registered Date</th>
                 <th className="px-4 py-3.5">Contact Details</th>
@@ -331,8 +449,28 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 filteredUsers.map((user) => {
                   const isBlocked = blockedMap[user.id] ?? (user.status === 'blocked' || user.isBlocked);
                   const isRecent = isRecentUser(user);
+                  const isSelected = selectedUserIds.includes(user.id);
                   return (
-                    <tr key={user.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr
+                      key={user.id}
+                      className={`hover:bg-slate-800/40 transition-colors ${
+                        isSelected ? 'bg-red-950/20' : ''
+                      }`}
+                    >
+                      {/* Selection Checkbox */}
+                      <td className="px-3 py-3.5 text-center">
+                        <button
+                          onClick={() => handleToggleSelectUser(user.id)}
+                          className="cursor-pointer text-slate-400 hover:text-amber-400 transition-colors"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-red-400" />
+                          ) : (
+                            <Square className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+
                       {/* User Profile Cell */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
@@ -498,6 +636,14 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                           >
                             <Key className="w-3.5 h-3.5" />
                           </button>
+                          {/* DELETE USER ACTION BUTTON */}
+                          <button
+                            onClick={() => setUserToDelete(user)}
+                            className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition-colors cursor-pointer"
+                            title="ID डिलीट करें (Delete User ID)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -505,7 +651,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                     कोई यूज़र नहीं मिला (No users matching the selected criteria).
                   </td>
                 </tr>
@@ -808,7 +954,20 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  const target = selectedUser;
+                  setSelectedUser(null);
+                  setUserToDelete(target);
+                }}
+                className="px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>🗑️ यह ID डिलीट करें (Delete ID)</span>
+              </button>
+
               <button
                 onClick={() => setSelectedUser(null)}
                 className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer"
@@ -816,6 +975,162 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 Close Profile
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Single User Confirmation (ID डिलीट करें) */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="w-full max-w-md bg-slate-900 border-2 border-red-500/80 rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-3 rounded-2xl bg-red-500/20 border border-red-500/40">
+                <AlertTriangle className="w-6 h-6 text-red-400 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">यूज़र / ID डिलीट करें?</h3>
+                <p className="text-xs text-red-300">Are you sure you want to delete this user ID?</p>
+              </div>
+            </div>
+
+            {deleteSuccessMsg ? (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{deleteSuccessMsg}</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">नाम (Name):</span>
+                    <strong className="text-white font-bold">{userToDelete.name}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">User ID:</span>
+                    <strong className="text-amber-400 font-mono text-[11px]">{userToDelete.id}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">फोन नंबर (Phone):</span>
+                    <strong className="text-white font-mono">{userToDelete.phone}</strong>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">वॉलेट बैलेंस:</span>
+                    <strong className="text-amber-300 font-black">
+                      ₹{(userToDelete.walletBalance || 0).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                  {userToDelete.referredBy && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Referred By:</span>
+                      <strong className="text-purple-300 font-mono">{userToDelete.referredBy}</strong>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px]">
+                  ⚠️ <strong>सूचना:</strong> यह कार्रवाई इस यूज़र ID को हमेशा के लिए सिस्टम और डेटाबेस से हटा देगी। यदि यह कोई बेकार या टेस्ट ID है तो ही हटाएं।
+                </div>
+              </div>
+            )}
+
+            {!deleteSuccessMsg && (
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setUserToDelete(null)}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer transition-colors"
+                >
+                  रद्द करें (Cancel)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteUser}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs shadow-lg shadow-red-500/20 cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {deleteLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  <span>{deleteLoading ? 'डिलीट हो रहा है...' : 'हाँ, ID डिलीट करें'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Batch Delete Confirmation (मल्टीपल ID डिलीट करें) */}
+      {showBatchDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+          <div className="w-full max-w-md bg-slate-900 border-2 border-red-500/80 rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-red-400">
+              <div className="p-3 rounded-2xl bg-red-500/20 border border-red-500/40">
+                <UserX className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">
+                  {selectedUserIds.length} ID एक साथ डिलीट करें?
+                </h3>
+                <p className="text-xs text-red-300">Bulk delete selected user accounts</p>
+              </div>
+            </div>
+
+            {deleteSuccessMsg ? (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{deleteSuccessMsg}</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-300">
+                  आपने कुल <strong className="text-amber-300 font-black">{selectedUserIds.length}</strong> बेकार / टेस्ट यूज़र ID को डिलीट करने के लिए चुना है।
+                </p>
+
+                <div className="max-h-40 overflow-y-auto space-y-1.5 p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                  {users
+                    .filter((u) => selectedUserIds.includes(u.id))
+                    .map((u) => (
+                      <div key={u.id} className="flex items-center justify-between text-[11px] text-slate-300 py-1 px-2 rounded-lg bg-slate-900">
+                        <span className="font-bold text-white truncate max-w-[150px]">{u.name}</span>
+                        <span className="font-mono text-slate-400 text-[10px]">ID: {u.id}</span>
+                      </div>
+                    ))}
+                </div>
+
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-[11px]">
+                  ⚠️ सभी चयनित ID डेटाबेस से हमेशा के लिए मिटा दी जाएंगी।
+                </div>
+              </div>
+            )}
+
+            {!deleteSuccessMsg && (
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchDeleteModal(false)}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer transition-colors"
+                >
+                  रद्द करें (Cancel)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmBatchDelete}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs shadow-lg shadow-red-500/20 cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {deleteLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  <span>{deleteLoading ? 'डिलीट हो रहा है...' : `हाँ, ${selectedUserIds.length} ID डिलीट करें`}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

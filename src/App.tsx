@@ -258,39 +258,43 @@ export function App() {
   // Real-time Firestore synchronizer for users across multiple devices and browsers
   useEffect(() => {
     try {
+      // Real-time users sync
       const unsubscribeUsers = onSnapshot(
         collection(db, 'users'),
         (snapshot) => {
-          if (!snapshot.empty) {
-            const firestoreUsers: User[] = [];
-            snapshot.forEach((docSnap) => {
-              const data = docSnap.data() as User;
-              firestoreUsers.push({ ...data, id: docSnap.id });
+          const firestoreUsers: User[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as User;
+            firestoreUsers.push({ ...data, id: docSnap.id });
+          });
+
+          setUsers(() => {
+            const map = new Map<string, User>();
+            INITIAL_USERS.forEach((u) => map.set(u.id, u));
+            firestoreUsers.forEach((u) => map.set(u.id, u));
+
+            const firestoreIds = new Set(firestoreUsers.map((u) => u.id));
+            const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
+
+            const validUsers = Array.from(map.values()).filter((u) => {
+              return initialIds.has(u.id) || firestoreIds.has(u.id);
             });
 
-            setUsers((prev) => {
-              const map = new Map<string, User>();
-              // Keep pre-existing and initial
-              prev.forEach((u) => map.set(u.id, u));
-              // Merge incoming Firestore users
-              firestoreUsers.forEach((u) => map.set(u.id, u));
-              const merged = Array.from(map.values());
-              return merged.sort((a, b) => {
-                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                return timeB - timeA;
-              });
+            return validUsers.sort((a, b) => {
+              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return timeB - timeA;
             });
+          });
 
-            // If current logged-in user is updated in Firestore, keep currentUser state live
-            setCurrentUser((prevUser) => {
-              if (!prevUser) return null;
-              const updated = firestoreUsers.find(
-                (u) => u.id === prevUser.id || (prevUser.phone && u.phone === prevUser.phone)
-              );
-              return updated ? { ...prevUser, ...updated } : prevUser;
-            });
-          }
+          // If current logged-in user is updated or deleted in Firestore, keep currentUser state live
+          setCurrentUser((prevUser) => {
+            if (!prevUser) return null;
+            const updated = firestoreUsers.find(
+              (u) => u.id === prevUser.id || (prevUser.phone && u.phone === prevUser.phone)
+            );
+            return updated ? { ...prevUser, ...updated } : prevUser;
+          });
         },
         (error) => {
           console.warn('Firestore real-time sync notice:', error);
@@ -384,15 +388,91 @@ export function App() {
       );
 
       return () => {
-        unsubscribeUsers();
-        unsubscribeCommissions();
-        unsubscribeSettings();
-        unsubscribeGames();
-        unsubscribeTickets();
+        if (unsubscribeUsers) unsubscribeUsers();
+        if (unsubscribeCommissions) unsubscribeCommissions();
+        if (unsubscribeSettings) unsubscribeSettings();
+        if (unsubscribeGames) unsubscribeGames();
+        if (unsubscribeTickets) unsubscribeTickets();
       };
     } catch (err) {
       console.warn('Firestore onSnapshot listener error:', err);
     }
+  }, []);
+
+  // Multi-Device & Tab Real-Time Poller + BroadcastChannel Sync Engine
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // 1. BroadcastChannel for instant local tab sync
+    let bc: BroadcastChannel | null = null;
+    try {
+      if ('BroadcastChannel' in window) {
+        bc = new BroadcastChannel('apna_tambola_sync');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'NEW_USER_REGISTERED' && event.data.user) {
+            const newUser: User = event.data.user;
+            setUsers((prev) => {
+              if (prev.some((u) => u.id === newUser.id)) return prev;
+              return [newUser, ...prev];
+            });
+          }
+        };
+      }
+    } catch (e) {}
+
+    // 2. Storage event listener for cross-tab sync
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'apna_tambola_registered_users' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setUsers((prev) => {
+              const map = new Map<string, User>();
+              prev.forEach((u) => map.set(u.id, u));
+              parsed.forEach((u) => map.set(u.id, u));
+              return Array.from(map.values());
+            });
+          }
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // 3. Periodic REST API polling for multi-device server-backed synchronization
+    const pollServerSync = async () => {
+      try {
+        const res = await fetch('/api/sync/all');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.users) && data.users.length > 0) {
+            setUsers((prev) => {
+              const map = new Map<string, User>();
+              prev.forEach((u) => map.set(u.id, u));
+              data.users.forEach((u: User) => map.set(u.id, u));
+              return Array.from(map.values());
+            });
+          }
+          if (Array.isArray(data.commissions) && data.commissions.length > 0) {
+            setCommissions((prev) => {
+              const map = new Map<string, ReferralCommission>();
+              prev.forEach((c) => map.set(c.id, c));
+              data.commissions.forEach((c: ReferralCommission) => map.set(c.id, c));
+              return Array.from(map.values());
+            });
+          }
+        }
+      } catch (e) {
+        // Silent fallback
+      }
+    };
+
+    const intervalId = setInterval(pollServerSync, 3500);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Sync games to localStorage
@@ -463,30 +543,54 @@ export function App() {
   const computedReferralMembers = React.useMemo<ReferralMember[]>(() => {
     if (!currentUser) return [];
 
-    const isDirectMatch = (targetReferredBy: string | undefined, parent: User) => {
-      if (!targetReferredBy || !parent) return false;
-      const clean = targetReferredBy.trim().toUpperCase();
-      const pCode = (parent.referralCode || '').trim().toUpperCase();
+    const isDirectMatch = (child: User, parent: User) => {
+      if (!child || !parent || child.id === parent.id) return false;
+
       const pId = (parent.id || '').trim().toUpperCase();
+      const pCode = (parent.referralCode || '').trim().toUpperCase();
       const pPhone = parent.phone ? parent.phone.replace(/\D/g, '') : '';
-      const cleanDigits = clean.replace(/\D/g, '');
+      const pEmail = (parent.email || '').trim().toLowerCase();
+      const pName = (parent.name || '').trim().toUpperCase();
 
-      // 1. Direct referralCode or ID exact match
-      if (pCode && clean === pCode) return true;
-      if (pId && clean === pId) return true;
-
-      // 2. Contains referralCode or ID (in case full referral URL was pasted or prefix attached)
-      if (pCode && clean.includes(pCode)) return true;
-      if (pId && clean.includes(pId)) return true;
-
-      // 3. Phone matching
-      if (pPhone && cleanDigits) {
-        if (cleanDigits === pPhone || pPhone.endsWith(cleanDigits) || cleanDigits.endsWith(pPhone)) return true;
-        if (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6)) return true;
+      // 1. Direct referredByUserId match
+      if (child.referredByUserId) {
+        const cRefUserId = child.referredByUserId.trim().toUpperCase();
+        if (cRefUserId === pId || (pCode && cRefUserId === pCode)) {
+          return true;
+        }
       }
 
-      // 4. Name match (case-insensitive)
-      if (parent.name && clean === parent.name.trim().toUpperCase()) return true;
+      // 2. targetReferredBy code match
+      if (child.referredBy) {
+        const clean = child.referredBy.trim().toUpperCase();
+        const cleanLower = child.referredBy.trim().toLowerCase();
+        const cleanDigits = clean.replace(/\D/g, '');
+
+        // Exact matches
+        if (pCode && clean === pCode) return true;
+        if (pId && clean === pId) return true;
+
+        // Strip prefix "REF-" / "ref-"
+        const pCodeNoPrefix = pCode.replace(/^REF-?/, '');
+        const cleanNoPrefix = clean.replace(/^REF-?/, '');
+        if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === clean || cleanNoPrefix === pCode)) return true;
+
+        // Substring / URL param matches
+        if (pCode && (clean.includes(pCode) || pCode.includes(clean))) return true;
+        if (pId && (clean.includes(pId) || pId.includes(clean))) return true;
+
+        // Email match
+        if (pEmail && cleanLower === pEmail) return true;
+
+        // Phone matching (full or last 6-10 digits)
+        if (pPhone && cleanDigits) {
+          if (cleanDigits === pPhone || pPhone.endsWith(cleanDigits) || cleanDigits.endsWith(pPhone)) return true;
+          if (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6)) return true;
+        }
+
+        // Name match (case-insensitive)
+        if (pName && clean === pName) return true;
+      }
 
       return false;
     };
@@ -495,7 +599,7 @@ export function App() {
     const addedUserIds = new Set<string>();
 
     // Level 1: Direct Referrals (Users who signed up with currentUser's referral code)
-    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectMatch(u.referredBy, currentUser));
+    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectMatch(u, currentUser));
     l1Users.forEach((u) => {
       addedUserIds.add(u.id);
       const userTickets = tickets.filter((t) => t.userId === u.id).length;
@@ -518,7 +622,7 @@ export function App() {
 
     // Level 2: Users referred by Level 1
     const l2Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectMatch(u, p))
     );
     l2Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -539,7 +643,7 @@ export function App() {
 
     // Level 3: Users referred by Level 2
     const l3Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectMatch(u, p))
     );
     l3Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -560,7 +664,7 @@ export function App() {
 
     // Level 4: Users referred by Level 3
     const l4Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectMatch(u, p))
     );
     l4Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -581,7 +685,7 @@ export function App() {
 
     // Level 5: Users referred by Level 4
     const l5Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectMatch(u, p))
     );
     l5Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -602,7 +706,7 @@ export function App() {
 
     // Level 6: Users referred by Level 5
     const l6Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectMatch(u, p))
     );
     l6Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -623,7 +727,7 @@ export function App() {
 
     // Level 7: Users referred by Level 6
     const l7Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectMatch(u, p))
     );
     l7Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -644,7 +748,7 @@ export function App() {
 
     // Level 8: Users referred by Level 7
     const l8Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectMatch(u.referredBy, p))
+      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectMatch(u, p))
     );
     l8Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -727,12 +831,37 @@ export function App() {
       createdAt: newUser.createdAt || new Date().toISOString(),
     };
 
-    // Save to Firestore
+    // Save to server backend via REST API
     try {
-      setDoc(doc(db, 'users', completeUser.id), completeUser, { merge: true });
+      fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: completeUser.name,
+          phone: completeUser.phone,
+          email: completeUser.email,
+          password: completeUser.password,
+          referralCodeInput: completeUser.referredBy || completeUser.referredByUserId || '',
+          selectedAvatar: completeUser.avatar,
+        }),
+      }).catch(() => {});
+    } catch (e) {}
+
+    // Save to Firestore with timeout
+    try {
+      setDoc(doc(db, 'users', completeUser.id), JSON.parse(JSON.stringify(completeUser)), { merge: true }).catch(() => {});
     } catch (e) {
       console.warn('Firestore user save notice:', e);
     }
+
+    // Broadcast across tabs
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: completeUser });
+        bc.close();
+      }
+    } catch (e) {}
 
     // Add new registered user to state at top
     setUsers((prev) => {
@@ -745,16 +874,67 @@ export function App() {
     });
 
     // If registered through someone's referral code, trigger real-time notification & credit for that referrer
-    if (completeUser.referredBy) {
-      const cleanRef = completeUser.referredBy.trim().toUpperCase();
+    if (completeUser.referredBy || completeUser.referredByUserId) {
+      const cleanRef = (completeUser.referredBy || '').trim().toUpperCase();
       const referrerUser = users.find(
         (u) =>
+          (completeUser.referredByUserId && u.id === completeUser.referredByUserId) ||
           (u.referralCode && u.referralCode.trim().toUpperCase() === cleanRef) ||
           (u.id && u.id.trim().toUpperCase() === cleanRef) ||
-          (u.phone && u.phone.replace(/\D/g, '').endsWith(cleanRef))
+          (u.referralCode && cleanRef.includes(u.referralCode.trim().toUpperCase())) ||
+          (u.phone && cleanRef.includes(u.phone.replace(/\D/g, '')))
       );
 
       if (referrerUser) {
+        // Create joining direct referral commission record
+        const joinComm: ReferralCommission = {
+          id: `comm_join_${Date.now()}_${completeUser.id}`,
+          userId: referrerUser.id,
+          userName: referrerUser.name,
+          sourceUserId: completeUser.id,
+          sourceUserName: completeUser.name,
+          gameId: 'signup_bonus',
+          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+          ticketId: 'REG-DIRECT',
+          level: 1,
+          percentage: 10,
+          baseAmount: 10,
+          commissionAmount: 10,
+          transactionId: `TXN-REF-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          status: 'approved',
+        };
+
+        setCommissions((prev) => [joinComm, ...prev.filter((c) => c.id !== joinComm.id)]);
+        try {
+          setDoc(doc(db, 'commissions', joinComm.id), joinComm);
+        } catch (e) {}
+
+        // Update referrer in users state
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === referrerUser.id
+              ? {
+                  ...u,
+                  referralBalance: (u.referralBalance || 0) + 10,
+                  walletBalance: (u.walletBalance || 0) + 10,
+                }
+              : u
+          )
+        );
+
+        // Update referrer in Firestore
+        try {
+          setDoc(
+            doc(db, 'users', referrerUser.id),
+            {
+              referralBalance: (referrerUser.referralBalance || 0) + 10,
+              walletBalance: (referrerUser.walletBalance || 0) + 10,
+            },
+            { merge: true }
+          );
+        } catch (e) {}
+
         const notif: UserNotificationItem = {
           id: `un_ref_${Date.now()}`,
           category: 'referral_commission',
@@ -2004,36 +2184,184 @@ export function App() {
 
   // 15. Admin Update User Wallet
   const handleUpdateWalletBalance = async (userId: string, amount: number, type: 'credit' | 'debit'): Promise<boolean> => {
-    setCurrentUser((prev) => {
-      const delta = type === 'credit' ? amount : -amount;
-      return {
-        ...prev,
-        walletBalance: Math.max(0, prev.walletBalance + delta),
-        depositBalance: Math.max(0, prev.depositBalance + delta),
-      };
-    });
+    const delta = type === 'credit' ? amount : -amount;
+    let targetUser: User | undefined;
+
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          const nextWallet = Math.max(0, (u.walletBalance || 0) + delta);
+          const nextDeposit = Math.max(0, (u.depositBalance || 0) + delta);
+          targetUser = { ...u, walletBalance: nextWallet, depositBalance: nextDeposit };
+          return targetUser;
+        }
+        return u;
+      })
+    );
+
+    if (currentUser?.id === userId) {
+      setCurrentUser((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          walletBalance: Math.max(0, prev.walletBalance + delta),
+          depositBalance: Math.max(0, prev.depositBalance + delta),
+        };
+      });
+    }
+
+    try {
+      if (targetUser) {
+        const userRef = doc(db, 'users', userId);
+        await setDoc(userRef, {
+          walletBalance: targetUser.walletBalance,
+          depositBalance: targetUser.depositBalance,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+    } catch (e) {
+      console.warn('Firestore update wallet balance notice:', e);
+    }
     return true;
   };
 
   // 16. Admin Toggle KYC
   const handleToggleKYC = async (userId: string): Promise<boolean> => {
-    setCurrentUser((prev) => ({
-      ...prev,
-      kycStatus: prev.kycStatus === 'verified' ? 'pending' : 'verified',
-    }));
+    let nextStatus: 'verified' | 'unverified' | 'pending' = 'verified';
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          nextStatus = u.kycStatus === 'verified' ? 'unverified' : 'verified';
+          return { ...u, kycStatus: nextStatus };
+        }
+        return u;
+      })
+    );
+
+    if (currentUser?.id === userId) {
+      setCurrentUser((prev) => (prev ? { ...prev, kycStatus: nextStatus } : null));
+    }
+
+    try {
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, { kycStatus: nextStatus, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore toggle KYC notice:', e);
+    }
     return true;
   };
 
-  // 17. Admin User Management Handlers
+  // 17. Admin User Management Handlers (Block, Password Reset, Delete, Batch Delete)
   const handleToggleBlockUser = async (userId: string): Promise<boolean> => {
+    let isNowBlocked = false;
     setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, isBlocked: !u.isBlocked } : u))
+      prev.map((u) => {
+        if (u.id === userId) {
+          isNowBlocked = !u.isBlocked;
+          return { ...u, isBlocked: isNowBlocked };
+        }
+        return u;
+      })
     );
+
+    try {
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, { isBlocked: isNowBlocked, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore toggle block notice:', e);
+    }
     return true;
   };
 
   const handleResetPassword = async (userId: string): Promise<boolean> => {
-    // Simulated secure reset
+    const tempPin = '123456';
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, password: tempPin } : u))
+    );
+
+    try {
+      const userRef = doc(db, 'users', userId);
+      await setDoc(userRef, { password: tempPin, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn('Firestore reset password notice:', e);
+    }
+    return true;
+  };
+
+  // 17.1 Delete Single User (ID डिलीट करें)
+  const handleDeleteUser = async (userId: string): Promise<boolean> => {
+    // 1. Remove from local state
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+
+    // 2. If deleting the current logged-in user (unless admin deleting self)
+    if (currentUser?.id === userId && currentUser.role !== 'admin') {
+      setCurrentUser(null);
+      localStorage.removeItem('apna_tambola_logged_in_user');
+    }
+
+    // 3. Delete from Firestore permanently
+    try {
+      const userRef = doc(db, 'users', userId);
+      await deleteDoc(userRef);
+    } catch (e) {
+      console.warn('Firestore deleteDoc notice:', e);
+    }
+
+    // 4. Log admin activity
+    const newLog: ActivityLog = {
+      id: `act_${Date.now()}`,
+      adminName: currentUser?.name || 'Admin',
+      action: `Deleted user ID: ${userId}`,
+      category: 'user',
+      ipAddress: '192.168.1.1',
+      device: 'Admin Portal',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'danger',
+      details: `User ID ${userId} was permanently removed from system database`,
+    };
+    setActivityLogs((prev) => [newLog, ...prev]);
+
+    return true;
+  };
+
+  // 17.2 Batch Delete Multiple Users (मल्टीपल ID डिलीट करें)
+  const handleBatchDeleteUsers = async (userIds: string[]): Promise<boolean> => {
+    if (!userIds || userIds.length === 0) return true;
+
+    const idsSet = new Set(userIds);
+
+    // 1. Remove from state
+    setUsers((prev) => prev.filter((u) => !idsSet.has(u.id)));
+
+    // 2. Delete all from Firestore
+    try {
+      await Promise.all(
+        userIds.map(async (uid) => {
+          try {
+            await deleteDoc(doc(db, 'users', uid));
+          } catch (e) {
+            console.warn(`Firestore batch delete failed for ${uid}:`, e);
+          }
+        })
+      );
+    } catch (e) {
+      console.warn('Firestore batch delete error:', e);
+    }
+
+    // 3. Log admin activity
+    const newLog: ActivityLog = {
+      id: `act_${Date.now()}`,
+      adminName: currentUser?.name || 'Admin',
+      action: `Batch deleted ${userIds.length} user accounts (${userIds.join(', ')})`,
+      category: 'user',
+      ipAddress: '192.168.1.1',
+      device: 'Admin Portal',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'danger',
+      details: `Batch deleted IDs: ${userIds.join(', ')}`,
+    };
+    setActivityLogs((prev) => [newLog, ...prev]);
+
     return true;
   };
 
@@ -2437,6 +2765,8 @@ export function App() {
             onDeleteNotification={handleDeleteNotification}
             onUpdateSettings={handleUpdateSettings}
             onRegisterUser={handleRegisterUser}
+            onDeleteUser={handleDeleteUser}
+            onBatchDeleteUsers={handleBatchDeleteUsers}
           />
         )}
 
