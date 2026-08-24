@@ -129,25 +129,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const cleanRaw = referralCodeInput.trim().toUpperCase();
     const cleanRef = cleanRaw.includes('REF=') ? cleanRaw.split('REF=')[1]?.split('&')[0] || cleanRaw : cleanRaw;
     const digitsOnly = cleanRaw.replace(/\D/g, '');
+    const cleanNoPrefix = cleanRef.replace(/^REF-?/, '');
 
     return (
       allUsers.find((u) => {
         const uCode = (u.referralCode || '').trim().toUpperCase();
+        const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
         const uId = (u.id || '').trim().toUpperCase();
         const uPhone = (u.phone || '').replace(/\D/g, '');
         const uName = (u.name || '').trim().toUpperCase();
 
-        // 1. Direct referral code or user id match
-        if (uCode && (uCode === cleanRef || cleanRef.includes(uCode) || uCode.includes(cleanRef))) return true;
+        // 1. Direct referral code or user id match (with and without REF- prefix)
+        if (uCode && (uCode === cleanRef || uCodeNoPrefix === cleanNoPrefix || cleanRef.includes(uCode) || uCode.includes(cleanRef))) return true;
         if (uId && (uId === cleanRef || cleanRef.includes(uId) || uId.includes(cleanRef))) return true;
 
-        // 2. Phone match
+        // 2. Phone match (exact, suffix, or contains)
         if (digitsOnly.length >= 6 && uPhone) {
           if (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone)) return true;
         }
 
         // 3. Name match
-        if (uName && cleanRef === uName) return true;
+        if (uName && (cleanRef === uName || cleanNoPrefix === uName)) return true;
 
         return false;
       }) || null
@@ -159,8 +161,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     let isCancelled = false;
     const cleanRaw = referralCodeInput.trim().toUpperCase();
     const cleanRef = cleanRaw.includes('REF=') ? cleanRaw.split('REF=')[1]?.split('&')[0] || cleanRaw : cleanRaw;
+    const cleanNoPrefix = cleanRef.replace(/^REF-?/, '');
+    const digitsOnly = cleanRaw.replace(/\D/g, '');
 
-    if (localMatchedReferrer || !cleanRef || cleanRef.length < 3) {
+    if (localMatchedReferrer || !cleanRef || cleanRef.length < 2) {
       setAsyncReferrer(null);
       setIsCheckingReferral(false);
       return;
@@ -169,7 +173,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsCheckingReferral(true);
     const searchFirestore = async () => {
       try {
-        // Search by referralCode
+        // 1. Search by exact referralCode
         const qCode = query(collection(db, 'users'), where('referralCode', '==', cleanRef));
         const snapCode = await getDocs(qCode);
         if (!isCancelled && !snapCode.empty) {
@@ -179,13 +183,57 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           return;
         }
 
-        // Search by ID
+        // 2. Search by REF- prefix variation
+        if (!cleanRef.startsWith('REF-')) {
+          const qRefPrefix = query(collection(db, 'users'), where('referralCode', '==', `REF-${cleanRef}`));
+          const snapPrefix = await getDocs(qRefPrefix);
+          if (!isCancelled && !snapPrefix.empty) {
+            const uDoc = snapPrefix.docs[0];
+            setAsyncReferrer({ ...(uDoc.data() as User), id: uDoc.id });
+            setIsCheckingReferral(false);
+            return;
+          }
+        }
+
+        // 3. Search by ID
         const docRef = doc(db, 'users', cleanRef.toLowerCase());
         const docSnap = await getDoc(docRef);
         if (!isCancelled && docSnap.exists()) {
           setAsyncReferrer({ ...(docSnap.data() as User), id: docSnap.id });
           setIsCheckingReferral(false);
           return;
+        }
+
+        // 4. Proactively check all users in Firestore if query missed case or phone
+        const allUsersSnap = await getDocs(collection(db, 'users'));
+        if (!isCancelled && !allUsersSnap.empty) {
+          let foundUser: User | null = null;
+          allUsersSnap.forEach((d) => {
+            if (foundUser) return;
+            const data = d.data() as User;
+            const u = { ...data, id: d.id };
+            const uCode = (u.referralCode || '').trim().toUpperCase();
+            const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+            const uId = (u.id || '').trim().toUpperCase();
+            const uPhone = (u.phone || '').replace(/\D/g, '');
+            const uName = (u.name || '').trim().toUpperCase();
+
+            if (uCode && (uCode === cleanRef || uCodeNoPrefix === cleanNoPrefix || cleanRef.includes(uCode) || uCode.includes(cleanRef))) {
+              foundUser = u;
+            } else if (uId && (uId === cleanRef || cleanRef.includes(uId) || uId.includes(cleanRef))) {
+              foundUser = u;
+            } else if (digitsOnly.length >= 6 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone))) {
+              foundUser = u;
+            } else if (uName && (cleanRef === uName || cleanNoPrefix === uName)) {
+              foundUser = u;
+            }
+          });
+
+          if (foundUser) {
+            setAsyncReferrer(foundUser);
+            setIsCheckingReferral(false);
+            return;
+          }
         }
 
         if (!isCancelled) {
@@ -536,33 +584,55 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     let finalReferrer: User | null = matchedReferrer || null;
 
     if (!finalReferrer && cleanRefCode) {
+      const cleanNoPrefix = cleanRefCode.replace(/^REF-?/, '');
+      const digitsOnly = cleanRefCode.replace(/\D/g, '');
+
       // 1. Check local loaded users
       finalReferrer =
         allUsers.find((u) => {
           const uCode = (u.referralCode || '').trim().toUpperCase();
+          const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
           const uId = (u.id || '').trim().toUpperCase();
           const uPhone = (u.phone || '').replace(/\D/g, '');
-          const cleanDigits = cleanRefCode.replace(/\D/g, '');
+          const uName = (u.name || '').trim().toUpperCase();
 
-          if (uCode && (uCode === cleanRefCode || cleanRefCode.includes(uCode) || uCode.includes(cleanRefCode))) return true;
+          if (uCode && (uCode === cleanRefCode || uCodeNoPrefix === cleanNoPrefix || cleanRefCode.includes(uCode) || uCode.includes(cleanRefCode))) return true;
           if (uId && (uId === cleanRefCode || cleanRefCode.includes(uId) || uId.includes(cleanRefCode))) return true;
-          if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+          if (digitsOnly.length >= 6 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone))) return true;
+          if (uName && (cleanRefCode === uName || cleanNoPrefix === uName)) return true;
           return false;
         }) || null;
 
       // 2. Proactively search Firestore directly if not yet in local allUsers memory
       if (!finalReferrer) {
         try {
-          // By referral code
           const qRef = query(collection(db, 'users'), where('referralCode', '==', cleanRefCode));
           const snapRef = await getDocs(qRef);
           if (!snapRef.empty) {
             finalReferrer = { ...(snapRef.docs[0].data() as User), id: snapRef.docs[0].id };
           } else {
-            // By doc ID
-            const docSnap = await getDoc(doc(db, 'users', cleanRefCode.toLowerCase()));
-            if (docSnap.exists()) {
-              finalReferrer = { ...(docSnap.data() as User), id: docSnap.id };
+            const allUsersSnap = await getDocs(collection(db, 'users'));
+            if (!allUsersSnap.empty) {
+              allUsersSnap.forEach((d) => {
+                if (finalReferrer) return;
+                const data = d.data() as User;
+                const u = { ...data, id: d.id };
+                const uCode = (u.referralCode || '').trim().toUpperCase();
+                const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+                const uId = (u.id || '').trim().toUpperCase();
+                const uPhone = (u.phone || '').replace(/\D/g, '');
+                const uName = (u.name || '').trim().toUpperCase();
+
+                if (uCode && (uCode === cleanRefCode || uCodeNoPrefix === cleanNoPrefix || cleanRefCode.includes(uCode) || uCode.includes(cleanRefCode))) {
+                  finalReferrer = u;
+                } else if (uId && (uId === cleanRefCode || cleanRefCode.includes(uId) || uId.includes(cleanRefCode))) {
+                  finalReferrer = u;
+                } else if (digitsOnly.length >= 6 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone))) {
+                  finalReferrer = u;
+                } else if (uName && (cleanRefCode === uName || cleanNoPrefix === uName)) {
+                  finalReferrer = u;
+                }
+              });
             }
           }
         } catch (err) {
@@ -612,10 +682,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          user: newUser,
+          id: newUser.id,
           name: newUser.name,
           phone: newUser.phone,
           email: newUser.email,
           password: newUser.password,
+          referralCode: newUser.referralCode,
+          referredBy: newUser.referredBy,
+          referredByUserId: newUser.referredByUserId,
           referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
           selectedAvatar: newUser.avatar,
         }),
@@ -916,9 +991,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Brand Logo & Header */}
         <div className="text-center space-y-2 relative z-10">
           <div className="inline-flex items-center justify-center">
-            <div className="tambola-ball-3d ball-gold w-14 h-14 text-xl font-black shadow-xl shadow-amber-500/40">
-              7
-            </div>
+            <img
+              src="/logo.png"
+              alt="Apna Tambola"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover shadow-2xl shadow-amber-500/40 border-2 border-amber-400/80 animate-pulse"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
           </div>
 
           <div>

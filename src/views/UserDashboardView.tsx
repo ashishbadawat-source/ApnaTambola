@@ -334,9 +334,17 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             </div>
           </div>
 
-          {/* Quick Header Right Badge */}
-          <div className="hidden lg:flex items-center gap-3">
-            <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-amber-400/40 text-right">
+          {/* Quick Header Right Badge with Official Logo */}
+          <div className="flex items-center gap-3">
+            <img
+              src="/logo.png"
+              alt="Apna Tambola"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover shadow-xl shadow-amber-500/40 border-2 border-amber-400 shrink-0"
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
+            <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-950/80 border border-amber-400/40 text-right">
               <span className="text-[10px] uppercase font-bold text-amber-400/80 block">All-in-One Dashboard</span>
               <span className="text-xs font-black text-white">11 Dedicated Color Themed Modules</span>
             </div>

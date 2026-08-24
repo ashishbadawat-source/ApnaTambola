@@ -32,6 +32,8 @@ import {
   SiteSettings,
 } from '../types';
 
+import { INITIAL_SITE_SETTINGS } from '../data/mockData';
+
 import { ModuleDashboard } from './admin/ModuleDashboard';
 import { ModuleUsers } from './admin/ModuleUsers';
 import { ModuleGames } from './admin/ModuleGames';
@@ -96,15 +98,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   activityLogs = [],
   notifications = [],
   loginHistory = [],
-  siteSettings = {
-    siteName: 'Tambola Live India',
-    tagline: 'India’s #1 Real-Time Multiplayer Housie Tournament Portal',
-    supportEmail: 'support@tambolalive.in',
-    supportWhatsapp: '+91 98765 43210',
-    noticeMarquee: '🎉 Mega Sunday Housie Bumper Jackpot starts at 9:00 PM! Win up to ₹1,00,000!',
-    maintenanceMode: false,
-    themeColor: 'gold',
-  },
+  siteSettings = INITIAL_SITE_SETTINGS,
   activeModule,
   onModuleChange,
   onCallNext,

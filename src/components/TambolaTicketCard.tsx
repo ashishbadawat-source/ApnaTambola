@@ -3,7 +3,7 @@ import { Ticket as TicketIcon, CheckCircle2, Printer, Share2, Award, Sparkles, S
 import { TambolaTicket, PrizeCode } from '../types';
 import { playDabSound } from '../utils/audio';
 import { getTicketTheme, TicketColorThemeId, COLUMN_COLORS } from '../utils/ticketColors';
-import { getStarNumbers } from '../utils/tambolaTicket';
+import { getStarNumbers, generateTambolaTicketMatrix } from '../utils/tambolaTicket';
 
 interface TambolaTicketCardProps {
   ticket: TambolaTicket;
@@ -34,8 +34,18 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
   compact = false,
   themeOverride,
 }) => {
-  const theme = getTicketTheme(themeOverride || ticket.colorTheme, ticket.ticketNumber);
-  const calledSet = new Set(calledNumbers);
+  if (!ticket) {
+    return null;
+  }
+
+  // Safe Matrix Fallback
+  const ticketNumbers =
+    Array.isArray(ticket.numbers) && ticket.numbers.length === 3
+      ? ticket.numbers
+      : generateTambolaTicketMatrix();
+
+  const theme = getTicketTheme(themeOverride || ticket.colorTheme, ticket.ticketNumber || 1);
+  const calledSet = new Set(calledNumbers || []);
   const markedSet = new Set(ticket.markedNumbers || []);
 
   // Calculate stats
@@ -43,19 +53,21 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
   let markedCount = 0;
   let rowMarkedCounts = [0, 0, 0];
 
-  ticket.numbers.forEach((row, rIdx) => {
-    row.forEach((num) => {
-      if (num > 0) {
-        totalTicketNumbers++;
-        if (markedSet.has(num) || calledSet.has(num)) {
-          markedCount++;
-          rowMarkedCounts[rIdx]++;
+  ticketNumbers.forEach((row, rIdx) => {
+    if (Array.isArray(row)) {
+      row.forEach((num) => {
+        if (num > 0) {
+          totalTicketNumbers++;
+          if (markedSet.has(num) || calledSet.has(num)) {
+            markedCount++;
+            if (rowMarkedCounts[rIdx] !== undefined) rowMarkedCounts[rIdx]++;
+          }
         }
-      }
-    });
+      });
+    }
   });
 
-  const starNums = getStarNumbers(ticket.numbers);
+  const starNums = getStarNumbers(ticketNumbers);
   const starMarkedCount = starNums.filter((n) => markedSet.has(n) || calledSet.has(n)).length;
 
   const handleCellClick = (num: number) => {
@@ -67,6 +79,8 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
   };
 
   const isTicketDisabled = ticket.isActive === false || ticket.status === 'disabled' || ticket.status === 'void';
+  const ticketIdDisplay = ticket.ticketId || `TKT-${ticket.id?.slice(0, 4) || '1001'}`;
+  const gameTitleDisplay = ticket.gameTitle || 'Tambola Live Tournament';
 
   return (
     <div
@@ -119,10 +133,10 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
             </span>
           )}
           <span className={`px-2 py-0.5 rounded font-black ${isTicketDisabled ? 'bg-black/50 text-red-300' : theme.ticketIdBadge}`}>
-            {ticket.ticketId}
+            {ticketIdDisplay}
           </span>
           <span className={`px-2 py-0.5 rounded text-xs ${isTicketDisabled ? 'bg-black/50 text-slate-400' : theme.priceBadge}`}>
-            ₹{ticket.price}
+            ₹{ticket.price ?? 10}
           </span>
         </div>
       </div>
@@ -142,7 +156,7 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
           <div className="flex items-center gap-2 truncate max-w-[230px]">
             <span className="w-2.5 h-2.5 rounded-full ring-2 ring-white/30" style={{ backgroundColor: theme.previewHex }} />
             <span className="text-slate-100 font-black truncate text-xs sm:text-sm">
-              {ticket.gameTitle}
+              {gameTitleDisplay}
             </span>
           </div>
 
@@ -192,7 +206,7 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
           </div>
 
           <div className="grid grid-rows-3 gap-1.5 sm:gap-2 select-none relative z-10">
-            {ticket.numbers.map((row, rowIdx) => {
+            {ticketNumbers.map((row, rowIdx) => {
               const rowTheme = theme.rows?.[rowIdx as 0 | 1 | 2];
               return (
                 <div key={rowIdx} className="grid grid-cols-9 gap-1 sm:gap-2">

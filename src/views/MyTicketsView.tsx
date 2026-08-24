@@ -36,10 +36,12 @@ export const MyTicketsView: React.FC<MyTicketsViewProps> = ({ tickets, games, on
   const winningTicketsCount = tickets.filter((t) => t.isWinningTicket).length;
 
   const filteredTickets = tickets.filter((t) => {
+    if (!t) return false;
     const game = gameMap.get(t.gameId);
-    const matchesSearch =
-      t.ticketId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.gameTitle.toLowerCase().includes(searchTerm.toLowerCase());
+    const tId = (t.ticketId || t.id || '').toLowerCase();
+    const gTitle = (t.gameTitle || game?.title || '').toLowerCase();
+    const q = searchTerm.toLowerCase().trim();
+    const matchesSearch = !q || tId.includes(q) || gTitle.includes(q);
 
     if (!matchesSearch) return false;
     if (selectedFilter === 'all') return true;

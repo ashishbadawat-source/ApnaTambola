@@ -306,9 +306,19 @@ export const HomeView: React.FC<HomeViewProps> = ({
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Left Column: Headlines, Value Prop & Main CTAs */}
           <div className="lg:col-span-7 space-y-6">
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/30 via-red-500/20 to-purple-600/30 border-2 border-amber-400/50 rounded-full px-4 py-1.5 text-xs font-black text-amber-300 shadow-lg">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-              <span className="tracking-wider uppercase">भारत का #1 रियल-मनी तंबोला व हाउसी गेम</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <img
+                src="/logo.png"
+                alt="Apna Tambola Logo"
+                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover shadow-xl shadow-amber-500/30 border-2 border-amber-400/80 shrink-0 animate-pulse"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/30 via-red-500/20 to-purple-600/30 border-2 border-amber-400/50 rounded-full px-4 py-1.5 text-xs font-black text-amber-300 shadow-lg">
+                <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
+                <span className="tracking-wider uppercase">भारत का #1 रियल-मनी तंबोला व हाउसी गेम</span>
+              </div>
             </div>
 
             <div className="space-y-3">

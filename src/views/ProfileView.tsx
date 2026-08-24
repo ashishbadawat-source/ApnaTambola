@@ -209,6 +209,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       email,
       avatar,
       bankDetails: {
+        accountName: accountHolder || name || 'Account Holder',
         upiId,
         bankName,
         accountNumber,
@@ -224,6 +225,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     e.preventDefault();
     onUpdateProfile({
       bankDetails: {
+        accountName: accountHolder || name || 'Account Holder',
         upiId,
         bankName,
         accountNumber,

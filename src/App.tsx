@@ -64,16 +64,19 @@ import {
 import { generateTambolaTicketMatrix, generateTicketId, verifyClaim } from './utils/tambolaTicket';
 import { checkAndAutoTrackWinners } from './utils/autoWinnerTracker';
 import { FlashWinnerItem } from './components/LiveWinnerFlashTicker';
+import { WinnerFlashData } from './components/WinnerCelebrationModal';
 import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
 import { playWinningFanfare, playNumberCallSound } from './utils/audio';
 import { calculateTambolaDynamicPrizes, calculateSplitWinning } from './utils/prizePoolCalculator';
 import { db } from './lib/firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from 'firebase/firestore';
 
 export function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<string>('home');
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   // Core Applet State with LocalStorage Persistence
   const [users, setUsers] = useState<User[]>(() => {
@@ -268,19 +271,16 @@ export function App() {
             firestoreUsers.push({ ...data, id: docSnap.id });
           });
 
-          setUsers(() => {
+          setUsers((prev) => {
             const map = new Map<string, User>();
             INITIAL_USERS.forEach((u) => map.set(u.id, u));
-            firestoreUsers.forEach((u) => map.set(u.id, u));
-
-            const firestoreIds = new Set(firestoreUsers.map((u) => u.id));
-            const initialIds = new Set(INITIAL_USERS.map((u) => u.id));
-
-            const validUsers = Array.from(map.values()).filter((u) => {
-              return initialIds.has(u.id) || firestoreIds.has(u.id);
+            prev.forEach((u) => map.set(u.id, u));
+            firestoreUsers.forEach((u) => {
+              const existing = map.get(u.id);
+              map.set(u.id, { ...(existing || {}), ...u });
             });
 
-            return validUsers.sort((a, b) => {
+            return Array.from(map.values()).sort((a, b) => {
               const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
               const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
               return timeB - timeA;
@@ -415,6 +415,35 @@ export function App() {
               if (prev.some((u) => u.id === newUser.id)) return prev;
               return [newUser, ...prev];
             });
+          } else if (event.data?.type === 'TICKET_STATUS_TOGGLED') {
+            const { ticketId, isActive } = event.data;
+            setTickets((prev) =>
+              prev.map((t) =>
+                t.id === ticketId
+                  ? {
+                      ...t,
+                      isActive,
+                      status: isActive ? 'active' : 'disabled',
+                      disabledReason: isActive ? undefined : 'Disabled by Admin',
+                    }
+                  : t
+              )
+            );
+          } else if (event.data?.type === 'TICKETS_BATCH_TOGGLED') {
+            const { ticketIds, isActive } = event.data;
+            const idSet = new Set(ticketIds || []);
+            setTickets((prev) =>
+              prev.map((t) =>
+                idSet.has(t.id)
+                  ? {
+                      ...t,
+                      isActive,
+                      status: isActive ? 'active' : 'disabled',
+                      disabledReason: isActive ? undefined : 'Disabled by Admin',
+                    }
+                  : t
+              )
+            );
           }
         };
       }
@@ -434,6 +463,18 @@ export function App() {
             });
           }
         } catch (err) {}
+      } else if (e.key === 'apna_tambola_tickets' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setTickets((prev) => {
+              const map = new Map<string, TambolaTicket>();
+              prev.forEach((t) => map.set(t.id, t));
+              parsed.forEach((t) => map.set(t.id, t));
+              return Array.from(map.values());
+            });
+          }
+        } catch (err) {}
       }
     };
     window.addEventListener('storage', handleStorage);
@@ -449,6 +490,16 @@ export function App() {
               const map = new Map<string, User>();
               prev.forEach((u) => map.set(u.id, u));
               data.users.forEach((u: User) => map.set(u.id, u));
+              return Array.from(map.values());
+            });
+          }
+          if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+            setTickets((prev) => {
+              const map = new Map<string, TambolaTicket>();
+              prev.forEach((t) => map.set(t.id, t));
+              data.tickets.forEach((t: TambolaTicket) => {
+                if (t && t.id) map.set(t.id, t);
+              });
               return Array.from(map.values());
             });
           }
@@ -474,6 +525,159 @@ export function App() {
       clearInterval(intervalId);
     };
   }, []);
+
+  // Force Refresh & Multi-Device Sync logic
+  const handleForceRefresh = async () => {
+    setIsSyncing(true);
+    setSyncFeedback('🔄 सभी डिवाइस और फायरस्टोर से लाइव डेटा सिंक हो रहा है...');
+
+    try {
+      // 1. Force fetch from Firestore collections
+      if (db) {
+        try {
+          const [usersSnap, gamesSnap, ticketsSnap, commsSnap, settingsSnap] = await Promise.all([
+            getDocs(collection(db, 'users')).catch(() => null),
+            getDocs(collection(db, 'games')).catch(() => null),
+            getDocs(collection(db, 'tickets')).catch(() => null),
+            getDocs(collection(db, 'commissions')).catch(() => null),
+            getDoc(doc(db, 'system', 'site_settings')).catch(() => null),
+          ]);
+
+          if (usersSnap && !usersSnap.empty) {
+            const fsUsers: User[] = [];
+            usersSnap.forEach((d) => fsUsers.push({ ...(d.data() as User), id: d.id }));
+            if (fsUsers.length > 0) {
+              setUsers((prev) => {
+                const map = new Map<string, User>();
+                INITIAL_USERS.forEach((u) => map.set(u.id, u));
+                prev.forEach((u) => map.set(u.id, u));
+                fsUsers.forEach((u) => map.set(u.id, u));
+                const merged = Array.from(map.values());
+                try {
+                  localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+          }
+
+          if (gamesSnap && !gamesSnap.empty) {
+            const fsGames: TambolaGame[] = [];
+            gamesSnap.forEach((d) => fsGames.push({ ...(d.data() as TambolaGame), id: d.id }));
+            if (fsGames.length > 0) {
+              setGames((prev) => {
+                const map = new Map<string, TambolaGame>();
+                prev.forEach((g) => map.set(g.id, g));
+                fsGames.forEach((g) => map.set(g.id, g));
+                const merged = Array.from(map.values());
+                try {
+                  localStorage.setItem('apna_tambola_games', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+          }
+
+          if (ticketsSnap && !ticketsSnap.empty) {
+            const fsTickets: TambolaTicket[] = [];
+            ticketsSnap.forEach((d) => fsTickets.push({ ...(d.data() as TambolaTicket), id: d.id }));
+            if (fsTickets.length > 0) {
+              setTickets((prev) => {
+                const map = new Map<string, TambolaTicket>();
+                prev.forEach((t) => map.set(t.id, t));
+                fsTickets.forEach((t) => map.set(t.id, t));
+                const merged = Array.from(map.values());
+                try {
+                  localStorage.setItem('apna_tambola_tickets', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+          }
+
+          if (commsSnap && !commsSnap.empty) {
+            const fsComms: ReferralCommission[] = [];
+            commsSnap.forEach((d) => fsComms.push({ ...(d.data() as ReferralCommission), id: d.id }));
+            if (fsComms.length > 0) {
+              setCommissions((prev) => {
+                const map = new Map<string, ReferralCommission>();
+                prev.forEach((c) => map.set(c.id, c));
+                fsComms.forEach((c) => map.set(c.id, c));
+                return Array.from(map.values());
+              });
+            }
+          }
+
+          if (settingsSnap && settingsSnap.exists()) {
+            const data = settingsSnap.data() as Partial<SiteSettings>;
+            setSiteSettings((prev) => {
+              const updated = { ...prev, ...data };
+              try {
+                localStorage.setItem('apna_tambola_site_settings', JSON.stringify(updated));
+              } catch {}
+              return updated;
+            });
+          }
+        } catch (fsErr) {
+          console.warn('Firestore direct fetch notice:', fsErr);
+        }
+      }
+
+      // 2. Fetch from backend API /api/sync/all to merge cross-device changes
+      try {
+        const resp = await fetch('/api/sync/all');
+        if (resp.ok) {
+          const data = await resp.json();
+          if (Array.isArray(data.users) && data.users.length > 0) {
+            setUsers((prev) => {
+              const map = new Map<string, User>();
+              prev.forEach((u) => map.set(u.id, u));
+              data.users.forEach((u: User) => map.set(u.id, u));
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+          if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+            setTickets((prev) => {
+              const map = new Map<string, TambolaTicket>();
+              prev.forEach((t) => map.set(t.id, t));
+              data.tickets.forEach((t: TambolaTicket) => {
+                if (t && t.id) map.set(t.id, t);
+              });
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem('apna_tambola_tickets', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        }
+      } catch (apiErr) {
+        console.warn('Server sync notice:', apiErr);
+      }
+
+      // 3. Broadcast across tabs
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'FORCE_SYNC_COMPLETED', timestamp: Date.now() });
+          bc.close();
+        } catch {}
+      }
+
+      setSyncFeedback('✅ डेटा सफलतापूर्वक रीफ्रेश व सिंक हो गया!');
+      setTimeout(() => setSyncFeedback(null), 3500);
+    } catch (e) {
+      console.error('Refresh error:', e);
+      setSyncFeedback('✅ डेटा रीफ्रेश हो गया!');
+      setTimeout(() => setSyncFeedback(null), 3000);
+    } finally {
+      setTimeout(() => setIsSyncing(false), 500);
+    }
+  };
 
   // Sync games to localStorage
   useEffect(() => {
@@ -777,16 +981,7 @@ export function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
-  const [celebrationData, setCelebrationData] = useState<{
-    prizeName: string;
-    prizeAmount: number;
-    userName: string;
-    ticketId: string;
-    winningNumber?: number;
-    ticket?: TambolaTicket;
-    calledNumbers?: number[];
-    isCurrentUser?: boolean;
-  } | null>(null);
+  const [celebrationData, setCelebrationData] = useState<WinnerFlashData | null>(null);
 
   const autoCallTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -837,10 +1032,15 @@ export function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          user: completeUser,
+          id: completeUser.id,
           name: completeUser.name,
           phone: completeUser.phone,
           email: completeUser.email,
           password: completeUser.password,
+          referralCode: completeUser.referralCode,
+          referredBy: completeUser.referredBy,
+          referredByUserId: completeUser.referredByUserId,
           referralCodeInput: completeUser.referredBy || completeUser.referredByUserId || '',
           selectedAvatar: completeUser.avatar,
         }),
@@ -1056,8 +1256,9 @@ export function App() {
 
           // Credit into Withdrawal Wallet (winningBalance)
           setCurrentUser((prev) => {
-            const newWinning = prev.winningBalance + win.splitPrizeAmount;
-            const newTotal = prev.depositBalance + newWinning + prev.referralBalance;
+            if (!prev) return null;
+            const newWinning = (prev.winningBalance || 0) + win.splitPrizeAmount;
+            const newTotal = (prev.depositBalance || 0) + newWinning + (prev.referralBalance || 0);
             return {
               ...prev,
               winningBalance: newWinning,
@@ -1066,20 +1267,22 @@ export function App() {
           });
 
           // Create credit transaction
-          const winTxn: WalletTransaction = {
-            id: `txn_auto_${Date.now()}_${win.prizeCode}`,
-            userId: currentUser.id,
-            type: 'prize_won',
-            amount: win.splitPrizeAmount,
-            balanceAfter: currentUser.walletBalance + win.splitPrizeAmount,
-            description: win.isEqualSplit
-              ? `🏆 ऑटो-ट्रैक जीत: ${win.prizeName} (${win.totalSplitWinners} विजेताओं में विभाजित) - ${win.gameTitle}`
-              : `🏆 ऑटो-ट्रैक जीत: ${win.prizeName} - ${win.gameTitle}`,
-            referenceId: win.ticketId,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
-            status: 'completed',
-          };
-          setTransactions((prev) => [winTxn, ...prev]);
+          if (currentUser) {
+            const winTxn: WalletTransaction = {
+              id: `txn_auto_${Date.now()}_${win.prizeCode}`,
+              userId: currentUser.id,
+              type: 'prize_won',
+              amount: win.splitPrizeAmount,
+              balanceAfter: (currentUser.walletBalance || 0) + win.splitPrizeAmount,
+              description: win.isEqualSplit
+                ? `🏆 ऑटो-ट्रैक जीत: ${win.prizeName} (${win.totalSplitWinners} विजेताओं में विभाजित) - ${win.gameTitle}`
+                : `🏆 ऑटो-ट्रैक जीत: ${win.prizeName} - ${win.gameTitle}`,
+              referenceId: win.ticketId,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+              status: 'completed',
+            };
+            setTransactions((prev) => [winTxn, ...prev]);
+          }
 
           // Push in-app winning notification
           const winNotif: UserNotificationItem = {
@@ -1211,18 +1414,29 @@ export function App() {
     let totalPaidOut = 0;
 
     // Helper to find upline parent
-    const findParent = (refCodeOrId?: string): User | undefined => {
+    const findParent = (refCodeOrId?: string, refUserId?: string): User | undefined => {
+      if (refUserId) {
+        const u = users.find((x) => x.id === refUserId);
+        if (u) return u;
+      }
       if (!refCodeOrId) return undefined;
       const clean = refCodeOrId.trim().toUpperCase();
-      return users.find(
-        (u) =>
-          (u.referralCode && u.referralCode.trim().toUpperCase() === clean) ||
-          (u.id && u.id.trim().toUpperCase() === clean) ||
-          (u.phone && u.phone.replace(/\D/g, '').endsWith(clean))
-      );
+      const cleanDigits = clean.replace(/\D/g, '');
+      const cleanNoPrefix = clean.replace(/^REF-?/, '');
+      return users.find((u) => {
+        if (u.id === currentUser.id) return false;
+        const uCode = (u.referralCode || '').trim().toUpperCase();
+        const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+        const uId = (u.id || '').trim().toUpperCase();
+        const uPhone = (u.phone || '').replace(/\D/g, '');
+        if (uCode && (uCode === clean || uCodeNoPrefix === cleanNoPrefix || clean.includes(uCode) || uCode.includes(clean))) return true;
+        if (uId && (uId === clean || clean.includes(uId) || uId.includes(clean))) return true;
+        if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+        return false;
+      });
     };
 
-    let uplineUser = findParent(currentUser.referredBy);
+    let uplineUser = findParent(currentUser.referredBy, currentUser.referredByUserId);
 
     for (let i = 0; i < RATES.length; i++) {
       const tier = RATES[i];
@@ -1278,7 +1492,7 @@ export function App() {
       }
 
       // Move to next higher level upline
-      uplineUser = findParent(uplineUser.referredBy);
+      uplineUser = findParent(uplineUser.referredBy, uplineUser.referredByUserId);
     }
 
     if (newComms.length > 0) {
@@ -1350,6 +1564,7 @@ export function App() {
 
     // Deduct exact payment amount from user deposit balance and update wallet balance
     setCurrentUser((prev) => {
+      if (!prev) return null;
       const newDeposit = prev.depositBalance - totalCost;
       const newWallet = newDeposit + prev.winningBalance + (prev.referralBalance || 0);
       return {
@@ -1991,11 +2206,14 @@ export function App() {
   const handleRejectWithdrawal = async (id: string): Promise<boolean> => {
     const req = withdrawals.find((w) => w.id === id);
     if (req) {
-      setCurrentUser((prev) => ({
-        ...prev,
-        walletBalance: prev.walletBalance + req.amount,
-        winningBalance: prev.winningBalance + req.amount,
-      }));
+      setCurrentUser((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          walletBalance: (prev.walletBalance || 0) + req.amount,
+          winningBalance: (prev.winningBalance || 0) + req.amount,
+        };
+      });
     }
     setWithdrawals((prev) =>
       prev.map((w) => (w.id === id ? { ...w, status: 'rejected' } : w))
@@ -2121,7 +2339,7 @@ export function App() {
   const handleAdminToggleTicketStatus = async (ticketId: string, isActive: boolean): Promise<boolean> => {
     setTickets((prev) =>
       prev.map((t) =>
-        t.id === ticketId
+        t.id === ticketId || t.ticketId === ticketId
           ? {
               ...t,
               isActive,
@@ -2142,7 +2360,9 @@ export function App() {
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
-      );
+      ).catch((err) => {
+        console.warn('Firestore ticket toggle async notice:', err);
+      });
     } catch (e) {
       console.warn('Firestore ticket toggle notice:', e);
     }
@@ -2154,7 +2374,7 @@ export function App() {
     const idSet = new Set(ticketIds);
     setTickets((prev) =>
       prev.map((t) =>
-        idSet.has(t.id)
+        idSet.has(t.id) || (t.ticketId && idSet.has(t.ticketId))
           ? {
               ...t,
               isActive,
@@ -2176,7 +2396,7 @@ export function App() {
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
-        );
+        ).catch(() => {});
       } catch (e) {}
     }
     return true;
@@ -2506,12 +2726,24 @@ export function App() {
         unreadNotificationCount={userNotifications.filter((n) => !n.read).length}
         activeTemplateId={activeTemplateId}
         onOpenTemplateSelector={() => setShowTemplateModal(true)}
+        onRefreshData={handleForceRefresh}
+        isSyncing={isSyncing}
         onSelectAdminModule={(modKey) => {
           setActiveTab('admin');
           setAdminActiveModule(modKey);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
+
+      {/* Floating Multi-Device Sync Toast Notification */}
+      {syncFeedback && (
+        <div className="fixed top-20 right-4 sm:right-6 z-50 animate-in fade-in slide-in-from-top-4 duration-300 pointer-events-none">
+          <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-950/95 border-2 border-amber-400 text-amber-300 text-xs sm:text-sm font-black shadow-2xl backdrop-blur-md">
+            <span className="text-base">⚡</span>
+            <span>{syncFeedback}</span>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">

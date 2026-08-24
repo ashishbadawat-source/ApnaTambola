@@ -52,8 +52,25 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   };
 
   const handleShareWhatsApp = () => {
-    const text = `Join me on TAMBOLA LIVE! Play live Housie games and win exciting prizes. Use my referral code ${currentUser.referralCode} to get started: ${referralLink}`;
+    const text = `🎯 *अपना तंबोला (APNA TAMBOLA) - भारत का #1 लाइव तंबोला गेम!* 🏆\n\n🎁 *₹10 फ्री साइनअप बोनस* तुरंत पाएं!\n👑 8-लेवल अनलिमिटेड रेफरल कमीशन कमाएं और 10-सेकंड में सीधा UPI विथड्रॉल करें!\n\n👉 *मेरे रेफरल कोड (${currentUser.referralCode}) से तुरंत जॉइन करें:*\n${referralLink}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleNativeShare = async () => {
+    const shareData = {
+      title: 'अपना तंबोला (Apna Tambola) - Live Fun • Live Win',
+      text: `🎯 अपना तंबोला पर लाइव हौसी खेलें और जीतें! ₹10 फ्री बोनस पाएं (रेफरल कोड: ${currentUser.referralCode})`,
+      url: referralLink,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (e) {
+        handleShareWhatsApp();
+      }
+    } else {
+      handleShareWhatsApp();
+    }
   };
 
   const totalEarnings = commissions
@@ -87,10 +104,20 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-xl">
-            <div className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 rounded-full px-3 py-1 text-xs font-bold text-amber-300">
-              <Gift className="w-3.5 h-3.5 text-amber-400" />
-              <span>8-Level Multi-Tier Revenue Tree</span>
+          <div className="space-y-3 max-w-xl">
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo.png"
+                alt="Apna Tambola Logo"
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover shadow-xl shadow-amber-500/30 border-2 border-amber-400 shrink-0"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+              <div className="inline-flex items-center gap-1.5 bg-amber-500/20 border border-amber-400/40 rounded-full px-3 py-1 text-xs font-bold text-amber-300">
+                <Gift className="w-3.5 h-3.5 text-amber-400" />
+                <span>8-Level Multi-Tier Revenue Tree</span>
+              </div>
             </div>
             <h1 className="text-2xl sm:text-4xl font-black text-slate-100">
               Earn Up to <span className="text-amber-400">4.6% Commission</span> Across 8 Levels
@@ -119,20 +146,47 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
               />
               <button
                 onClick={handleCopyLink}
-                className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs flex items-center gap-1 shrink-0 transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied!' : 'Copy'}</span>
               </button>
             </div>
 
-            <button
-              onClick={handleShareWhatsApp}
-              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow transition-colors"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Share on WhatsApp &amp; Telegram</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleShareWhatsApp}
+                className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp शेयर</span>
+              </button>
+              <button
+                onClick={handleNativeShare}
+                className="py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition-colors cursor-pointer"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>लिंक शेयर करें</span>
+              </button>
+            </div>
+
+            {/* Live Link Share Preview Box */}
+            <div className="mt-2 p-2.5 rounded-xl bg-slate-900/90 border border-slate-700/70 text-[11px] space-y-1.5">
+              <span className="text-[9px] uppercase font-bold text-slate-400 block tracking-wider">
+                📱 व्हाट्सएप/सोशल मीडिया लिंक प्रीव्यू:
+              </span>
+              <div className="flex items-center gap-2 p-1.5 rounded-lg bg-slate-950 border border-slate-800">
+                <img
+                  src="/logo.png"
+                  alt="Apna Tambola Preview"
+                  className="w-10 h-10 rounded-lg object-cover border border-amber-400/50 shrink-0"
+                />
+                <div className="truncate">
+                  <div className="font-bold text-white text-[11px] truncate">Apna Tambola - Live Fun • Live Win</div>
+                  <div className="text-[10px] text-slate-400 truncate">₹10 फ्री साइनअप बोनस + 8-लेवल कमीशन</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

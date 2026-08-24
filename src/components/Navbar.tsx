@@ -32,6 +32,7 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react';
 import { User as UserType } from '../types';
 import { AllOptionsModal } from './AllOptionsModal';
@@ -55,6 +56,8 @@ interface NavbarProps {
   onSelectAdminModule?: (moduleKey: string) => void;
   activeTemplateId?: string;
   onOpenTemplateSelector?: () => void;
+  onRefreshData?: () => void;
+  isSyncing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -76,6 +79,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAdminModule,
   activeTemplateId = 'royal_gold',
   onOpenTemplateSelector,
+  onRefreshData,
+  isSyncing = false,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -236,10 +241,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => handleTabChange('home')}
             className="flex items-center gap-2.5 cursor-pointer group select-none shrink-0"
           >
-            <div className="relative">
-              <div className="tambola-ball-3d ball-gold w-9 h-9 sm:w-10 sm:h-10 text-sm sm:text-base font-black group-hover:scale-110 transition-transform shadow-lg shadow-amber-500/40 border border-amber-300/40">
-                7
-              </div>
+            <div className="relative flex items-center justify-center">
+              <img
+                src="/logo.png"
+                alt="Apna Tambola Logo"
+                className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover group-hover:scale-105 transition-transform drop-shadow-[0_0_12px_rgba(245,158,11,0.5)] border-2 border-amber-400/60"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping absolute -top-0.5 -right-0.5" />
             </div>
             <div>
@@ -332,14 +342,35 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Right Action Bar */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* 🔄 Explicit Force Refresh & Multi-Device Sync Button */}
+            {onRefreshData && (
+              <button
+                id="header-refresh-data-btn"
+                type="button"
+                onClick={onRefreshData}
+                disabled={isSyncing}
+                title="सभी डिवाइस से लाइव डेटा तुरंत रीफ्रेश करें (Force Refresh & Multi-Device Sync)"
+                className={`px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-black border transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 ${
+                  isSyncing
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-300 ring-2 ring-amber-400/50'
+                    : 'bg-slate-900/90 hover:bg-slate-800 text-amber-400 border-amber-400/30 hover:border-amber-400/60'
+                }`}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-300' : 'text-amber-400'}`} />
+                <span className="hidden md:inline font-bold">
+                  {isSyncing ? 'सिंक हो रहा है...' : 'रीफ्रेश'}
+                </span>
+              </button>
+            )}
+
             {/* 🎨 Template & Theme Selector Button */}
             {onOpenTemplateSelector && (
               <button
                 id="header-template-selector-btn"
                 onClick={onOpenTemplateSelector}
                 title="टेम्पलेट व थीम बदलें (Change Theme)"
-                className="px-2.5 py-1.5 rounded-xl text-xs font-black border transition-all flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 border-amber-400/40 text-amber-300 hover:bg-amber-400/20 cursor-pointer shadow-sm"
+                className="px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-black border transition-all flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-emerald-500/20 border-amber-400/40 text-amber-300 hover:bg-amber-400/20 cursor-pointer shadow-sm"
               >
                 <span className="text-sm">🎨</span>
                 <span className="hidden sm:inline font-bold">टेम्पलेट</span>
@@ -480,6 +511,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <Grid className="w-4 h-4 text-amber-400" />
                         <span>सभी 22 विकल्प (All Options)</span>
                       </button>
+
+                      {onRefreshData && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onRefreshData();
+                            setUserDropdownOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-amber-300 hover:bg-amber-500/10 flex items-center gap-2 transition-colors cursor-pointer"
+                        >
+                          <RefreshCw className={`w-4 h-4 text-amber-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                          <span>लाइव डेटा रीफ्रेश (Force Sync)</span>
+                        </button>
+                      )}
 
                       {currentUser.role === 'admin' && (
                         <button

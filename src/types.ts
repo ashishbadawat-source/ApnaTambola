@@ -16,6 +16,12 @@ export interface User {
   referralBalance: number;
   bonusRewardBalance?: number; // 🎁 Daily Spin / Scratch / Check-in Rewards Wallet (Unlocks 10% on Admin Recharge)
   kycStatus: 'verified' | 'pending' | 'rejected' | 'unverified';
+  isKycVerified?: boolean;
+  level?: number;
+  gamesPlayed?: number;
+  totalWinnings?: number;
+  totalWon?: number;
+  referralCount?: number;
   referralCode: string;
   referredBy?: string; // referrer's referralCode
   referredByUserId?: string; // referrer's User ID for direct linkage
@@ -28,6 +34,7 @@ export interface User {
     ifsc: string;
     bankName: string;
     upiId: string;
+    accountHolder?: string;
   };
 }
 
@@ -59,6 +66,7 @@ export interface TambolaTicket {
   colorTheme?: TicketColorThemeId;
   autoMode?: boolean; // Auto-track and auto-claim prizes even when offline
   isWinner?: boolean;
+  isWinningTicket?: boolean;
   wonPrizes?: string[];
   qrCodeData?: string;
   isActive?: boolean; // Admin ON / OFF toggle for individual ticket (Default true: ON / चालू, false: OFF / बंद)
@@ -68,6 +76,7 @@ export interface TambolaTicket {
 
 export type PrizeCode =
   | 'early5'
+  | 'early_five'
   | 'star'
   | 'corners'
   | 'top_line'
@@ -108,6 +117,9 @@ export interface TambolaGame {
   maxPlayers: number;
   registeredPlayers: number;
   totalTicketsSold: number;
+  soldTickets?: number;
+  totalTickets?: number;
+  maxTicketsPerUser?: number;
   prizePool: number;
   ticketColorTheme?: TicketColorThemeId;
   status: GameStatus;
@@ -118,6 +130,7 @@ export interface TambolaGame {
   bookingClosedMessage?: string; // Custom message when booking is closed
   calledNumbers: number[];
   currentNumber: number | null;
+  lastCalledNumber?: number | null;
   previousNumbers: number[];
   autoCalling: boolean;
   callIntervalSeconds: number;
@@ -141,6 +154,7 @@ export interface GameWinner {
   ticketNumber: number;
   winningNumber: number;
   date: string;
+  timestamp?: string;
 }
 
 export interface ReferralLevelConfig {
@@ -197,6 +211,7 @@ export type TransactionStatus = 'completed' | 'pending' | 'failed' | 'reversed';
 export interface WalletTransaction {
   id: string;
   userId: string;
+  userName?: string;
   type: TransactionType;
   amount: number;
   status: TransactionStatus;
@@ -268,12 +283,15 @@ export interface SupportTicket {
   priority: 'low' | 'medium' | 'high';
   status: 'open' | 'in_progress' | 'resolved';
   createdAt: string;
+  ticketCode?: string;
   messages: {
     id: string;
     sender: 'user' | 'admin';
     senderName: string;
     text: string;
     time: string;
+    timestamp?: string;
+    message?: string;
   }[];
 }
 
@@ -291,6 +309,8 @@ export interface SiteSettings {
   tagline: string;
   supportEmail: string;
   supportPhone: string;
+  supportWhatsapp?: string;
+  noticeMarquee?: string;
   referralSystemEnabled: boolean;
   minWithdrawal: number;
   maxWithdrawalPerDay: number;
@@ -375,10 +395,13 @@ export interface LoginHistoryEntry {
   id: string;
   userId: string;
   userName: string;
+  role?: string;
   ip: string;
+  ipAddress?: string;
   device: string;
   location: string;
   time: string;
+  timestamp?: string;
   status: 'success' | 'failed';
 }
 

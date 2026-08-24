@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Bell,
   Send,
@@ -15,19 +15,19 @@ import {
 import { AdminNotification, User } from '../../types';
 
 interface ModuleNotificationsProps {
-  notifications: AdminNotification[];
-  users: User[];
-  onSendNotification: (notification: Omit<AdminNotification, 'id' | 'sentAt'>) => Promise<boolean>;
+  notifications?: AdminNotification[];
+  users?: User[];
+  onSendNotification?: (notification: Omit<AdminNotification, 'id' | 'sentAt'>) => Promise<boolean>;
   onDeleteNotification?: (id: string) => void;
 }
 
 export const ModuleNotifications: React.FC<ModuleNotificationsProps> = ({
-  notifications,
-  users,
+  notifications = [],
+  users = [],
   onSendNotification,
   onDeleteNotification,
 }) => {
-  const [notifList, setNotifList] = useState<AdminNotification[]>(notifications);
+  const [notifList, setNotifList] = useState<AdminNotification[]>(() => notifications || []);
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
   const [type, setType] = useState<'info' | 'success' | 'warning' | 'urgent'>('info');
@@ -36,47 +36,65 @@ export const ModuleNotifications: React.FC<ModuleNotificationsProps> = ({
   const [sending, setSending] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Sync with prop updates if changed externally
+  useEffect(() => {
+    if (notifications && Array.isArray(notifications)) {
+      setNotifList(notifications);
+    }
+  }, [notifications]);
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !message.trim()) return;
     setSending(true);
     try {
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today';
       const newNotif: AdminNotification = {
         id: `notif_${Date.now()}`,
-        title,
-        message,
+        title: title.trim(),
+        message: message.trim(),
         type,
         targetAudience,
         channel,
-        sentAt: 'Just now',
+        sentAt: nowStr,
+        createdAt: new Date().toISOString(),
+        status: 'sent',
         readCount: 0,
-        totalRecipients: targetAudience === 'all' ? users.length : 1,
+        totalRecipients: targetAudience === 'all' ? (users?.length || 1) : 1,
       };
 
-      await onSendNotification({
-        title,
-        message,
-        type,
-        targetAudience,
-        channel,
-        readCount: 0,
-        totalRecipients: targetAudience === 'all' ? users.length : 1,
-      });
+      if (onSendNotification) {
+        await onSendNotification({
+          title: title.trim(),
+          message: message.trim(),
+          type,
+          targetAudience,
+          channel,
+          readCount: 0,
+          totalRecipients: targetAudience === 'all' ? (users?.length || 1) : 1,
+        });
+      }
 
-      setNotifList((prev) => [newNotif, ...prev]);
+      setNotifList((prev) => [newNotif, ...(prev || [])]);
       setTitle('');
       setMessage('');
-      setSuccessMsg(`Broadcast sent to ${targetAudience.replace('_', ' ').toUpperCase()} via ${channel.toUpperCase()}!`);
+      const channelLabel = (channel || 'in_app').toUpperCase();
+      const targetLabel = (targetAudience || 'all').replace('_', ' ').toUpperCase();
+      setSuccessMsg(`Broadcast sent to ${targetLabel} via ${channelLabel}!`);
       setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err) {
+      console.warn('Failed to send broadcast:', err);
     } finally {
       setSending(false);
     }
   };
 
   const handleDelete = (id: string) => {
-    setNotifList((prev) => prev.filter((n) => n.id !== id));
+    setNotifList((prev) => (prev || []).filter((n) => n?.id !== id));
     if (onDeleteNotification) onDeleteNotification(id);
   };
+
+  const safeList = (notifList && notifList.length > 0 ? notifList : notifications) || [];
 
   return (
     <div className="space-y-6">
@@ -85,7 +103,7 @@ export const ModuleNotifications: React.FC<ModuleNotificationsProps> = ({
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
             <Bell className="w-6 h-6 text-amber-400" />
-            <span>Broadcast & Player Notification Center</span>
+            <span>Broadcast &amp; Player Notification Center</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-400">
             Dispatch in-app banners, push alerts, SMS reminders for upcoming jackpot games, and bonus credit notices.
@@ -116,7 +134,7 @@ export const ModuleNotifications: React.FC<ModuleNotificationsProps> = ({
                 onChange={(e) => setTargetAudience(e.target.value as any)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
               >
-                <option value="all">All Registered Players ({users.length})</option>
+                <option value="all">All Registered Players ({users?.length || 0})</option>
                 <option value="active_players">Active Room Players Only</option>
                 <option value="referrers">Top Referrers (MLM)</option>
               </select>
@@ -192,44 +210,62 @@ export const ModuleNotifications: React.FC<ModuleNotificationsProps> = ({
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-xl">
         <h3 className="text-base font-black text-white">Broadcast History Log</h3>
 
-        <div className="space-y-3">
-          {notifList.map((n) => (
-            <div
-              key={n.id}
-              className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
-                      n.type === 'urgent'
-                        ? 'bg-red-500/20 text-red-300'
-                        : n.type === 'success'
-                        ? 'bg-emerald-500/20 text-emerald-300'
-                        : 'bg-blue-500/20 text-blue-300'
-                    }`}
-                  >
-                    {n.type}
-                  </span>
-                  <span className="font-bold text-white text-xs">{n.title}</span>
-                  <span className="text-[10px] text-slate-500 font-mono">• {n.sentAt}</span>
-                </div>
-                <p className="text-xs text-slate-300">{n.message}</p>
-                <div className="text-[10px] text-slate-400">
-                  Channel: <strong className="text-slate-200">{n.channel.toUpperCase()}</strong> • Target: <strong className="text-slate-200">{n.targetAudience}</strong>
-                </div>
-              </div>
+        {safeList.length === 0 ? (
+          <div className="text-center py-8 text-slate-500 text-xs font-semibold">
+            कोई ब्रॉडकास्ट संदेश नहीं है। ऊपर दिए गए फ़ॉर्म से पहला ब्रॉडकास्ट भेजें।
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {safeList.map((n) => {
+              if (!n) return null;
+              const notifType = n.type || 'info';
+              const notifChannel = (n.channel || 'in_app').toUpperCase();
+              const notifTarget = (n.targetAudience || 'all').replace('_', ' ').toUpperCase();
+              const notifDate = n.sentAt || n.createdAt || 'Recent';
 
-              <button
-                onClick={() => handleDelete(n.id)}
-                className="p-2 rounded-xl bg-slate-900 hover:bg-red-500/10 text-slate-500 hover:text-red-400 text-xs transition-colors cursor-pointer"
-                title="Delete Broadcast"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
+              return (
+                <div
+                  key={n.id || `notif_${Math.random()}`}
+                  className="p-4 rounded-2xl bg-slate-950 border border-slate-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                          notifType === 'urgent'
+                            ? 'bg-red-500/20 text-red-300'
+                            : notifType === 'success'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : notifType === 'warning'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-blue-500/20 text-blue-300'
+                        }`}
+                      >
+                        {notifType}
+                      </span>
+                      <span className="font-bold text-white text-xs">{n.title || 'Broadcast Alert'}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">• {notifDate}</span>
+                    </div>
+                    <p className="text-xs text-slate-300">{n.message || ''}</p>
+                    <div className="text-[10px] text-slate-400">
+                      Channel: <strong className="text-slate-200">{notifChannel}</strong> • Target:{' '}
+                      <strong className="text-slate-200">{notifTarget}</strong>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(n.id)}
+                    className="p-2 rounded-xl bg-slate-900 hover:bg-red-500/10 text-slate-500 hover:text-red-400 text-xs transition-colors cursor-pointer"
+                    title="Delete Broadcast"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

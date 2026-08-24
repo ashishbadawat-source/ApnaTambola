@@ -113,26 +113,35 @@ async function startServer() {
 
   app.post('/api/users/register', (req: Request, res: Response) => {
     try {
-      const { name, phone, email, password, referralCodeInput, selectedAvatar } = req.body;
+      const body = req.body || {};
+      const name = body.name || (body.user && body.user.name);
+      const phone = body.phone || (body.user && body.user.phone);
+      const email = body.email || (body.user && body.user.email);
+      const password = body.password || (body.user && body.user.password);
+      const referralCodeInput = body.referralCodeInput || body.referredBy || (body.user && (body.user.referredBy || body.user.referredByUserId)) || '';
+      const selectedAvatar = body.selectedAvatar || body.avatar || (body.user && body.user.avatar);
+      const providedId = body.id || (body.user && body.user.id);
+      const providedRefCode = body.referralCode || (body.user && body.user.referralCode);
+      const providedReferredByUserId = body.referredByUserId || (body.user && body.user.referredByUserId);
+
       if (!name || !phone) {
         return res.status(400).json({ success: false, error: 'Name and phone are required.' });
       }
 
       const phoneDigits = String(phone).replace(/\D/g, '');
-      const existingUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          error: `Mobile number ${phone} is already registered (${existingUser.name}).`,
-          existingUser,
-        });
-      }
+      const existingUserIdx = users.findIndex(
+        (u) => (u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits)) || (providedId && u.id === providedId)
+      );
 
       // Resolve referrer
       const cleanRef = referralCodeInput ? String(referralCodeInput).trim().toUpperCase() : '';
       let referrer: User | null = null;
 
-      if (cleanRef) {
+      if (providedReferredByUserId) {
+        referrer = users.find((u) => u.id === providedReferredByUserId) || null;
+      }
+
+      if (!referrer && cleanRef) {
         referrer =
           users.find((u) => {
             const uCode = (u.referralCode || '').trim().toUpperCase();
@@ -149,9 +158,13 @@ async function startServer() {
           }) || null;
       }
 
-      const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
+      const finalId = providedId || (existingUserIdx >= 0 ? users[existingUserIdx].id : `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`);
+      const resolvedReferralCode = providedRefCode || (existingUserIdx >= 0 ? users[existingUserIdx].referralCode : `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`);
+      const finalReferredBy = referrer ? (referrer.referralCode || referrer.id || cleanRef) : (cleanRef || '');
+      const finalReferredByUserId = referrer ? referrer.id : (providedReferredByUserId || '');
+
       const newUser: User = {
-        id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+        id: finalId,
         name: String(name).trim(),
         email: email ? String(email).trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
         phone: `+91 ${phoneDigits}`,
@@ -159,17 +172,17 @@ async function startServer() {
         role: 'user',
         status: 'active',
         isBlocked: false,
-        walletBalance: 10,
-        depositBalance: 0,
-        winningBalance: 10,
-        referralBalance: 0,
-        bonusRewardBalance: 0,
+        walletBalance: existingUserIdx >= 0 ? (users[existingUserIdx].walletBalance ?? 10) : 10,
+        depositBalance: existingUserIdx >= 0 ? (users[existingUserIdx].depositBalance ?? 0) : 0,
+        winningBalance: existingUserIdx >= 0 ? (users[existingUserIdx].winningBalance ?? 10) : 10,
+        referralBalance: existingUserIdx >= 0 ? (users[existingUserIdx].referralBalance ?? 0) : 0,
+        bonusRewardBalance: existingUserIdx >= 0 ? (users[existingUserIdx].bonusRewardBalance ?? 0) : 0,
         referralCode: resolvedReferralCode,
-        referredBy: referrer ? (referrer.referralCode || referrer.id || cleanRef) : cleanRef,
-        referredByUserId: referrer ? referrer.id : '',
+        referredBy: finalReferredBy,
+        referredByUserId: finalReferredByUserId,
         kycStatus: 'verified',
         avatar: selectedAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-        createdAt: new Date().toISOString(),
+        createdAt: existingUserIdx >= 0 ? users[existingUserIdx].createdAt : new Date().toISOString(),
         bankDetails: {
           accountName: String(name).trim(),
           accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
@@ -179,7 +192,11 @@ async function startServer() {
         },
       };
 
-      users.unshift(newUser);
+      if (existingUserIdx >= 0) {
+        users[existingUserIdx] = { ...users[existingUserIdx], ...newUser };
+      } else {
+        users.unshift(newUser);
+      }
 
       // Award referrer bonus & commission record
       let joinComm: ReferralCommission | null = null;
@@ -187,24 +204,30 @@ async function startServer() {
         referrer.walletBalance = (referrer.walletBalance || 0) + 10;
         referrer.referralBalance = (referrer.referralBalance || 0) + 10;
 
-        joinComm = {
-          id: `comm_join_${Date.now()}_${newUser.id}`,
-          userId: referrer.id,
-          userName: referrer.name,
-          sourceUserId: newUser.id,
-          sourceUserName: newUser.name,
-          gameId: 'signup_bonus',
-          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
-          ticketId: 'REG-DIRECT',
-          level: 1,
-          percentage: 10,
-          baseAmount: 10,
-          commissionAmount: 10,
-          transactionId: `TXN-REF-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          status: 'approved',
-        };
-        commissions.unshift(joinComm);
+        const existingJoinComm = commissions.find(
+          (c) => c.userId === referrer!.id && c.sourceUserId === newUser.id && c.gameId === 'signup_bonus'
+        );
+
+        if (!existingJoinComm) {
+          joinComm = {
+            id: `comm_join_${Date.now()}_${newUser.id}`,
+            userId: referrer.id,
+            userName: referrer.name,
+            sourceUserId: newUser.id,
+            sourceUserName: newUser.name,
+            gameId: 'signup_bonus',
+            gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+            ticketId: 'REG-DIRECT',
+            level: 1,
+            percentage: 10,
+            baseAmount: 10,
+            commissionAmount: 10,
+            transactionId: `TXN-REF-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            status: 'approved',
+          };
+          commissions.unshift(joinComm);
+        }
       }
 
       res.json({
@@ -222,10 +245,13 @@ async function startServer() {
   app.post('/api/users/sync', (req: Request, res: Response) => {
     const incomingUsers: User[] = req.body.users || [];
     const map = new Map<string, User>();
-    users.forEach((u) => map.set(u.id, u));
+    users.forEach((u) => {
+      if (u && u.id) map.set(u.id, u);
+    });
     incomingUsers.forEach((u) => {
       if (u && u.id) {
-        map.set(u.id, { ...(map.get(u.id) || {}), ...u });
+        const prev = map.get(u.id);
+        map.set(u.id, { ...(prev || {}), ...u });
       }
     });
     users = Array.from(map.values());
@@ -240,7 +266,7 @@ async function startServer() {
     const comm = req.body;
     if (comm && comm.id) {
       const idx = commissions.findIndex((c) => c.id === comm.id);
-      if (idx >= 0) commissions[idx] = comm;
+      if (idx >= 0) commissions[idx] = { ...commissions[idx], ...comm };
       else commissions.unshift(comm);
     }
     res.json({ success: true, commissions });
@@ -252,6 +278,7 @@ async function startServer() {
       users,
       commissions,
       games,
+      tickets,
       winners,
       transactions,
       withdrawals,
@@ -259,6 +286,39 @@ async function startServer() {
       siteSettings,
       serverTime: new Date().toISOString(),
     });
+  });
+
+  // Tickets List & Sync
+  app.get('/api/tickets', (req: Request, res: Response) => {
+    res.json(tickets);
+  });
+
+  app.post('/api/tickets/toggle', (req: Request, res: Response) => {
+    const { ticketId, isActive } = req.body;
+    const tkt = tickets.find((t) => t.id === ticketId || t.ticketId === ticketId);
+    if (tkt) {
+      tkt.isActive = isActive;
+      tkt.status = isActive ? 'active' : 'disabled';
+      if (!isActive) tkt.disabledReason = 'Disabled by Admin';
+      else delete tkt.disabledReason;
+    }
+    res.json({ success: true, ticket: tkt, totalTickets: tickets.length });
+  });
+
+  app.post('/api/tickets/batch-toggle', (req: Request, res: Response) => {
+    const { ticketIds = [], isActive } = req.body;
+    const idSet = new Set(ticketIds);
+    let updatedCount = 0;
+    tickets.forEach((t) => {
+      if (idSet.has(t.id) || idSet.has(t.ticketId)) {
+        t.isActive = isActive;
+        t.status = isActive ? 'active' : 'disabled';
+        if (!isActive) t.disabledReason = 'Disabled by Admin';
+        else delete t.disabledReason;
+        updatedCount++;
+      }
+    });
+    res.json({ success: true, updatedCount, totalTickets: tickets.length });
   });
 
   // 2. Games API
@@ -441,49 +501,80 @@ async function startServer() {
     };
     transactions.unshift(txn);
 
-    // 5-LEVEL REFERRAL COMMISSION ENGINE (Server-Side Calculation)
+    // 8-LEVEL REFERRAL COMMISSION ENGINE (Server-Side Calculation)
     if (siteSettings.referralSystemEnabled) {
-      const levelPercentages = siteSettings.levelPercentages || [4.0, 2.0, 1.0, 0.5, 0.3];
+      const levelPercentages = siteSettings.levelPercentages || [2.0, 1.0, 0.5, 0.4, 0.3, 0.2, 0.1, 0.1];
       
-      // Calculate 5-level upstream commissions
-      // In production, we traverse the user referral tree. Here we credit the user's upline network
-      levelPercentages.forEach((pct, idx) => {
-        const levelNum = idx + 1;
-        const commAmount = (totalCost * pct) / 100;
-        
-        // Find or assign upline member for Ashish/Buyer
-        const commRecord: ReferralCommission = {
-          id: `comm_${Date.now()}_L${levelNum}`,
-          userId: buyer.id, // In demo, shows up on user's referral earnings dashboard
-          userName: buyer.name,
-          sourceUserId: `u_downline_${levelNum}`,
-          sourceUserName: `Team Member (L${levelNum})`,
-          gameId: game.id,
-          gameTitle: game.title,
-          ticketId: newTickets[0]?.ticketId || 'TKT-BATCH',
-          level: levelNum,
-          percentage: pct,
-          baseAmount: totalCost,
-          commissionAmount: Number(commAmount.toFixed(2)),
-          transactionId: `TXN-REF-${Date.now()}-${levelNum}`,
-          timestamp: new Date().toISOString(),
-          status: 'approved',
-        };
-        commissions.unshift(commRecord);
-
-        // Send Referral Commission Earned Email on Level 1
-        if (idx === 0) {
-          sendBrevoEmail('referral_commission', buyer.email || 'affiliate@example.com', buyer.name, {
-            commissionAmount: commAmount.toFixed(2),
-            level: 1,
-            percentage: `${pct}%`,
-            sourceUserName: buyer.name,
-            gameTitle: game.title,
-            newReferralBalance: buyer.referralBalance || 1840,
-            date: new Date().toLocaleString(),
-          }).catch((e) => console.warn('[Brevo Error]', e));
+      const findUplineParent = (childUser: User): User | null => {
+        if (!childUser) return null;
+        if (childUser.referredByUserId) {
+          const directUser = users.find((u) => u.id === childUser.referredByUserId);
+          if (directUser) return directUser;
         }
-      });
+        if (childUser.referredBy) {
+          const clean = childUser.referredBy.trim().toUpperCase();
+          const cleanDigits = clean.replace(/\D/g, '');
+          return users.find((u) => {
+            if (u.id === childUser.id) return false;
+            const uCode = (u.referralCode || '').trim().toUpperCase();
+            const uId = (u.id || '').trim().toUpperCase();
+            const uPhone = (u.phone || '').replace(/\D/g, '');
+            if (uCode && (uCode === clean || clean.includes(uCode) || uCode.includes(clean))) return true;
+            if (uId && (uId === clean || clean.includes(uId) || uId.includes(clean))) return true;
+            if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+            return false;
+          }) || null;
+        }
+        return null;
+      };
+
+      let currentChild: User = buyer;
+      for (let idx = 0; idx < levelPercentages.length; idx++) {
+        const pct = levelPercentages[idx];
+        const levelNum = idx + 1;
+        const uplineParent = findUplineParent(currentChild);
+        if (!uplineParent) break;
+
+        const commAmount = Number(((totalCost * pct) / 100).toFixed(2));
+        if (commAmount > 0) {
+          uplineParent.walletBalance = Number(((uplineParent.walletBalance || 0) + commAmount).toFixed(2));
+          uplineParent.referralBalance = Number(((uplineParent.referralBalance || 0) + commAmount).toFixed(2));
+
+          const commRecord: ReferralCommission = {
+            id: `comm_${Date.now()}_L${levelNum}_${Math.floor(100 + Math.random() * 900)}`,
+            userId: uplineParent.id,
+            userName: uplineParent.name,
+            sourceUserId: buyer.id,
+            sourceUserName: buyer.name,
+            gameId: game.id,
+            gameTitle: game.title,
+            ticketId: newTickets[0]?.ticketId || 'TKT-BATCH',
+            level: levelNum,
+            percentage: pct,
+            baseAmount: totalCost,
+            commissionAmount: commAmount,
+            transactionId: `TXN-REF-${Date.now()}-${levelNum}`,
+            timestamp: new Date().toISOString(),
+            status: 'approved',
+          };
+          commissions.unshift(commRecord);
+
+          // Send Referral Commission Earned Email on Level 1
+          if (levelNum === 1) {
+            sendBrevoEmail('referral_commission', uplineParent.email || 'affiliate@example.com', uplineParent.name, {
+              commissionAmount: commAmount.toFixed(2),
+              level: 1,
+              percentage: `${pct}%`,
+              sourceUserName: buyer.name,
+              gameTitle: game.title,
+              newReferralBalance: uplineParent.referralBalance,
+              date: new Date().toLocaleString(),
+            }).catch((e) => console.warn('[Brevo Error]', e));
+          }
+        }
+
+        currentChild = uplineParent;
+      }
     }
 
     // Send Brevo Ticket Purchase Confirmation Transactional Email

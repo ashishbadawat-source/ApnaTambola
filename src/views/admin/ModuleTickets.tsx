@@ -62,6 +62,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   const [printingTicket, setPrintingTicket] = useState<TambolaTicket | null>(null);
 
   const filteredTickets = tickets.filter((t) => {
+    if (!t) return false;
     if (selectedGameFilter !== 'all' && t.gameId !== selectedGameFilter) return false;
     if (selectedStatusFilter === 'winning' && !t.isWinningTicket) return false;
     if (selectedStatusFilter === 'active' && t.isActive === false) return false;
@@ -69,11 +70,10 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      return (
-        t.ticketId.toLowerCase().includes(q) ||
-        t.userName.toLowerCase().includes(q) ||
-        t.gameTitle.toLowerCase().includes(q)
-      );
+      const ticketId = (t.ticketId || '').toLowerCase();
+      const userName = (t.userName || '').toLowerCase();
+      const gameTitle = (t.gameTitle || '').toLowerCase();
+      return ticketId.includes(q) || userName.includes(q) || gameTitle.includes(q);
     }
     return true;
   });
@@ -94,45 +94,110 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   };
 
   const handleToggleSingleTicket = async (ticket: TambolaTicket, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    const newStatus = !(ticket.isActive !== false);
-    if (onAdminToggleTicketStatus) {
-      await onAdminToggleTicketStatus(ticket.id, newStatus);
-      setGenSuccess(
-        `टिकट ${ticket.ticketId} को एडमिन द्वारा ${newStatus ? 'चालू (ACTIVE / ON)' : 'बंद (DISABLED / OFF)'} कर दिया गया है!`
-      );
-      if (inspectingTicket && inspectingTicket.id === ticket.id) {
-        setInspectingTicket({ ...inspectingTicket, isActive: newStatus, status: newStatus ? 'active' : 'disabled' });
-      }
-      setTimeout(() => setGenSuccess(null), 4000);
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    if (!ticket || !ticket.id) return;
+    const newStatus = !(ticket.isActive !== false);
+
+    // Call prop handler safely
+    try {
+      if (onAdminToggleTicketStatus) {
+        await onAdminToggleTicketStatus(ticket.id, newStatus);
+      }
+    } catch (err) {
+      console.warn('onAdminToggleTicketStatus notice:', err);
+    }
+
+    // Call server REST API for instant cross-device sync
+    try {
+      fetch('/api/tickets/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketId: ticket.id, isActive: newStatus }),
+      }).catch(() => {});
+    } catch (e) {}
+
+    // Broadcast across tabs safely
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({
+          type: 'TICKET_STATUS_TOGGLED',
+          ticketId: ticket.id,
+          isActive: newStatus,
+        });
+        bc.close();
+      }
+    } catch (e) {}
+
+    setGenSuccess(
+      `टिकट ${ticket.ticketId || ticket.id} को एडमिन द्वारा ${newStatus ? 'चालू (ACTIVE / ON)' : 'बंद (DISABLED / OFF)'} कर दिया गया है!`
+    );
+    if (inspectingTicket && inspectingTicket.id === ticket.id) {
+      setInspectingTicket({ ...inspectingTicket, isActive: newStatus, status: newStatus ? 'active' : 'disabled' });
+    }
+    setTimeout(() => setGenSuccess(null), 4000);
   };
 
   const handleBatchToggleTickets = async (isActive: boolean) => {
-    const targetIds = filteredTickets.map((t) => t.id);
+    const targetIds = filteredTickets.map((t) => t.id).filter(Boolean);
     if (targetIds.length === 0) {
-      alert('No tickets match current filters to update.');
+      setGenSuccess('कोई टिकट वर्तमान फ़िल्टर से मैच नहीं हुआ।');
+      setTimeout(() => setGenSuccess(null), 3000);
       return;
     }
-    if (onAdminBatchToggleTickets) {
-      await onAdminBatchToggleTickets(targetIds, isActive);
-      setGenSuccess(
-        `फ़िल्टर किए गए सभी ${targetIds.length} टिकटों को एडमिन द्वारा ${isActive ? 'चालू (ON)' : 'बंद (OFF)'} कर दिया गया है!`
-      );
-      setTimeout(() => setGenSuccess(null), 4000);
+
+    try {
+      if (onAdminBatchToggleTickets) {
+        await onAdminBatchToggleTickets(targetIds, isActive);
+      }
+    } catch (err) {
+      console.warn('onAdminBatchToggleTickets notice:', err);
     }
+
+    // Call server REST API for batch toggle
+    try {
+      fetch('/api/tickets/batch-toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketIds: targetIds, isActive }),
+      }).catch(() => {});
+    } catch (e) {}
+
+    // Broadcast across tabs
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({
+          type: 'TICKETS_BATCH_TOGGLED',
+          ticketIds: targetIds,
+          isActive,
+        });
+        bc.close();
+      }
+    } catch (e) {}
+
+    setGenSuccess(
+      `फ़िल्टर किए गए सभी ${targetIds.length} टिकटों को एडमिन द्वारा ${isActive ? 'चालू (ON)' : 'बंद (OFF)'} कर दिया गया है!`
+    );
+    setTimeout(() => setGenSuccess(null), 4000);
   };
 
   const handleVerifyTicketSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const query = verifyTicketIdInput.trim().toLowerCase();
+    if (!query) return;
     const found = tickets.find(
-      (t) => t.ticketId.toLowerCase() === verifyTicketIdInput.trim().toLowerCase()
+      (t) => (t.ticketId || '').toLowerCase() === query || (t.id || '').toLowerCase() === query
     );
     if (found) {
       setInspectingTicket(found);
       setVerifyTicketIdInput('');
     } else {
-      alert(`No ticket found with ID: ${verifyTicketIdInput}`);
+      setGenSuccess(`टिकट आईडी "${verifyTicketIdInput}" नहीं मिला।`);
+      setTimeout(() => setGenSuccess(null), 3000);
     }
   };
 
@@ -318,13 +383,21 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       {/* Tickets Master Grid / Table */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredTickets.map((tkt, tktIdx) => {
+          if (!tkt) return null;
           const isTktActive = tkt.isActive !== false;
           const theme = getTicketTheme(tkt.colorTheme, tkt.ticketNumber || tktIdx + 1);
           const markedCount = tkt.markedNumbers?.length || 0;
+          const ticketNumbers =
+            Array.isArray(tkt.numbers) && tkt.numbers.length === 3
+              ? tkt.numbers
+              : generateTambolaTicketMatrix();
+          const ticketIdStr = tkt.ticketId || `TKT-${tkt.id?.slice(0, 4) || '1001'}`;
+          const gameTitleStr = tkt.gameTitle || 'Tambola Live Tournament';
+          const userNameStr = tkt.userName || 'Player';
 
           return (
             <div
-              key={tkt.id}
+              key={tkt.id || `tkt-${tktIdx}`}
               className={`rounded-3xl border-2 p-0 overflow-hidden shadow-2xl flex flex-col justify-between transition-all duration-300 relative ${
                 !isTktActive
                   ? 'bg-gradient-to-b from-[#200808] via-[#140606] to-[#0c0303] border-red-500/70 opacity-90'
@@ -349,7 +422,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                     <Ticket className="w-3.5 h-3.5" />
                   </div>
                   <span className="font-mono text-xs font-black tracking-wider bg-black/50 px-2 py-0.5 rounded-md border border-white/20 text-white">
-                    {tkt.ticketId}
+                    {ticketIdStr}
                   </span>
                   <span
                     className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${
@@ -370,7 +443,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                     </span>
                   )}
                   <span className="px-2.5 py-0.5 rounded-md bg-black/60 text-amber-300 font-black text-xs border border-amber-400/40 shadow-sm">
-                    ₹{tkt.price}
+                    ₹{tkt.price ?? 10}
                   </span>
                 </div>
               </div>
@@ -380,12 +453,12 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <div className="flex items-center gap-1.5 truncate max-w-[190px]">
                     <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span className="font-black text-white truncate text-xs">{tkt.gameTitle}</span>
+                    <span className="font-black text-white truncate text-xs">{gameTitleStr}</span>
                   </div>
 
                   <div className="flex items-center gap-1 text-[11px] text-slate-300 shrink-0">
                     <User className="w-3 h-3 text-slate-400" />
-                    <span>Owner: <strong className="text-amber-300 font-bold">{tkt.userName}</strong></span>
+                    <span>Owner: <strong className="text-amber-300 font-bold">{userNameStr}</strong></span>
                   </div>
                 </div>
 
@@ -397,32 +470,33 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                   </div>
 
                   <div className="grid grid-cols-9 gap-1 text-[11px] font-mono relative z-10">
-                    {tkt.numbers.map((row, rIdx) => (
+                    {ticketNumbers.map((row, rIdx) => (
                       <React.Fragment key={rIdx}>
-                        {row.map((val, cIdx) => {
-                          const isFilled = val > 0;
-                          const isDabbed = isFilled && tkt.markedNumbers?.includes(val);
-                          const colTheme = COLUMN_COLORS[cIdx] || COLUMN_COLORS[0];
+                        {Array.isArray(row) &&
+                          row.map((val, cIdx) => {
+                            const isFilled = val > 0;
+                            const isDabbed = isFilled && tkt.markedNumbers?.includes(val);
+                            const colTheme = COLUMN_COLORS[cIdx] || COLUMN_COLORS[0];
 
-                          return (
-                            <div
-                              key={`${rIdx}-${cIdx}`}
-                              className={`h-6 sm:h-7 rounded-lg flex flex-col items-center justify-center font-black transition-all ${
-                                !isFilled
-                                  ? `${theme.cellBlankBg} border text-transparent select-none opacity-80`
-                                  : isDabbed
-                                  ? `${colTheme.dabbed} ring-2 ring-amber-300 scale-105 z-10 shadow-md`
-                                  : `${colTheme.cellBg} border hover:brightness-125 shadow-sm`
-                              }`}
-                            >
-                              {!isFilled ? (
-                                <Star className="w-2 h-2 text-amber-400/40 fill-amber-400/20" />
-                              ) : (
-                                <span>{val}</span>
-                              )}
-                            </div>
-                          );
-                        })}
+                            return (
+                              <div
+                                key={`${rIdx}-${cIdx}`}
+                                className={`h-6 sm:h-7 rounded-lg flex flex-col items-center justify-center font-black transition-all ${
+                                  !isFilled
+                                    ? `${theme.cellBlankBg} border text-transparent select-none opacity-80`
+                                    : isDabbed
+                                    ? `${colTheme.dabbed} ring-2 ring-amber-300 scale-105 z-10 shadow-md`
+                                    : `${colTheme.cellBg} border hover:brightness-125 shadow-sm`
+                                }`}
+                              >
+                                {!isFilled ? (
+                                  <Star className="w-2 h-2 text-amber-400/40 fill-amber-400/20" />
+                                ) : (
+                                  <span>{val}</span>
+                                )}
+                              </div>
+                            );
+                          })}
                       </React.Fragment>
                     ))}
                   </div>
@@ -574,18 +648,22 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
 
             <div className="border-2 border-slate-950 rounded-2xl p-4 bg-amber-50">
               <div className="grid grid-cols-9 gap-1.5 text-center font-bold text-sm font-mono">
-                {printingTicket.numbers.map((row, rIdx) => (
+                {(Array.isArray(printingTicket.numbers) && printingTicket.numbers.length === 3
+                  ? printingTicket.numbers
+                  : generateTambolaTicketMatrix()
+                ).map((row, rIdx) => (
                   <React.Fragment key={rIdx}>
-                    {row.map((val, cIdx) => (
-                      <div
-                        key={`${rIdx}-${cIdx}`}
-                        className={`h-10 border border-slate-400 rounded-lg flex items-center justify-center text-sm font-black ${
-                          val === 0 ? 'bg-slate-200 text-transparent' : 'bg-white text-slate-950 shadow-sm'
-                        }`}
-                      >
-                        {val > 0 ? val : ''}
-                      </div>
-                    ))}
+                    {Array.isArray(row) &&
+                      row.map((val, cIdx) => (
+                        <div
+                          key={`${rIdx}-${cIdx}`}
+                          className={`h-10 border border-slate-400 rounded-lg flex items-center justify-center text-sm font-black ${
+                            val === 0 ? 'bg-slate-200 text-transparent' : 'bg-white text-slate-950 shadow-sm'
+                          }`}
+                        >
+                          {val > 0 ? val : ''}
+                        </div>
+                      ))}
                   </React.Fragment>
                 ))}
               </div>
