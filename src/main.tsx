@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Intercept benign third-party widget runtime errors (like Tawk.to script cross-origin/i18next glitches)
 if (typeof window !== 'undefined') {
@@ -49,6 +50,9 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary fallbackTitle="अपना तंबोला लाइव (Apna Tambola Live)">
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );
+
