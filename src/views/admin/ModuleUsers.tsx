@@ -576,21 +576,30 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
 
                       {/* Referral Details */}
                       <td className="px-4 py-3.5">
-                        <div className="font-mono text-amber-400 font-bold text-xs">{user.referralCode}</div>
+                        <div className="font-mono text-amber-400 font-bold text-xs">{user.referralCode || '—'}</div>
                         {user.referredBy || user.referredByUserId ? (
                           <div className="text-[10px] text-emerald-400 font-medium">
-                            Upline: {user.referredBy || user.referredByUserId}
+                            <span className="text-slate-400">Sponsor: </span>
+                            <span className="font-mono">{user.referredBy || user.referredByUserId}</span>
                             {(() => {
-                              const uplineUser = users.find(
-                                (u) =>
-                                  (user.referredByUserId && u.id === user.referredByUserId) ||
-                                  (user.referredBy && (u.referralCode === user.referredBy || u.id === user.referredBy))
-                              );
+                              const refVal = (user.referredBy || user.referredByUserId || '').trim().toUpperCase();
+                              const refNoPrefix = refVal.replace(/^REF-?/, '');
+                              const uplineUser = users.find((u) => {
+                                if (u.id === user.id) return false;
+                                if (user.referredByUserId && u.id === user.referredByUserId) return true;
+                                const uCode = (u.referralCode || '').trim().toUpperCase();
+                                const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+                                const uId = (u.id || '').trim().toUpperCase();
+                                return (
+                                  (uCode && (uCode === refVal || uCodeNoPrefix === refNoPrefix || refVal.includes(uCode) || uCode.includes(refVal))) ||
+                                  (uId && (uId === refVal || refVal.includes(uId) || uId.includes(refVal)))
+                                );
+                              });
                               return uplineUser ? ` (${uplineUser.name})` : '';
                             })()}
                           </div>
                         ) : (
-                          <div className="text-[10px] text-slate-500">Direct Signup</div>
+                          <div className="text-[10px] text-slate-500">Direct Signup (No Sponsor)</div>
                         )}
                       </td>
 

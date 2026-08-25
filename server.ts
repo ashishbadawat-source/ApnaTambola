@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import {
   DEFAULT_USER,
@@ -40,8 +41,11 @@ import {
   getMaskedSettings,
 } from './src/server/emailServiceBackend';
 
+// Durable File Storage Path
+const DATA_FILE = path.join(process.cwd(), 'server_store.json');
+
 // In-Memory Durable Server State
-let users: User[] = [DEFAULT_USER, ADMIN_USER];
+let users: User[] = [ADMIN_USER];
 let games: TambolaGame[] = [...INITIAL_GAMES];
 let tickets: TambolaTicket[] = [...INITIAL_USER_TICKETS];
 let winners: GameWinner[] = [...INITIAL_WINNERS];
@@ -51,6 +55,61 @@ let transactions: WalletTransaction[] = [...INITIAL_TRANSACTIONS];
 let withdrawals: WithdrawalRequest[] = [...INITIAL_WITHDRAWALS];
 let supportTickets: SupportTicket[] = [...INITIAL_SUPPORT_TICKETS];
 let siteSettings: SiteSettings = { ...INITIAL_SITE_SETTINGS };
+
+// Load persistent state from disk on boot
+function loadStateFromDisk() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        const userMap = new Map<string, User>();
+        [ADMIN_USER].forEach((u) => userMap.set(u.id, u));
+        data.users.forEach((u: User) => {
+          if (u && u.id) {
+            userMap.set(u.id, { ...(userMap.get(u.id) || {}), ...u });
+          }
+        });
+        users = Array.from(userMap.values());
+      }
+      if (Array.isArray(data.games) && data.games.length > 0) games = data.games;
+      if (Array.isArray(data.tickets) && data.tickets.length > 0) tickets = data.tickets;
+      if (Array.isArray(data.commissions) && data.commissions.length > 0) commissions = data.commissions;
+      if (Array.isArray(data.transactions) && data.transactions.length > 0) transactions = data.transactions;
+      if (Array.isArray(data.withdrawals) && data.withdrawals.length > 0) withdrawals = data.withdrawals;
+      if (Array.isArray(data.supportTickets) && data.supportTickets.length > 0) supportTickets = data.supportTickets;
+      if (data.siteSettings) siteSettings = { ...siteSettings, ...data.siteSettings };
+      console.log(`[Storage] Loaded persistent data: ${users.length} users, ${commissions.length} commissions, ${tickets.length} tickets`);
+    } else {
+      saveStateToDisk();
+    }
+  } catch (e) {
+    console.warn('[Storage] Could not load persistent server state:', e);
+  }
+}
+
+// Save state to disk helper
+function saveStateToDisk() {
+  try {
+    const payload = {
+      users,
+      games,
+      tickets,
+      commissions,
+      transactions,
+      withdrawals,
+      supportTickets,
+      siteSettings,
+      updatedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('[Storage] Could not save persistent server state:', e);
+  }
+}
+
+// Initialize persistence immediately
+loadStateFromDisk();
 
 // Automatic interval timer for live games
 let liveGameInterval: NodeJS.Timeout | null = null;
@@ -232,6 +291,8 @@ async function startServer() {
         }
       }
 
+      saveStateToDisk();
+
       res.json({
         success: true,
         user: newUser,
@@ -254,8 +315,99 @@ async function startServer() {
         if (walletBalance !== undefined) targetUser.walletBalance = walletBalance;
         if (hasDeposited !== undefined) targetUser.hasDeposited = hasDeposited;
         if (firstDepositBonusClaimed !== undefined) targetUser.firstDepositBonusClaimed = firstDepositBonusClaimed;
+        saveStateToDisk();
       }
       res.json({ success: true, user: targetUser });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/users/toggle-kyc', (req: Request, res: Response) => {
+    try {
+      const { userId } = req.body;
+      const targetUser = users.find((u) => u.id === userId);
+      if (targetUser) {
+        targetUser.kycStatus = targetUser.kycStatus === 'verified' ? 'unverified' : 'verified';
+        saveStateToDisk();
+        return res.json({ success: true, user: targetUser, nextStatus: targetUser.kycStatus });
+      }
+      res.status(404).json({ success: false, error: 'User not found' });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/users/toggle-block', (req: Request, res: Response) => {
+    try {
+      const { userId } = req.body;
+      const targetUser = users.find((u) => u.id === userId);
+      if (targetUser) {
+        targetUser.isBlocked = !targetUser.isBlocked;
+        targetUser.status = targetUser.isBlocked ? 'blocked' : 'active';
+        saveStateToDisk();
+        return res.json({ success: true, user: targetUser, isBlocked: targetUser.isBlocked });
+      }
+      res.status(404).json({ success: false, error: 'User not found' });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/users/reset-password', (req: Request, res: Response) => {
+    try {
+      const { userId, newPassword } = req.body;
+      const targetUser = users.find((u) => u.id === userId);
+      if (targetUser) {
+        targetUser.password = newPassword || '123456';
+        saveStateToDisk();
+        return res.json({ success: true, user: targetUser });
+      }
+      res.status(404).json({ success: false, error: 'User not found' });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/users/:id', (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      users = users.filter((u) => u.id !== id);
+      saveStateToDisk();
+      res.json({ success: true, message: 'User deleted' });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/users/batch-delete', (req: Request, res: Response) => {
+    try {
+      const { userIds } = req.body;
+      const idSet = new Set(userIds || []);
+      users = users.filter((u) => !idSet.has(u.id));
+      saveStateToDisk();
+      res.json({ success: true, message: 'Users batch deleted' });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/users/wallet-adjust', (req: Request, res: Response) => {
+    try {
+      const { userId, amount, type } = req.body;
+      const targetUser = users.find((u) => u.id === userId);
+      if (targetUser) {
+        const num = Number(amount) || 0;
+        if (type === 'credit') {
+          targetUser.walletBalance = (targetUser.walletBalance || 0) + num;
+          targetUser.depositBalance = (targetUser.depositBalance || 0) + num;
+        } else {
+          targetUser.walletBalance = Math.max(0, (targetUser.walletBalance || 0) - num);
+        }
+        saveStateToDisk();
+        return res.json({ success: true, user: targetUser });
+      }
+      res.status(404).json({ success: false, error: 'User not found' });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -274,6 +426,7 @@ async function startServer() {
       }
     });
     users = Array.from(map.values());
+    saveStateToDisk();
     res.json({ success: true, totalUsers: users.length, users });
   });
 
@@ -287,6 +440,7 @@ async function startServer() {
       const idx = commissions.findIndex((c) => c.id === comm.id);
       if (idx >= 0) commissions[idx] = { ...commissions[idx], ...comm };
       else commissions.unshift(comm);
+      saveStateToDisk();
     }
     res.json({ success: true, commissions });
   });

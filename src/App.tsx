@@ -1011,14 +1011,34 @@ export function App() {
   };
 
   const handleUserLogin = (user: User) => {
-    setCurrentUser(user);
-    // Add user to list if newly registered
+    // Preserve any existing user state properties (like referredBy and referredByUserId)
+    let mergedUser: User = user;
     setUsers((prev) => {
-      if (prev.some((u) => u.id === user.id)) {
-        return prev.map((u) => (u.id === user.id ? user : u));
+      let updated: User[];
+      const existing = prev.find((u) => u.id === user.id || (u.phone && user.phone && u.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, ''))));
+      if (existing) {
+        mergedUser = {
+          ...existing,
+          ...user,
+          referredBy: user.referredBy || existing.referredBy || '',
+          referredByUserId: user.referredByUserId || existing.referredByUserId || '',
+          referralCode: user.referralCode || existing.referralCode,
+          role: user.role || existing.role || 'user',
+        };
+        updated = prev.map((u) => (u.id === existing.id ? mergedUser : u));
+      } else {
+        updated = [user, ...prev];
       }
-      return [user, ...prev];
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
     });
+
+    setCurrentUser(mergedUser);
+    try {
+      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(mergedUser));
+    } catch (e) {}
   };
 
   const handleRegisterUser = (newUser: User) => {
@@ -1092,7 +1112,7 @@ export function App() {
       createdAt: newUser.createdAt || new Date().toISOString(),
     };
 
-    // Save to server backend via REST API
+    // Save to server backend via REST API immediately
     try {
       fetch('/api/users/register', {
         method: 'POST',
@@ -1113,7 +1133,7 @@ export function App() {
       }).catch(() => {});
     } catch (e) {}
 
-    // Save to Firestore with timeout & merge
+    // Save to Firestore with merge
     try {
       setDoc(doc(db, 'users', completeUser.id), JSON.parse(JSON.stringify(completeUser)), { merge: true }).catch(() => {});
     } catch (e) {
@@ -1122,7 +1142,7 @@ export function App() {
 
     // Add new registered user to state immediately at top (triggers computedReferralMembers immediately)
     setUsers((prev) => {
-      const filtered = prev.filter((u) => u.id !== completeUser.id && u.phone !== completeUser.phone);
+      const filtered = prev.filter((u) => u.id !== completeUser.id && (u.phone ? u.phone.replace(/\D/g, '') !== completeUser.phone.replace(/\D/g, '') : true));
       const updated = [completeUser, ...filtered];
       try {
         localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
@@ -1153,12 +1173,17 @@ export function App() {
 
       setCommissions((prev) => [joinComm, ...prev.filter((c) => c.id !== joinComm.id)]);
       try {
-        setDoc(doc(db, 'commissions', joinComm.id), joinComm);
+        setDoc(doc(db, 'commissions', joinComm.id), joinComm).catch(() => {});
+        fetch('/api/commissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(joinComm),
+        }).catch(() => {});
       } catch (e) {}
 
       // Update upline balance in local users state
-      setUsers((prev) =>
-        prev.map((u) =>
+      setUsers((prev) => {
+        const updated = prev.map((u) =>
           u.id === upline.id
             ? {
                 ...u,
@@ -1166,8 +1191,12 @@ export function App() {
                 walletBalance: (u.walletBalance || 0) + 10,
               }
             : u
-        )
-      );
+        );
+        try {
+          localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
 
       // Update upline balance in Firestore
       try {
@@ -1178,7 +1207,7 @@ export function App() {
             walletBalance: (upline.walletBalance || 0) + 10,
           },
           { merge: true }
-        );
+        ).catch(() => {});
       } catch (e) {}
 
       const notif: UserNotificationItem = {
@@ -2572,16 +2601,43 @@ export function App() {
       })
     );
 
+    // Update local state & storage
+    let updatedUsers: User[] = [];
+    setUsers((prev) => {
+      updatedUsers = prev.map((u) => {
+        if (u.id === userId) {
+          return targetUser;
+        }
+        return u;
+      });
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updatedUsers));
+      } catch (e) {}
+      return updatedUsers;
+    });
+
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => {
         if (!prev) return null;
-        return {
+        const updated = {
           ...prev,
           walletBalance: Math.max(0, prev.walletBalance + delta),
           depositBalance: Math.max(0, prev.depositBalance + delta),
         };
+        try {
+          localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
       });
     }
+
+    try {
+      fetch('/api/users/wallet-adjust', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, amount, type }),
+      }).catch(() => {});
+    } catch (e) {}
 
     try {
       if (targetUser) {
@@ -2601,19 +2657,31 @@ export function App() {
   // 16. Admin Toggle KYC
   const handleToggleKYC = async (userId: string): Promise<boolean> => {
     let nextStatus: 'verified' | 'unverified' | 'pending' = 'verified';
-    setUsers((prev) =>
-      prev.map((u) => {
+    setUsers((prev) => {
+      const updated = prev.map((u) => {
         if (u.id === userId) {
           nextStatus = u.kycStatus === 'verified' ? 'unverified' : 'verified';
           return { ...u, kycStatus: nextStatus };
         }
         return u;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
 
     if (currentUser?.id === userId) {
       setCurrentUser((prev) => (prev ? { ...prev, kycStatus: nextStatus } : null));
     }
+
+    try {
+      fetch('/api/users/toggle-kyc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      }).catch(() => {});
+    } catch (e) {}
 
     try {
       const userRef = doc(db, 'users', userId);
@@ -2627,19 +2695,32 @@ export function App() {
   // 17. Admin User Management Handlers (Block, Password Reset, Delete, Batch Delete)
   const handleToggleBlockUser = async (userId: string): Promise<boolean> => {
     let isNowBlocked = false;
-    setUsers((prev) =>
-      prev.map((u) => {
+    setUsers((prev) => {
+      const updated = prev.map((u) => {
         if (u.id === userId) {
           isNowBlocked = !u.isBlocked;
-          return { ...u, isBlocked: isNowBlocked };
+          const nextStatus: 'active' | 'blocked' | 'inactive' = isNowBlocked ? 'blocked' : 'active';
+          return { ...u, isBlocked: isNowBlocked, status: nextStatus };
         }
         return u;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    try {
+      fetch('/api/users/toggle-block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      }).catch(() => {});
+    } catch (e) {}
 
     try {
       const userRef = doc(db, 'users', userId);
-      await setDoc(userRef, { isBlocked: isNowBlocked, updatedAt: new Date().toISOString() }, { merge: true });
+      await setDoc(userRef, { isBlocked: isNowBlocked, status: isNowBlocked ? 'blocked' : 'active', updatedAt: new Date().toISOString() }, { merge: true });
     } catch (e) {
       console.warn('Firestore toggle block notice:', e);
     }
@@ -2648,9 +2729,21 @@ export function App() {
 
   const handleResetPassword = async (userId: string): Promise<boolean> => {
     const tempPin = '123456';
-    setUsers((prev) =>
-      prev.map((u) => (u.id === userId ? { ...u, password: tempPin } : u))
-    );
+    setUsers((prev) => {
+      const updated = prev.map((u) => (u.id === userId ? { ...u, password: tempPin } : u));
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    try {
+      fetch('/api/users/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, newPassword: tempPin }),
+      }).catch(() => {});
+    } catch (e) {}
 
     try {
       const userRef = doc(db, 'users', userId);
@@ -2663,16 +2756,27 @@ export function App() {
 
   // 17.1 Delete Single User (ID डिलीट करें)
   const handleDeleteUser = async (userId: string): Promise<boolean> => {
-    // 1. Remove from local state
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    // 1. Remove from local state & localStorage
+    setUsers((prev) => {
+      const updated = prev.filter((u) => u.id !== userId);
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
 
     // 2. If deleting the current logged-in user (unless admin deleting self)
     if (currentUser?.id === userId && currentUser.role !== 'admin') {
       setCurrentUser(null);
-      localStorage.removeItem('apna_tambola_logged_in_user');
+      localStorage.removeItem('apna_tambola_auth_user');
     }
 
-    // 3. Delete from Firestore permanently
+    // 3. Delete from Server
+    try {
+      fetch(`/api/users/${userId}`, { method: 'DELETE' }).catch(() => {});
+    } catch (e) {}
+
+    // 4. Delete from Firestore permanently
     try {
       const userRef = doc(db, 'users', userId);
       await deleteDoc(userRef);
@@ -2680,7 +2784,7 @@ export function App() {
       console.warn('Firestore deleteDoc notice:', e);
     }
 
-    // 4. Log admin activity
+    // 5. Log admin activity
     const newLog: ActivityLog = {
       id: `act_${Date.now()}`,
       adminName: currentUser?.name || 'Admin',
@@ -2703,10 +2807,25 @@ export function App() {
 
     const idsSet = new Set(userIds);
 
-    // 1. Remove from state
-    setUsers((prev) => prev.filter((u) => !idsSet.has(u.id)));
+    // 1. Remove from state & localStorage
+    setUsers((prev) => {
+      const updated = prev.filter((u) => !idsSet.has(u.id));
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
 
-    // 2. Delete all from Firestore
+    // 2. Delete from Server
+    try {
+      fetch('/api/users/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds }),
+      }).catch(() => {});
+    } catch (e) {}
+
+    // 3. Delete all from Firestore
     try {
       await Promise.all(
         userIds.map(async (uid) => {
