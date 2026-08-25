@@ -68,6 +68,11 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
     ? referralMembers.filter((m) => m.level === 1).length
     : (currentUser?.referralCount || 0);
   const referralCount = referralMembers ? referralMembers.length : directReferralCount;
+  const isDepositor = Boolean(
+    currentUser?.hasDeposited ||
+    (currentUser?.depositBalance || 0) > 0 ||
+    currentUser?.firstDepositBonusClaimed
+  );
 
   // 11 Distinct Dashboard Options with High-Contrast, Vibrant, Beautiful Color Themes
   const DASHBOARD_MODULES = [
@@ -175,7 +180,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
       textColor: 'text-purple-300',
       headerBg: 'bg-purple-500/20 text-purple-300 border-purple-400/40',
       badgeBg: 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white font-black shadow-md',
-      badgeText: '👥 7.8% लाइफटाइम कमीशन',
+      badgeText: `👥 4.6% 8-लेवल कमीशन (${directReferralCount} Direct)`,
       iconBg: 'bg-purple-500 text-white shadow-lg shadow-purple-500/30',
       actionText: 'एफिलिएट ट्री खोलें (Referral)',
       accentPill: 'bg-purple-950/80 border border-purple-400/40 text-purple-200',
@@ -210,10 +215,10 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
       borderColor: 'border-pink-400 hover:border-pink-300',
       textColor: 'text-pink-300',
       headerBg: 'bg-pink-500/20 text-pink-300 border-pink-400/40',
-      badgeBg: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black shadow-md',
-      badgeText: '🎡 फ्री स्पिन उपलब्ध',
+      badgeBg: isDepositor ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black shadow-md' : 'bg-amber-500 text-slate-950 font-black shadow-md',
+      badgeText: isDepositor ? '🎡 एक्टिव - डेली रिवार्ड्स अनलॉक' : '🔒 डिपॉजिट आवश्यक (Locked)',
       iconBg: 'bg-pink-500 text-white shadow-lg shadow-pink-500/30',
-      actionText: 'स्पिन व्हील घुमाएं (Spin & Win)',
+      actionText: isDepositor ? 'स्पिन व्हील घुमाएं (Spin & Win)' : 'डिपॉजिट करके अनलॉक करें',
       accentPill: 'bg-pink-950/80 border border-pink-400/40 text-pink-200',
     },
     {
@@ -361,8 +366,8 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                   <Ticket className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-xs font-black text-blue-300 block">टिकट वॉलेट (Deposit)</span>
-                  <span className="text-[10px] text-blue-200/80">टिकट खरीदने हेतु फंड</span>
+                  <span className="text-xs font-black text-blue-300 block">टिकट वॉलेट (Ticket Wallet)</span>
+                  <span className="text-[10px] text-blue-200/80">डिपॉजिट + ₹10 प्रथम डिपॉजिट बोनस</span>
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/40 text-[10px] font-bold">
@@ -375,7 +380,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                 ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
               </div>
               <span className="text-[10px] text-blue-300/80 block mt-0.5">
-                {(currentUser?.depositBalance || 0) > 0 ? '✓ टिकट खरीदने हेतु फंड उपलब्ध' : '⚠️ एडमिन से फंड जोड़ें'}
+                {(currentUser?.depositBalance || 0) > 0 ? '✓ टिकट खरीदने हेतु फंड उपलब्ध' : '⚠️ एडमिन से फंड जोड़ें (पहले डिपॉजिट पर ₹10 बोनस)'}
               </span>
             </div>
 
@@ -388,7 +393,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             </button>
           </div>
 
-          {/* Wallet Box 2: 💰 Withdrawal Wallet (Winnings & Signup Bonus) in Emerald Green */}
+          {/* Wallet Box 2: 💰 Withdrawal Wallet (Winnings) in Emerald Green */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-900/90 via-teal-900/60 to-slate-950 border-2 border-emerald-400 shadow-xl shadow-emerald-950/50 flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -397,7 +402,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                 </div>
                 <div>
                   <span className="text-xs font-black text-emerald-300 block">विथड्रॉल वॉलेट (Winnings)</span>
-                  <span className="text-[10px] text-emerald-200/80">जीत राशि + ₹10 बोनस</span>
+                  <span className="text-[10px] text-emerald-200/80">गेम में जीती गई शुद्ध राशि</span>
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[10px] font-bold">
@@ -423,7 +428,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             </button>
           </div>
 
-          {/* Wallet Box 3: 👥 5-Level Referral Wallet in Amber Gold */}
+          {/* Wallet Box 3: 👥 8-Level Referral Wallet in Amber Gold */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-900/90 via-yellow-900/60 to-slate-950 border-2 border-amber-400 shadow-xl shadow-amber-950/50 flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -431,12 +436,12 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                   <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <span className="text-xs font-black text-amber-300 block">रेफरल वॉलेट (7.8%)</span>
-                  <span className="text-[10px] text-amber-200/80">5-लेवल टीम नेटवर्क इनकम</span>
+                  <span className="text-xs font-black text-amber-300 block">रेफरल वॉलेट (4.6%)</span>
+                  <span className="text-[10px] text-amber-200/80">8-लेवल टीम नेटवर्क इनकम</span>
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-bold">
-                Lifetime 7.8%
+                8-Levels Lifetime
               </span>
             </div>
 

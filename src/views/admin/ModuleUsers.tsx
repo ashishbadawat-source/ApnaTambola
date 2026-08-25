@@ -577,8 +577,18 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                       {/* Referral Details */}
                       <td className="px-4 py-3.5">
                         <div className="font-mono text-amber-400 font-bold text-xs">{user.referralCode}</div>
-                        {user.referredBy ? (
-                          <div className="text-[10px] text-emerald-400 font-medium">Upline: {user.referredBy}</div>
+                        {user.referredBy || user.referredByUserId ? (
+                          <div className="text-[10px] text-emerald-400 font-medium">
+                            Upline: {user.referredBy || user.referredByUserId}
+                            {(() => {
+                              const uplineUser = users.find(
+                                (u) =>
+                                  (user.referredByUserId && u.id === user.referredByUserId) ||
+                                  (user.referredBy && (u.referralCode === user.referredBy || u.id === user.referredBy))
+                              );
+                              return uplineUser ? ` (${uplineUser.name})` : '';
+                            })()}
+                          </div>
                         ) : (
                           <div className="text-[10px] text-slate-500">Direct Signup</div>
                         )}

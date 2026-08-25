@@ -192,6 +192,8 @@ export function App() {
   const [adminActiveModule, setAdminActiveModule] = useState<string>('dashboard');
   const [showAllOptionsModal, setShowAllOptionsModal] = useState<boolean>(false);
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [activeTemplateId, setActiveTemplateId] = useState<AppTemplateId>(() => {
     const saved = localStorage.getItem('apna_tambola_template');
     return (saved as AppTemplateId) || 'royal_gold';
@@ -222,6 +224,9 @@ export function App() {
       if (refCode && refCode.trim()) {
         const cleanRef = refCode.trim().toUpperCase();
         localStorage.setItem('apna_tambola_pending_referral', cleanRef);
+        // Prompt register modal
+        setShowAuthModal(true);
+        setAuthModalMode('register');
       }
     };
 
@@ -979,8 +984,6 @@ export function App() {
 
   // Sound & Modals State
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [celebrationData, setCelebrationData] = useState<WinnerFlashData | null>(null);
 
   const autoCallTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -1019,8 +1022,71 @@ export function App() {
   };
 
   const handleRegisterUser = (newUser: User) => {
+    // 1. Comprehensive case-insensitive upline identification
+    const rawRefCode = (
+      newUser.referredBy ||
+      newUser.referredByUserId ||
+      localStorage.getItem('apna_tambola_pending_referral') ||
+      ''
+    ).trim();
+
+    const upperRefCode = rawRefCode.toUpperCase();
+    const cleanRefNoPrefix = upperRefCode.replace(/^REF-?/, '');
+    const cleanDigits = rawRefCode.replace(/\D/g, '');
+
+    // Search across all users in state & initial list
+    let matchedUpline: User | null = null;
+
+    if (newUser.referredByUserId) {
+      const explicitUid = newUser.referredByUserId.trim().toUpperCase();
+      matchedUpline = users.find((u) => u.id && u.id.trim().toUpperCase() === explicitUid) || null;
+    }
+
+    if (!matchedUpline && upperRefCode) {
+      matchedUpline =
+        users.find((u) => {
+          if (!u || u.id === newUser.id) return false;
+          const uId = (u.id || '').trim().toUpperCase();
+          const uCode = (u.referralCode || '').trim().toUpperCase();
+          const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+          const uPhone = (u.phone || '').replace(/\D/g, '');
+          const uEmail = (u.email || '').trim().toLowerCase();
+          const uName = (u.name || '').trim().toUpperCase();
+
+          // Exact matching
+          if (uCode && (uCode === upperRefCode || uCodeNoPrefix === cleanRefNoPrefix)) return true;
+          if (uId && uId === upperRefCode) return true;
+
+          // Substring / without prefix
+          if (uCode && (upperRefCode.includes(uCode) || uCode.includes(upperRefCode))) return true;
+          if (cleanRefNoPrefix && uCodeNoPrefix && (cleanRefNoPrefix === uCodeNoPrefix || uCode.includes(cleanRefNoPrefix) || upperRefCode.includes(uCodeNoPrefix))) return true;
+          if (uId && (upperRefCode.includes(uId) || uId.includes(upperRefCode))) return true;
+
+          // Phone number matching (exact or last digits)
+          if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+
+          // Email match
+          if (uEmail && rawRefCode.toLowerCase() === uEmail) return true;
+
+          // Name match
+          if (uName && (upperRefCode === uName || cleanRefNoPrefix === uName)) return true;
+
+          return false;
+        }) || null;
+    }
+
+    const finalReferredByCode = matchedUpline
+      ? (matchedUpline.referralCode || matchedUpline.id || upperRefCode)
+      : (upperRefCode || newUser.referredBy || '');
+
+    const finalReferredByUserId = matchedUpline
+      ? matchedUpline.id
+      : (newUser.referredByUserId || '');
+
     const completeUser: User = {
       ...newUser,
+      referredBy: finalReferredByCode,
+      referredByUserId: finalReferredByUserId,
       status: newUser.status || 'active',
       isBlocked: false,
       createdAt: newUser.createdAt || new Date().toISOString(),
@@ -1041,29 +1107,20 @@ export function App() {
           referralCode: completeUser.referralCode,
           referredBy: completeUser.referredBy,
           referredByUserId: completeUser.referredByUserId,
-          referralCodeInput: completeUser.referredBy || completeUser.referredByUserId || '',
+          referralCodeInput: finalReferredByCode,
           selectedAvatar: completeUser.avatar,
         }),
       }).catch(() => {});
     } catch (e) {}
 
-    // Save to Firestore with timeout
+    // Save to Firestore with timeout & merge
     try {
       setDoc(doc(db, 'users', completeUser.id), JSON.parse(JSON.stringify(completeUser)), { merge: true }).catch(() => {});
     } catch (e) {
       console.warn('Firestore user save notice:', e);
     }
 
-    // Broadcast across tabs
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        const bc = new BroadcastChannel('apna_tambola_sync');
-        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: completeUser });
-        bc.close();
-      }
-    } catch (e) {}
-
-    // Add new registered user to state at top
+    // Add new registered user to state immediately at top (triggers computedReferralMembers immediately)
     setUsers((prev) => {
       const filtered = prev.filter((u) => u.id !== completeUser.id && u.phone !== completeUser.phone);
       const updated = [completeUser, ...filtered];
@@ -1073,92 +1130,94 @@ export function App() {
       return updated;
     });
 
-    // If registered through someone's referral code, trigger real-time notification & credit for that referrer
-    if (completeUser.referredBy || completeUser.referredByUserId) {
-      const cleanRef = (completeUser.referredBy || '').trim().toUpperCase();
-      const referrerUser = users.find(
-        (u) =>
-          (completeUser.referredByUserId && u.id === completeUser.referredByUserId) ||
-          (u.referralCode && u.referralCode.trim().toUpperCase() === cleanRef) ||
-          (u.id && u.id.trim().toUpperCase() === cleanRef) ||
-          (u.referralCode && cleanRef.includes(u.referralCode.trim().toUpperCase())) ||
-          (u.phone && cleanRef.includes(u.phone.replace(/\D/g, '')))
+    // If upline exists, credit bonus commission and immediately propagate tree
+    if (matchedUpline) {
+      const upline = matchedUpline;
+      const joinComm: ReferralCommission = {
+        id: `comm_join_${Date.now()}_${completeUser.id}`,
+        userId: upline.id,
+        userName: upline.name,
+        sourceUserId: completeUser.id,
+        sourceUserName: completeUser.name,
+        gameId: 'signup_bonus',
+        gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+        ticketId: 'REG-DIRECT',
+        level: 1,
+        percentage: 10,
+        baseAmount: 10,
+        commissionAmount: 10,
+        transactionId: `TXN-REF-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        status: 'approved',
+      };
+
+      setCommissions((prev) => [joinComm, ...prev.filter((c) => c.id !== joinComm.id)]);
+      try {
+        setDoc(doc(db, 'commissions', joinComm.id), joinComm);
+      } catch (e) {}
+
+      // Update upline balance in local users state
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === upline.id
+            ? {
+                ...u,
+                referralBalance: (u.referralBalance || 0) + 10,
+                walletBalance: (u.walletBalance || 0) + 10,
+              }
+            : u
+        )
       );
 
-      if (referrerUser) {
-        // Create joining direct referral commission record
-        const joinComm: ReferralCommission = {
-          id: `comm_join_${Date.now()}_${completeUser.id}`,
-          userId: referrerUser.id,
-          userName: referrerUser.name,
-          sourceUserId: completeUser.id,
-          sourceUserName: completeUser.name,
-          gameId: 'signup_bonus',
-          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
-          ticketId: 'REG-DIRECT',
-          level: 1,
-          percentage: 10,
-          baseAmount: 10,
-          commissionAmount: 10,
-          transactionId: `TXN-REF-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          status: 'approved',
-        };
-
-        setCommissions((prev) => [joinComm, ...prev.filter((c) => c.id !== joinComm.id)]);
-        try {
-          setDoc(doc(db, 'commissions', joinComm.id), joinComm);
-        } catch (e) {}
-
-        // Update referrer in users state
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === referrerUser.id
-              ? {
-                  ...u,
-                  referralBalance: (u.referralBalance || 0) + 10,
-                  walletBalance: (u.walletBalance || 0) + 10,
-                }
-              : u
-          )
+      // Update upline balance in Firestore
+      try {
+        setDoc(
+          doc(db, 'users', upline.id),
+          {
+            referralBalance: (upline.referralBalance || 0) + 10,
+            walletBalance: (upline.walletBalance || 0) + 10,
+          },
+          { merge: true }
         );
+      } catch (e) {}
 
-        // Update referrer in Firestore
-        try {
-          setDoc(
-            doc(db, 'users', referrerUser.id),
-            {
-              referralBalance: (referrerUser.referralBalance || 0) + 10,
-              walletBalance: (referrerUser.walletBalance || 0) + 10,
-            },
-            { merge: true }
-          );
-        } catch (e) {}
+      const notif: UserNotificationItem = {
+        id: `un_ref_${Date.now()}`,
+        category: 'referral_commission',
+        title: '🎉 नया डायरेक्ट रेफरल!',
+        message: `${completeUser.name} आपके रेफरल कोड (${finalReferredByCode}) से सफलतापूर्वक रजिस्टर हो गए हैं! वे आपके डायरेक्ट (Level 1) टीम में शामिल हो गए हैं।`,
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'referral',
+      };
+      setUserNotifications((prev) => [notif, ...prev]);
 
-        const notif: UserNotificationItem = {
-          id: `un_ref_${Date.now()}`,
-          category: 'referral_commission',
-          title: '🎉 नया डायरेक्ट रेफरल!',
-          message: `${completeUser.name} आपके रेफरल लिंक से सफलतापूर्वक रजिस्टर हो गए हैं! वे आपके डायरेक्ट (Level 1) टीम में शामिल हो गए हैं।`,
-          timestamp: 'Just now',
-          read: false,
-          actionTab: 'referral',
-        };
-        setUserNotifications((prev) => [notif, ...prev]);
-
-        // If referrer is currently logged in user on this device, update live state
-        if (currentUser && currentUser.id === referrerUser.id) {
-          setCurrentUser((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              referralBalance: (prev.referralBalance || 0) + 10,
-              walletBalance: (prev.walletBalance || 0) + 10,
-            };
-          });
-        }
+      // If upline is currently logged in user on this device, update live state immediately
+      if (currentUser && currentUser.id === upline.id) {
+        setCurrentUser((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            referralBalance: (prev.referralBalance || 0) + 10,
+            walletBalance: (prev.walletBalance || 0) + 10,
+          };
+        });
       }
     }
+
+    // Broadcast registration event across tabs for instant multi-window sync
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: completeUser });
+        bc.close();
+      }
+    } catch (e) {}
+
+    // Dispatch custom DOM event
+    try {
+      window.dispatchEvent(new CustomEvent('apna_tambola_data_updated'));
+    } catch (e) {}
   };
 
   const handleLogout = () => {
@@ -1932,7 +1991,7 @@ export function App() {
     return true;
   };
 
-  // 7b. Claim Daily Spin / Scratch / Check-in Rewards into Daily Bonus Wallet
+  // 7b. Claim Daily Spin / Scratch / Check-in Rewards into Daily Bonus Wallet (Depositors Only)
   const handleClaimDailyReward = async (
     amount: number,
     source: string
@@ -1941,6 +2000,27 @@ export function App() {
       handleOpenAuth('login');
       return false;
     }
+
+    const isDepositor = Boolean(
+      currentUser.hasDeposited ||
+      (currentUser.depositBalance && currentUser.depositBalance > 0) ||
+      currentUser.firstDepositBonusClaimed
+    );
+
+    if (!isDepositor) {
+      const lockNotif: UserNotificationItem = {
+        id: `un_dep_lock_${Date.now()}`,
+        category: 'wallet_credit',
+        title: '🔒 डिपॉजिट आवश्यक (Deposit Required)',
+        message: 'दैनिक चेक-इन, लकी स्पिन और स्क्रैच कार्ड केवल उन खिलाड़ियों के लिए हैं जिन्होंने कम से कम एक बार वॉलेट डिपॉजिट किया है। कृपया पहले वॉलेट में डिपॉजिट करें।',
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'wallet',
+      };
+      setUserNotifications((prev) => [lockNotif, ...prev]);
+      return false;
+    }
+
     const rounded = Math.round(amount * 100) / 100;
     setCurrentUser((prev) => {
       if (!prev) return null;

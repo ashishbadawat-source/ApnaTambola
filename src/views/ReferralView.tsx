@@ -57,20 +57,45 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   };
 
   const handleNativeShare = async () => {
-    const shareData = {
-      title: 'अपना तंबोला (Apna Tambola) - Live Fun • Live Win',
-      text: `🎯 अपना तंबोला पर लाइव हौसी खेलें और जीतें! ₹10 फ्री बोनस पाएं (रेफरल कोड: ${currentUser.referralCode})`,
-      url: referralLink,
-    };
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (e) {
-        handleShareWhatsApp();
+    const shareTitle = 'अपना तंबोला (Apna Tambola) - Live Fun • Live Win';
+    const shareText = `🎯 अपना तंबोला पर लाइव हौसी खेलें और जीतें! ₹10 फ्री बोनस पाएं (रेफरल कोड: ${currentUser.referralCode})`;
+
+    // Try sharing with logo image attachment if supported
+    try {
+      if (navigator.share) {
+        let fileToShare: File | null = null;
+        try {
+          const res = await fetch('/logo.png');
+          if (res.ok) {
+            const blob = await res.blob();
+            fileToShare = new File([blob], 'apna-tambola-logo.png', { type: 'image/png' });
+          }
+        } catch (e) {}
+
+        if (fileToShare && navigator.canShare && navigator.canShare({ files: [fileToShare] })) {
+          await navigator.share({
+            title: shareTitle,
+            text: shareText,
+            url: referralLink,
+            files: [fileToShare],
+          });
+          return;
+        }
+
+        // Standard Web Share
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: referralLink,
+        });
+        return;
       }
-    } else {
-      handleShareWhatsApp();
+    } catch (e) {
+      console.warn('Native share fallback:', e);
     }
+
+    // Fallback to WhatsApp
+    handleShareWhatsApp();
   };
 
   const totalEarnings = commissions

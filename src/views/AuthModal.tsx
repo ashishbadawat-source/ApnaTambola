@@ -507,6 +507,94 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClose();
   };
 
+  // ==================== INSTANT DIRECT REFERRAL LINK & LOGIN ====================
+  const handleLinkReferralAndLogin = async (targetUser: User) => {
+    const cleanRefCode = referralCodeInput ? referralCodeInput.trim().toUpperCase() : '';
+    const sponsor = matchedReferrer || null;
+    const finalReferredByCode = sponsor ? (sponsor.referralCode || sponsor.id || cleanRefCode) : cleanRefCode;
+    const finalReferredByUserId = sponsor ? sponsor.id : '';
+
+    const updatedUser: User = {
+      ...targetUser,
+      referredBy: finalReferredByCode || targetUser.referredBy || '',
+      referredByUserId: finalReferredByUserId || targetUser.referredByUserId || '',
+      status: 'active',
+      isBlocked: false,
+    };
+
+    // Save to Firestore
+    try {
+      const sanitizedUser = JSON.parse(JSON.stringify(updatedUser));
+      setDoc(doc(db, 'users', updatedUser.id), sanitizedUser, { merge: true }).catch(() => {});
+    } catch (e) {}
+
+    // Save to server backend
+    try {
+      fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user: updatedUser,
+          id: updatedUser.id,
+          name: updatedUser.name,
+          phone: updatedUser.phone,
+          email: updatedUser.email,
+          referralCode: updatedUser.referralCode,
+          referredBy: updatedUser.referredBy,
+          referredByUserId: updatedUser.referredByUserId,
+          referralCodeInput: cleanRefCode || (sponsor ? sponsor.referralCode : ''),
+          selectedAvatar: updatedUser.avatar,
+        }),
+      }).catch((e) => console.warn('Server registration update notice:', e));
+    } catch (e) {}
+
+    // Award direct referral join bonus to sponsor
+    if (sponsor) {
+      try {
+        const joinCommission: ReferralCommission = {
+          id: `comm_join_${Date.now()}_${updatedUser.id}`,
+          userId: sponsor.id,
+          userName: sponsor.name,
+          sourceUserId: updatedUser.id,
+          sourceUserName: updatedUser.name,
+          gameId: 'signup_bonus',
+          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+          ticketId: 'REG-DIRECT',
+          level: 1,
+          percentage: 10,
+          baseAmount: 10,
+          commissionAmount: 10,
+          transactionId: `TXN-REF-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          status: 'approved',
+        };
+        const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
+        setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
+        fetch('/api/commissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sanitizedComm),
+        }).catch(() => {});
+      } catch (e) {}
+    }
+
+    // Broadcast registration event across tabs
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: updatedUser });
+        bc.close();
+      }
+    } catch (e) {}
+
+    if (onRegisterUser) {
+      onRegisterUser(updatedUser);
+    }
+    playWinningFanfare();
+    onLogin(updatedUser);
+    onClose();
+  };
+
   // ==================== USER REGISTRATION HANDLER ====================
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -550,36 +638,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Check if phone or email already registered
-    const existingPhone = allUsers.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
-    if (existingPhone) {
-      setExistingUserFound(existingPhone);
-      setStatusMessage({
-        type: 'error',
-        text:
-          lang === 'hi'
-            ? `⚠️ मोबाइल नंबर (+91 ${phoneDigits}) पहले से रजिस्टर है (${existingPhone.name})! कृपया नीचे दिए गए बटनों से सीधे लॉगिन करें या नया पासवर्ड सेट करें।`
-            : `⚠️ Mobile (+91 ${phoneDigits}) is already registered (${existingPhone.name})! Please sign in or reset password below.`,
-      });
-      return;
-    }
-
-    if (email) {
-      const existingEmail = allUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
-      if (existingEmail) {
-        setExistingUserFound(existingEmail);
-        setStatusMessage({
-          type: 'error',
-          text:
-            lang === 'hi'
-              ? `⚠️ ईमेल पता (${email}) पहले से रजिस्टर है (${existingEmail.name})! कृपया नीचे दिए गए बटनों से लॉगिन करें।`
-              : `⚠️ Email (${email}) is already registered (${existingEmail.name})! Please sign in below.`,
-        });
-        return;
-      }
-    }
-
-    // Resolve referredBy code and exact referrer profile
+    // Resolve referredBy code and exact referrer profile first
     const cleanRefCode = referralCodeInput ? referralCodeInput.trim().toUpperCase() : '';
     let finalReferrer: User | null = matchedReferrer || null;
 
@@ -641,11 +700,104 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     }
 
-    const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
     const finalReferredByCode = finalReferrer ? (finalReferrer.referralCode || finalReferrer.id || cleanRefCode) : cleanRefCode;
     const finalReferredByUserId = finalReferrer ? finalReferrer.id : '';
 
+    // Check if phone or email already registered
+    const existingPhone = allUsers.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
+    const existingEmail = email ? allUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase()) : null;
+    const existingUser = existingPhone || existingEmail;
+
+    if (existingUser) {
+      // If user is registering with details & referral code, seamlessly update and connect under the sponsor!
+      const updatedUser: User = {
+        ...existingUser,
+        name: name || existingUser.name,
+        password: pwd || existingUser.password,
+        avatar: selectedAvatar || existingUser.avatar,
+        referredBy: finalReferredByCode || existingUser.referredBy || '',
+        referredByUserId: finalReferredByUserId || existingUser.referredByUserId || '',
+        status: 'active',
+        isBlocked: false,
+      };
+
+      // Save to server backend
+      try {
+        fetch('/api/users/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user: updatedUser,
+            id: updatedUser.id,
+            name: updatedUser.name,
+            phone: updatedUser.phone,
+            email: updatedUser.email,
+            password: updatedUser.password,
+            referralCode: updatedUser.referralCode,
+            referredBy: updatedUser.referredBy,
+            referredByUserId: updatedUser.referredByUserId,
+            referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
+            selectedAvatar: updatedUser.avatar,
+          }),
+        }).catch((e) => console.warn('Server registration update notice:', e));
+      } catch (e) {}
+
+      // Save to Firestore
+      try {
+        const sanitizedUser = JSON.parse(JSON.stringify(updatedUser));
+        setDoc(doc(db, 'users', updatedUser.id), sanitizedUser, { merge: true }).catch(() => {});
+      } catch (err) {}
+
+      // Credit direct sponsor if new referral
+      if (finalReferrer) {
+        try {
+          const joinCommission: ReferralCommission = {
+            id: `comm_join_${Date.now()}_${updatedUser.id}`,
+            userId: finalReferrer.id,
+            userName: finalReferrer.name,
+            sourceUserId: updatedUser.id,
+            sourceUserName: updatedUser.name,
+            gameId: 'signup_bonus',
+            gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+            ticketId: 'REG-DIRECT',
+            level: 1,
+            percentage: 10,
+            baseAmount: 10,
+            commissionAmount: 10,
+            transactionId: `TXN-REF-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            status: 'approved',
+          };
+          const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
+          setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
+          fetch('/api/commissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sanitizedComm),
+          }).catch(() => {});
+        } catch (err) {}
+      }
+
+      // Broadcast registration event across tabs
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'NEW_USER_REGISTERED', user: updatedUser });
+          bc.close();
+        }
+      } catch (e) {}
+
+      if (onRegisterUser) {
+        onRegisterUser(updatedUser);
+      }
+      playWinningFanfare();
+      onLogin(updatedUser);
+      onClose();
+      return;
+    }
+
     // Create New Registered User (₹10 Bonus will be added on their 1st deposit)
+    const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
     const formattedPhone = `+91 ${phoneDigits}`;
     const newUser: User = {
       id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
@@ -1073,77 +1225,94 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             {/* Quick Action Options when already registered */}
             {existingUserFound && (
-              <div className="mt-2 pt-2 border-t border-red-800/60 flex flex-col sm:flex-row items-stretch gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRegister(false);
-                    setIsResetPasswordMode(false);
-                    setLoginMethod('password');
-                    setLoginIdentifier(existingUserFound.phone.replace(/\D/g, '') || existingUserFound.email);
-                    setStatusMessage(null);
-                    setExistingUserFound(null);
-                  }}
-                  className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>{lang === 'hi' ? 'सीधे लॉगिन करें' : 'Sign In Now'}</span>
-                </button>
+              <div className="mt-2 pt-2 border-t border-red-800/60 flex flex-col gap-2">
+                {(matchedReferrer || referralCodeInput) && (
+                  <button
+                    type="button"
+                    onClick={() => handleLinkReferralAndLogin(existingUserFound)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer transition-all"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-slate-950" />
+                    <span>
+                      {lang === 'hi'
+                        ? `✓ इस रेफरल (${matchedReferrer?.name || referralCodeInput}) से आईडी जोड़ें और शुरू करें`
+                        : `✓ Connect ID to Sponsor (${matchedReferrer?.name || referralCodeInput}) & Login`}
+                    </span>
+                  </button>
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const digits = cleanPhone(existingUserFound.phone);
-                    setIsRegister(false);
-                    setIsResetPasswordMode(false);
-                    setLoginMethod('otp');
-                    setOtpPhone(digits);
-                    const generated = Math.floor(1000 + Math.random() * 9000).toString();
-                    setMockGeneratedOtp(generated);
-                    setOtpStep(true);
-                    setOtpTimer(30);
-                    playNumberCallSound();
-                    setStatusMessage({
-                      type: 'success',
-                      text:
-                        lang === 'hi'
-                          ? `रजिस्टर्ड मोबाइल नंबर पर OTP ${generated} भेजा गया!`
-                          : `OTP ${generated} sent to registered mobile!`,
-                    });
-                    setExistingUserFound(null);
-                  }}
-                  className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span>{lang === 'hi' ? 'OTP से लॉगिन' : 'OTP Login'}</span>
-                </button>
+                <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRegister(false);
+                      setIsResetPasswordMode(false);
+                      setLoginMethod('password');
+                      setLoginIdentifier(existingUserFound.phone.replace(/\D/g, '') || existingUserFound.email);
+                      setStatusMessage(null);
+                      setExistingUserFound(null);
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{lang === 'hi' ? 'सीधे लॉगिन करें' : 'Sign In Now'}</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    const digits = cleanPhone(existingUserFound.phone);
-                    setIsResetPasswordMode(true);
-                    setIsRegister(false);
-                    setOtpPhone(digits);
-                    const generated = Math.floor(1000 + Math.random() * 9000).toString();
-                    setMockGeneratedOtp(generated);
-                    setOtpStep(true);
-                    setOtpTimer(30);
-                    playNumberCallSound();
-                    setStatusMessage({
-                      type: 'success',
-                      text:
-                        lang === 'hi'
-                          ? `पासवर्ड रीसेट हेतु OTP ${generated} भेजा गया!`
-                          : `OTP ${generated} sent for password reset!`,
-                    });
-                    setExistingUserFound(null);
-                  }}
-                  className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>{lang === 'hi' ? 'पासवर्ड बदलें' : 'Reset Pwd'}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const digits = cleanPhone(existingUserFound.phone);
+                      setIsRegister(false);
+                      setIsResetPasswordMode(false);
+                      setLoginMethod('otp');
+                      setOtpPhone(digits);
+                      const generated = Math.floor(1000 + Math.random() * 9000).toString();
+                      setMockGeneratedOtp(generated);
+                      setOtpStep(true);
+                      setOtpTimer(30);
+                      playNumberCallSound();
+                      setStatusMessage({
+                        type: 'success',
+                        text:
+                          lang === 'hi'
+                            ? `रजिस्टर्ड मोबाइल नंबर पर OTP ${generated} भेजा गया!`
+                            : `OTP ${generated} sent to registered mobile!`,
+                      });
+                      setExistingUserFound(null);
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>{lang === 'hi' ? 'OTP से लॉगिन' : 'OTP Login'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const digits = cleanPhone(existingUserFound.phone);
+                      setIsResetPasswordMode(true);
+                      setIsRegister(false);
+                      setOtpPhone(digits);
+                      const generated = Math.floor(1000 + Math.random() * 9000).toString();
+                      setMockGeneratedOtp(generated);
+                      setOtpStep(true);
+                      setOtpTimer(30);
+                      playNumberCallSound();
+                      setStatusMessage({
+                        type: 'success',
+                        text:
+                          lang === 'hi'
+                            ? `पासवर्ड रीसेट हेतु OTP ${generated} भेजा गया!`
+                            : `OTP ${generated} sent for password reset!`,
+                      });
+                      setExistingUserFound(null);
+                    }}
+                    className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{lang === 'hi' ? 'पासवर्ड बदलें' : 'Reset Pwd'}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>

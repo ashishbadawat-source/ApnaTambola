@@ -314,10 +314,10 @@ export const WalletView: React.FC<WalletViewProps> = ({
             ₹{currentUser.depositBalance.toLocaleString('en-IN')}
           </div>
           <p className="text-[10px] text-purple-200/90 font-medium leading-tight">
-            एडमिन पे / रिचार्ज + 10% रिवार्ड — <strong>केवल टिकट खरीदने हेतु</strong>
+            एडमिन रिचार्ज + ₹10 1st डिपॉजिट बोनस — <strong>केवल टिकट खरीदने हेतु</strong>
           </p>
           <div className="pt-1 flex items-center gap-1 text-[10px] text-slate-400 border-t border-purple-500/20">
-            <span>🔒 नो-विथड्रॉल</span>
+            <span>🔒 नो-विथड्रॉल (Non-withdrawable)</span>
           </div>
         </div>
 
@@ -392,16 +392,16 @@ export const WalletView: React.FC<WalletViewProps> = ({
           </div>
         </div>
 
-        {/* 5. 5-Level Referral Earnings */}
+        {/* 5. 8-Level Referral Earnings */}
         <div className="glass-panel rounded-3xl p-5 border border-indigo-500/30 shadow-xl space-y-2">
           <span className="text-xs uppercase font-bold text-indigo-300 tracking-wider flex items-center justify-between">
-            <span>Referral Income</span>
+            <span>Referral Income (4.6%)</span>
             <Gift className="w-4 h-4 text-indigo-400" />
           </span>
           <div className="text-2xl sm:text-3xl font-black text-indigo-300">
             ₹{currentUser.referralBalance.toLocaleString('en-IN')}
           </div>
-          <p className="text-[10px] text-indigo-300 font-medium">Earned from 5-tier network</p>
+          <p className="text-[10px] text-indigo-300 font-medium">Earned from 8-tier network</p>
           <div className="pt-1 flex items-center gap-1 text-[10px] text-slate-400 border-t border-indigo-500/20">
             <span>Direct commission</span>
           </div>
