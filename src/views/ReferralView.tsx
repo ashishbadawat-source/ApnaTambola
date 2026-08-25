@@ -17,6 +17,7 @@ import { User, ReferralMember, ReferralCommission } from '../types';
 
 interface ReferralViewProps {
   currentUser: User;
+  allUsers?: User[];
   referralMembers: ReferralMember[];
   commissions: ReferralCommission[];
   onOpenDeposit: () => void;
@@ -24,12 +25,34 @@ interface ReferralViewProps {
 
 export const ReferralView: React.FC<ReferralViewProps> = ({
   currentUser,
+  allUsers = [],
   referralMembers,
   commissions,
   onOpenDeposit,
 }) => {
   const [copied, setCopied] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | 'all'>('all');
+
+  // Upline sponsor lookup
+  const uplineUser = currentUser ? (
+    allUsers.find((u) => {
+      if (!currentUser || u.id === currentUser.id) return false;
+      if (currentUser.referredByUserId && u.id === currentUser.referredByUserId) return true;
+      const refCode = (currentUser.referredBy || '').trim().toUpperCase();
+      const refNoPrefix = refCode.replace(/^REF-?/, '');
+      const uCode = (u.referralCode || '').trim().toUpperCase();
+      const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+      const uId = (u.id || '').trim().toUpperCase();
+      const uPhone = (u.phone || '').replace(/\D/g, '');
+      const cleanDigits = refCode.replace(/\D/g, '');
+
+      if (uCode && (uCode === refCode || uCodeNoPrefix === refNoPrefix || refCode.includes(uCode) || uCode.includes(refCode))) return true;
+      if (uId && (uId === refCode || refCode.includes(uId) || uId.includes(refCode))) return true;
+      if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+      if (u.name && refCode === u.name.trim().toUpperCase()) return true;
+      return false;
+    }) || null
+  ) : null;
 
   const getReferralLink = () => {
     if (typeof window === 'undefined') return `/?ref=${currentUser.referralCode}`;
@@ -123,6 +146,66 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
   return (
     <div className="space-y-8 pb-16">
+      {/* 👑 Upline Sponsor Details Card */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#2c1242] via-[#1a1236] to-[#0d1726] border-2 border-purple-400/60 shadow-xl space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/40 shadow-inner">
+              <Users className="w-5 h-5 text-purple-300" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                <span>👑 आपकी अपलाइन स्पॉन्सर जानकारी (Your Upline Sponsor)</span>
+              </h3>
+              <p className="text-[11px] text-purple-200/80">
+                आपकी आईडी जिसके रेफरल लिंक / कोड से रजिस्टर्ड है (Direct Level 1 Parent)
+              </p>
+            </div>
+          </div>
+
+          {uplineUser || currentUser.referredBy || currentUser.referredByUserId ? (
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>🟢 वेरिफाइड स्पॉन्सर (Active Upline)</span>
+            </span>
+          ) : (
+            <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 text-xs font-black">
+              🏛️ डायरेक्ट कंपनी / एडमिन अपलाइन
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">अपलाइन का नाम</span>
+            <span className="text-sm font-black text-amber-300">
+              {uplineUser ? uplineUser.name : (currentUser.referredBy ? `स्पॉन्सर (${currentUser.referredBy})` : 'Direct Company Root')}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">अपलाइन यूज़र ID</span>
+            <span className="text-xs font-mono font-bold text-purple-300 truncate block select-all">
+              {uplineUser ? uplineUser.id : (currentUser.referredByUserId || currentUser.referredBy || 'SYSTEM_ROOT')}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">अपलाइन रेफरल कोड</span>
+            <span className="text-sm font-mono font-black text-emerald-400 select-all">
+              {uplineUser ? uplineUser.referralCode : (currentUser.referredBy || 'DIRECT')}
+            </span>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">आपका रेफरल कोड</span>
+            <span className="text-sm font-mono font-black text-amber-400 select-all">
+              {currentUser.referralCode || 'REF-YOU'}
+            </span>
+          </div>
+        </div>
+      </div>
+
       {/* Header Banner */}
       <div className="relative rounded-3xl glass-panel-purple border-2 border-purple-500/40 p-6 sm:p-10 shadow-2xl space-y-6 overflow-hidden">
         {/* Background glow */}

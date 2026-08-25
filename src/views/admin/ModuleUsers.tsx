@@ -437,6 +437,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 <th className="px-4 py-3.5">User / Player</th>
                 <th className="px-4 py-3.5">Registered Date</th>
                 <th className="px-4 py-3.5">Contact Details</th>
+                <th className="px-4 py-3.5">🔑 Password</th>
                 <th className="px-4 py-3.5">Wallet Balances</th>
                 <th className="px-4 py-3.5">KYC Status</th>
                 <th className="px-4 py-3.5">Referral Details</th>
@@ -528,6 +529,27 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                           <span>{user.phone}</span>
                         </div>
                         <div className="text-[11px] text-slate-400 truncate max-w-[140px]">{user.email}</div>
+                      </td>
+
+                      {/* User Password Cell */}
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-amber-400/40 font-mono text-xs text-amber-300 w-fit shadow-sm">
+                          <Key className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="font-bold tracking-wider select-all">{user.password || '123456'}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(user.password || '123456');
+                              setResetPassMsg(`✓ ${user.name} का पासवर्ड "${user.password || '123456'}" कॉपी हो गया!`);
+                              setTimeout(() => setResetPassMsg(null), 3000);
+                            }}
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer ml-1 transition-colors"
+                            title="Copy Password"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
                       </td>
 
                       {/* Wallet Balances */}
@@ -943,6 +965,36 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <div className="text-[10px] text-slate-400 uppercase font-bold">Referral Wallet</div>
                 <div className="text-base font-black text-emerald-400">₹{selectedUser.referralBalance || 0}</div>
+              </div>
+            </div>
+
+            {/* User Login Password Display Box */}
+            <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-400/50 space-y-2">
+              <div className="text-xs font-black text-amber-300 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Key className="w-4 h-4 text-amber-400" />
+                  <span>🔑 लॉगिन पासवर्ड (Account Login Password)</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black">
+                  Admin Direct View
+                </span>
+              </div>
+              <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-amber-400/30">
+                <span className="font-mono text-lg font-black text-amber-300 tracking-wider select-all">
+                  {selectedUser.password || '123456'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedUser.password || '123456');
+                    setResetPassMsg(`✓ ${selectedUser.name} का पासवर्ड "${selectedUser.password || '123456'}" कॉपी हो गया!`);
+                    setTimeout(() => setResetPassMsg(null), 3000);
+                  }}
+                  className="px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Password</span>
+                </button>
               </div>
             </div>
 

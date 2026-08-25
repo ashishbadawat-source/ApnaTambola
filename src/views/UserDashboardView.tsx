@@ -35,6 +35,7 @@ import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember } from '..
 
 interface UserDashboardViewProps {
   currentUser?: User | null;
+  allUsers?: User[];
   games: TambolaGame[];
   tickets: TambolaTicket[];
   winners: GameWinner[];
@@ -46,6 +47,7 @@ interface UserDashboardViewProps {
 
 export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   currentUser,
+  allUsers = [],
   games,
   tickets,
   winners,
@@ -60,6 +62,27 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
     const matchedGame = games.find((g) => g.id === t.gameId);
     return matchedGame && matchedGame.status !== 'completed';
   });
+
+  // Upline sponsor lookup
+  const uplineUser = currentUser ? (
+    allUsers.find((u) => {
+      if (!currentUser || u.id === currentUser.id) return false;
+      if (currentUser.referredByUserId && u.id === currentUser.referredByUserId) return true;
+      const refCode = (currentUser.referredBy || '').trim().toUpperCase();
+      const refNoPrefix = refCode.replace(/^REF-?/, '');
+      const uCode = (u.referralCode || '').trim().toUpperCase();
+      const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+      const uId = (u.id || '').trim().toUpperCase();
+      const uPhone = (u.phone || '').replace(/\D/g, '');
+      const cleanDigits = refCode.replace(/\D/g, '');
+
+      if (uCode && (uCode === refCode || uCodeNoPrefix === refNoPrefix || refCode.includes(uCode) || uCode.includes(refCode))) return true;
+      if (uId && (uId === refCode || refCode.includes(uId) || uId.includes(refCode))) return true;
+      if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+      if (u.name && refCode === u.name.trim().toUpperCase()) return true;
+      return false;
+    }) || null
+  ) : null;
 
   // Calculate player stats
   const totalGamesPlayed = currentUser?.gamesPlayed || 0;
@@ -355,6 +378,68 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             </div>
           </div>
         </div>
+
+        {/* 👑 Upline / Sponsor Information Card (डैशबोर्ड में अपलाइन ID व स्पॉन्सर जानकारी) */}
+        {currentUser && (
+          <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#2a1340] via-[#1a1438] to-[#0c1824] border-2 border-purple-400/60 shadow-xl space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/40 shadow-inner">
+                  <Users className="w-5 h-5 text-purple-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                    <span>👑 मेरी अपलाइन & स्पॉन्सर जानकारी (My Upline Sponsor Details)</span>
+                  </h3>
+                  <p className="text-[11px] text-purple-200/80">
+                    आप जिस स्पॉन्सर / यूजर के रेफरल लिंक से जुड़े हैं उसकी सम्पूर्ण जानकारी
+                  </p>
+                </div>
+              </div>
+
+              {uplineUser || currentUser.referredBy || currentUser.referredByUserId ? (
+                <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>🟢 एक्टिव डायरेक्ट अपलाइन (Level 1 Sponsor)</span>
+                </span>
+              ) : (
+                <span className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/40 text-xs font-black">
+                  🏛️ डायरेक्ट कंपनी / एडमिन अपलाइन (Root Member)
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">अपलाइन का नाम (Sponsor Name)</span>
+                <span className="text-sm font-black text-amber-300">
+                  {uplineUser ? uplineUser.name : (currentUser.referredBy ? `स्पॉन्सर (${currentUser.referredBy})` : 'Direct Company Root')}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">अपलाइन यूज़र ID (Upline ID)</span>
+                <span className="text-xs font-mono font-bold text-purple-300 truncate block select-all">
+                  {uplineUser ? uplineUser.id : (currentUser.referredByUserId || currentUser.referredBy || 'SYSTEM_ROOT')}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">अपलाइन रेफरल कोड (Sponsor Code)</span>
+                <span className="text-sm font-mono font-black text-emerald-400 select-all">
+                  {uplineUser ? uplineUser.referralCode : (currentUser.referredBy || 'DIRECT')}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-purple-400/30">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">आपका पर्सनल रेफरल कोड</span>
+                <span className="text-sm font-mono font-black text-amber-400 select-all">
+                  {currentUser.referralCode || 'REF-YOU'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 💳 3 VIBRANT WALLET BALANCE BOXES (साफ-साफ अलग-अलग रंगों में 3 वॉलेट बॉक्स) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-700/80">
