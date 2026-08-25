@@ -183,7 +183,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
                 />
                 <div className="truncate">
                   <div className="font-bold text-white text-[11px] truncate">Apna Tambola - Live Fun • Live Win</div>
-                  <div className="text-[10px] text-slate-400 truncate">₹10 फ्री साइनअप बोनस + 8-लेवल कमीशन</div>
+                  <div className="text-[10px] text-slate-400 truncate">पहला डिपॉजिट करने पर ₹10 बोनस + 8-लेवल कमीशन</div>
                 </div>
               </div>
             </div>

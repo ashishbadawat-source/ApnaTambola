@@ -1779,7 +1779,7 @@ export function App() {
     setUserNotifications((prev) => [winNotif, ...prev]);
   };
 
-  // 7. Wallet Deposit Handler (With 10% Daily Reward Bonus Auto-Unlock from Spin/Scratch Wallet)
+  // 7. Wallet Deposit Handler (With ₹10 Registration Bonus on 1st Deposit + 10% Daily Reward Bonus Auto-Unlock)
   const handleDeposit = async (
     amount: number,
     method: string,
@@ -1790,32 +1790,76 @@ export function App() {
       handleOpenAuth('login');
       return false;
     }
-    // 10% Daily Reward Bonus Unlock Rule:
+
+    // 1. One-time ₹10 Registration Bonus rule on 1st deposit:
+    const isFirstDeposit = !currentUser.hasDeposited && !currentUser.firstDepositBonusClaimed;
+    const registrationBonus = isFirstDeposit ? 10 : 0;
+
+    // 2. 10% Daily Reward Bonus Unlock Rule:
     const availableReward = currentUser.bonusRewardBalance || 0;
     const maxTenPercent = amount * 0.10;
     const unlockedReward = Math.min(maxTenPercent, availableReward);
     const roundedUnlocked = Math.round(unlockedReward * 100) / 100;
 
-    setCurrentUser((prev) => {
-      if (!prev) return null;
-      const currentReward = prev.bonusRewardBalance || 0;
-      const newRewardBalance = Math.max(0, currentReward - roundedUnlocked);
-      const newDeposit = prev.depositBalance + amount + roundedUnlocked;
-      const newTotal = newDeposit + prev.winningBalance + prev.referralBalance;
-      return {
-        ...prev,
-        depositBalance: newDeposit,
-        bonusRewardBalance: newRewardBalance,
-        walletBalance: newTotal,
-      };
+    const totalAddedToDeposit = amount + registrationBonus + roundedUnlocked;
+
+    const updatedUser: User = {
+      ...currentUser,
+      hasDeposited: true,
+      firstDepositBonusClaimed: true,
+      depositBalance: (currentUser.depositBalance || 0) + totalAddedToDeposit,
+      bonusRewardBalance: Math.max(0, (currentUser.bonusRewardBalance || 0) - roundedUnlocked),
+      walletBalance: (currentUser.depositBalance || 0) + totalAddedToDeposit + (currentUser.winningBalance || 0) + (currentUser.referralBalance || 0),
+    };
+
+    setCurrentUser(updatedUser);
+
+    // Update in users state array & localStorage
+    setUsers((prev) => {
+      const nextUsers = prev.map((u) => (u.id === updatedUser.id ? updatedUser : u));
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
+      } catch (e) {}
+      return nextUsers;
     });
+
+    // Save update to Firestore
+    try {
+      setDoc(
+        doc(db, 'users', updatedUser.id),
+        {
+          hasDeposited: true,
+          firstDepositBonusClaimed: true,
+          depositBalance: updatedUser.depositBalance,
+          bonusRewardBalance: updatedUser.bonusRewardBalance,
+          walletBalance: updatedUser.walletBalance,
+        },
+        { merge: true }
+      ).catch(() => {});
+    } catch (e) {}
+
+    // Save update to server API
+    try {
+      fetch('/api/users/update-balances', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: updatedUser.id,
+          depositBalance: updatedUser.depositBalance,
+          bonusRewardBalance: updatedUser.bonusRewardBalance,
+          walletBalance: updatedUser.walletBalance,
+          hasDeposited: true,
+          firstDepositBonusClaimed: true,
+        }),
+      }).catch(() => {});
+    } catch (e) {}
 
     const newTxn: WalletTransaction = {
       id: `txn_${Date.now()}`,
       userId: currentUser.id,
       type: 'deposit',
       amount,
-      balanceAfter: currentUser.walletBalance + amount + roundedUnlocked,
+      balanceAfter: updatedUser.walletBalance,
       description: `Deposit via ${method}${utrNumber ? ` (UTR: ${utrNumber})` : ''}`,
       paymentMethod: method,
       referenceId: utrNumber || `UPI-DEP-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -1827,13 +1871,42 @@ export function App() {
 
     const txnsToAdd: WalletTransaction[] = [newTxn];
 
+    // If first deposit, add ₹10 registration bonus transaction & notification
+    if (registrationBonus > 0) {
+      const regBonusTxn: WalletTransaction = {
+        id: `txn_reg_bonus_${Date.now()}`,
+        userId: currentUser.id,
+        type: 'signup_bonus',
+        amount: registrationBonus,
+        balanceAfter: updatedUser.walletBalance,
+        description: `🎁 प्रथम डिपॉजिट रजिस्ट्रेशन बोनस: ₹10 का वेलकम बोनस आपके पहले डिपॉजिट में जोड़ा गया (1 बार)`,
+        paymentMethod: 'Registration Bonus',
+        referenceId: `REG-BONUS-${Math.floor(100000 + Math.random() * 900000)}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'completed',
+      };
+      txnsToAdd.unshift(regBonusTxn);
+
+      const regBonusNotif: UserNotificationItem = {
+        id: `un_reg_bonus_${Date.now()}`,
+        category: 'wallet_credit',
+        title: `🎁 प्रथम डिपॉजिट पर ₹10 रजिस्ट्रेशन बोनस प्राप्त!`,
+        message: `बधाई! आपके पहले डिपॉजिट पर ₹10 का रजिस्ट्रेशन बोनस सफलतापूर्वक आपके टिकट वॉलेट में जोड़ दिया गया है। अब आप तंबोला टिकट खरीदकर खेल सकते हैं!`,
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'wallet',
+        amount: registrationBonus,
+      };
+      setUserNotifications((prev) => [regBonusNotif, ...prev]);
+    }
+
     if (roundedUnlocked > 0) {
       const bonusTxn: WalletTransaction = {
         id: `txn_reward_bonus_${Date.now()}`,
         userId: currentUser.id,
         type: 'reward_bonus_unlock',
         amount: roundedUnlocked,
-        balanceAfter: currentUser.walletBalance + amount + roundedUnlocked,
+        balanceAfter: updatedUser.walletBalance,
         description: `🎁 दैनिक रिवार्ड अनलॉक (10% डिपॉजिट बोनस): ₹${amount} के रिचार्ज पर ₹${roundedUnlocked.toFixed(2)} रिवार्ड वॉलेट से टिकट वॉलेट में जोड़ा गया`,
         paymentMethod: 'Daily Reward Wallet',
         referenceId: `REW-UNL-${Math.floor(100000 + Math.random() * 900000)}`,

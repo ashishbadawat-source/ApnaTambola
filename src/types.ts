@@ -15,6 +15,8 @@ export interface User {
   winningBalance: number;
   referralBalance: number;
   bonusRewardBalance?: number; // 🎁 Daily Spin / Scratch / Check-in Rewards Wallet (Unlocks 10% on Admin Recharge)
+  firstDepositBonusClaimed?: boolean; // 🎁 ₹10 Registration Bonus added automatically upon 1st deposit
+  hasDeposited?: boolean;
   kycStatus: 'verified' | 'pending' | 'rejected' | 'unverified';
   isKycVerified?: boolean;
   level?: number;
@@ -199,6 +201,7 @@ export type TransactionType =
   | 'ticket_purchase'
   | 'prize_won'
   | 'referral_commission'
+  | 'signup_bonus'
   | 'refund'
   | 'p2p_transfer_sent'
   | 'p2p_transfer_received'

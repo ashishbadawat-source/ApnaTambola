@@ -329,7 +329,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </span>
               </h1>
               <p className="text-sm sm:text-base text-slate-200 max-w-xl font-normal leading-relaxed">
-                भारत का सबसे लोकप्रिय ऑनलाइन मल्टीप्लेयर तंबोला! ऑटोमैटिक <strong>1 से 90 वॉइस नंबर कॉलिंग</strong>, विभिन्न रंगों के प्रिंटेबल टिकट्स, <strong>₹10 फ्री साइनअप बोनस</strong> और <strong>10-सेकंड में सीधा UPI विथड्रॉल</strong>!
+                भारत का सबसे लोकप्रिय ऑनलाइन मल्टीप्लेयर तंबोला! ऑटोमैटिक <strong>1 से 90 वॉइस नंबर कॉलिंग</strong>, विभिन्न रंगों के प्रिंटेबल टिकट्स, <strong>पहले डिपॉजिट पर ₹10 बोनस</strong> और <strong>10-सेकंड में सीधा UPI विथड्रॉल</strong>!
               </p>
             </div>
 
@@ -346,7 +346,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   className="px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-sm sm:text-base flex items-center gap-2.5 shadow-xl shadow-amber-500/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
                 >
                   <Gift className="w-5 h-5 text-slate-950" />
-                  <span>साइन अप करें (₹10 फ्री बोनस)</span>
+                  <span>साइन अप करें (₹10 डिपॉजिट बोनस)</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (

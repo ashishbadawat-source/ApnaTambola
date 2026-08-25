@@ -556,6 +556,23 @@ export const WalletView: React.FC<WalletViewProps> = ({
             </div>
           )}
 
+          {/* First Deposit Bonus Highlight Banner */}
+          {(!currentUser.hasDeposited && !currentUser.firstDepositBonusClaimed) && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/20 border-2 border-amber-400/70 flex items-center gap-3 shadow-lg animate-pulse">
+              <div className="p-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-lg shrink-0">
+                🎁
+              </div>
+              <div>
+                <div className="font-black text-amber-300 text-sm">
+                  पहला डिपॉजिट ऑफर: ₹10 का फ्री रजिस्ट्रेशन बोनस!
+                </div>
+                <div className="text-xs text-amber-100/90 leading-tight">
+                  आपके पहले डिपॉजिट (न्यूनतम ₹100) पर ₹10 का रजिस्ट्रेशन बोनस अतिरिक्त रूप से आपके टिकट वॉलेट में स्वतः जुड़ जाएगा (सिर्फ 1 बार)।
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Deposit Policy Notice Strip */}
           <div className="p-3 rounded-2xl bg-slate-950/90 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2 text-emerald-300 font-bold">

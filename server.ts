@@ -172,11 +172,13 @@ async function startServer() {
         role: 'user',
         status: 'active',
         isBlocked: false,
-        walletBalance: existingUserIdx >= 0 ? (users[existingUserIdx].walletBalance ?? 10) : 10,
+        walletBalance: existingUserIdx >= 0 ? (users[existingUserIdx].walletBalance ?? 0) : 0,
         depositBalance: existingUserIdx >= 0 ? (users[existingUserIdx].depositBalance ?? 0) : 0,
-        winningBalance: existingUserIdx >= 0 ? (users[existingUserIdx].winningBalance ?? 10) : 10,
+        winningBalance: existingUserIdx >= 0 ? (users[existingUserIdx].winningBalance ?? 0) : 0,
         referralBalance: existingUserIdx >= 0 ? (users[existingUserIdx].referralBalance ?? 0) : 0,
         bonusRewardBalance: existingUserIdx >= 0 ? (users[existingUserIdx].bonusRewardBalance ?? 0) : 0,
+        firstDepositBonusClaimed: existingUserIdx >= 0 ? (users[existingUserIdx].firstDepositBonusClaimed ?? false) : false,
+        hasDeposited: existingUserIdx >= 0 ? (users[existingUserIdx].hasDeposited ?? false) : false,
         referralCode: resolvedReferralCode,
         referredBy: finalReferredBy,
         referredByUserId: finalReferredByUserId,
@@ -239,6 +241,23 @@ async function startServer() {
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message || 'Registration failed' });
+    }
+  });
+
+  app.post('/api/users/update-balances', (req: Request, res: Response) => {
+    try {
+      const { userId, depositBalance, bonusRewardBalance, walletBalance, hasDeposited, firstDepositBonusClaimed } = req.body;
+      const targetUser = users.find((u) => u.id === userId);
+      if (targetUser) {
+        if (depositBalance !== undefined) targetUser.depositBalance = depositBalance;
+        if (bonusRewardBalance !== undefined) targetUser.bonusRewardBalance = bonusRewardBalance;
+        if (walletBalance !== undefined) targetUser.walletBalance = walletBalance;
+        if (hasDeposited !== undefined) targetUser.hasDeposited = hasDeposited;
+        if (firstDepositBonusClaimed !== undefined) targetUser.firstDepositBonusClaimed = firstDepositBonusClaimed;
+      }
+      res.json({ success: true, user: targetUser });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 
