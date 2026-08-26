@@ -3039,6 +3039,7 @@ export function App() {
           currentUser ? (
             <UserDashboardView
               currentUser={currentUser}
+              allUsers={users}
               games={games}
               tickets={tickets}
               winners={winners}
@@ -3133,6 +3134,7 @@ export function App() {
           currentUser ? (
             <ReferralView
               currentUser={currentUser}
+              allUsers={users}
               referralMembers={computedReferralMembers}
               commissions={commissions}
               onOpenDeposit={() => handleNavigate('wallet')}
@@ -3269,6 +3271,7 @@ export function App() {
             onDeleteNotification={handleDeleteNotification}
             onUpdateSettings={handleUpdateSettings}
             onRegisterUser={handleRegisterUser}
+            onUpdateUser={handleRegisterUser}
             onDeleteUser={handleDeleteUser}
             onBatchDeleteUsers={handleBatchDeleteUsers}
           />

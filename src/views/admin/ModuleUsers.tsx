@@ -32,6 +32,7 @@ import {
   Square,
   RefreshCw,
   UserX,
+  Copy,
 } from 'lucide-react';
 import { User, WalletTransaction } from '../../types';
 

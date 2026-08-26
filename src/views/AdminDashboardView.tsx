@@ -83,6 +83,7 @@ interface AdminDashboardViewProps {
   onDeleteNotification?: (id: string) => void;
   onUpdateSettings?: (settings: Partial<SiteSettings>) => Promise<boolean>;
   onRegisterUser?: (newUser: User) => void;
+  onUpdateUser?: (user: User) => void;
   onDeleteUser?: (userId: string) => Promise<boolean> | void;
   onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
 }
@@ -122,6 +123,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onDeleteNotification,
   onUpdateSettings,
   onRegisterUser,
+  onUpdateUser,
   onDeleteUser,
   onBatchDeleteUsers,
 }) => {
@@ -300,6 +302,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             commissions={commissions}
             onApproveCommission={onApproveCommission}
             onReverseCommission={onReverseCommission}
+            onUpdateUser={onUpdateUser || onRegisterUser}
           />
         )}
 
