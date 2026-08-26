@@ -7,6 +7,7 @@ import {
   ReferralMember,
   WalletTransaction,
   WithdrawalRequest,
+  DepositRequest,
   SupportTicket,
   SiteSettings,
   ActivityLog,
@@ -733,6 +734,40 @@ export const INITIAL_WITHDRAWALS: WithdrawalRequest[] = [
     status: 'pending',
     requestDate: '2026-08-14 21:05',
     note: 'Early Five prize withdrawal request',
+  },
+];
+
+export const INITIAL_DEPOSITS: DepositRequest[] = [
+  {
+    id: 'dep_init_01',
+    userId: 'usr_ashish_101',
+    userName: 'Ashish Badawat',
+    userEmail: 'ashishbadawat@gmail.com',
+    userPhone: '+91 98765 43210',
+    amount: 1000,
+    paymentMethod: 'UPI',
+    utrNumber: 'UPI482910492817',
+    status: 'approved',
+    requestDate: '2026-08-14 15:15',
+    processedDate: '2026-08-14 15:20',
+    adminRemarks: 'Verified in HDFC Current Account - OK',
+    registrationBonus: 10,
+    bonusRewardUnlock: 0,
+  },
+  {
+    id: 'dep_init_02',
+    userId: 'usr_rohit_202',
+    userName: 'Rohit Sharma',
+    userEmail: 'rohit.s@gmail.com',
+    userPhone: '+91 98222 11111',
+    amount: 500,
+    paymentMethod: 'Google Pay / UPI',
+    utrNumber: 'UPI992019482716',
+    status: 'pending',
+    requestDate: new Date().toISOString(),
+    registrationBonus: 10,
+    bonusRewardUnlock: 0,
+    adminRemarks: '',
   },
 ];
 

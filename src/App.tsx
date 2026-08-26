@@ -33,6 +33,7 @@ import {
   INITIAL_WINNERS,
   INITIAL_TRANSACTIONS,
   INITIAL_WITHDRAWALS,
+  INITIAL_DEPOSITS,
   INITIAL_REFERRAL_MEMBERS,
   INITIAL_COMMISSIONS,
   INITIAL_SUPPORT_TICKETS,
@@ -50,6 +51,7 @@ import {
   GameWinner,
   WalletTransaction,
   WithdrawalRequest,
+  DepositRequest,
   ReferralMember,
   ReferralCommission,
   SupportTicket,
@@ -168,6 +170,17 @@ export function App() {
       }
     } catch (e) {}
     return INITIAL_WITHDRAWALS;
+  });
+
+  const [deposits, setDeposits] = useState<DepositRequest[]>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_deposits');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return INITIAL_DEPOSITS;
   });
 
   const [referralMembers, setReferralMembers] = useState<ReferralMember[]>(INITIAL_REFERRAL_MEMBERS);
@@ -392,12 +405,41 @@ export function App() {
         (err) => console.warn('Firestore tickets listener:', err)
       );
 
+      // Real-time deposits sync
+      const unsubscribeDeposits = onSnapshot(
+        collection(db, 'deposits'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const firestoreDeps: DepositRequest[] = [];
+            snapshot.forEach((docSnap) => {
+              firestoreDeps.push({ ...(docSnap.data() as DepositRequest), id: docSnap.id });
+            });
+            setDeposits((prev) => {
+              const map = new Map<string, DepositRequest>();
+              prev.forEach((d) => map.set(d.id, d));
+              firestoreDeps.forEach((d) => map.set(d.id, d));
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return timeB - timeA;
+              });
+              try {
+                localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        },
+        (err) => console.warn('Firestore deposits listener:', err)
+      );
+
       return () => {
         if (unsubscribeUsers) unsubscribeUsers();
         if (unsubscribeCommissions) unsubscribeCommissions();
         if (unsubscribeSettings) unsubscribeSettings();
         if (unsubscribeGames) unsubscribeGames();
         if (unsubscribeTickets) unsubscribeTickets();
+        if (unsubscribeDeposits) unsubscribeDeposits();
       };
     } catch (err) {
       console.warn('Firestore onSnapshot listener error:', err);
@@ -484,7 +526,7 @@ export function App() {
     };
     window.addEventListener('storage', handleStorage);
 
-    // 3. Periodic REST API polling for multi-device server-backed synchronization
+    // 3. Periodic & Event-Driven REST API polling for multi-device server-backed synchronization
     const pollServerSync = async () => {
       try {
         const res = await fetch('/api/sync/all');
@@ -496,6 +538,15 @@ export function App() {
               prev.forEach((u) => map.set(u.id, u));
               data.users.forEach((u: User) => map.set(u.id, u));
               return Array.from(map.values());
+            });
+            // Also sync active currentUser if updated remotely
+            setCurrentUser((prev) => {
+              if (!prev) return null;
+              const remote = data.users.find((u: User) => u.id === prev.id);
+              if (remote) {
+                return { ...prev, ...remote };
+              }
+              return prev;
             });
           }
           if (Array.isArray(data.tickets) && data.tickets.length > 0) {
@@ -516,17 +567,47 @@ export function App() {
               return Array.from(map.values());
             });
           }
+          if (Array.isArray(data.deposits) && data.deposits.length > 0) {
+            setDeposits((prev) => {
+              const map = new Map<string, DepositRequest>();
+              prev.forEach((d) => map.set(d.id, d));
+              data.deposits.forEach((d: DepositRequest) => map.set(d.id, d));
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return timeB - timeA;
+              });
+            });
+          }
         }
       } catch (e) {
         // Silent fallback
       }
     };
 
-    const intervalId = setInterval(pollServerSync, 3500);
+    // Initial immediate sync
+    pollServerSync();
+
+    const intervalId = setInterval(pollServerSync, 2500);
+
+    const handleWindowFocus = () => {
+      pollServerSync();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pollServerSync();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       if (bc) bc.close();
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(intervalId);
     };
   }, []);
@@ -1867,7 +1948,7 @@ export function App() {
     setUserNotifications((prev) => [winNotif, ...prev]);
   };
 
-  // 7. Wallet Deposit Handler (With ₹10 Registration Bonus on 1st Deposit + 10% Daily Reward Bonus Auto-Unlock)
+  // 7. Wallet Deposit Request Handler (Admin UTR Verification Flow)
   const handleDeposit = async (
     amount: number,
     method: string,
@@ -1879,6 +1960,8 @@ export function App() {
       return false;
     }
 
+    const cleanUtr = (utrNumber || '').trim();
+
     // 1. One-time ₹10 Registration Bonus rule on 1st deposit:
     const isFirstDeposit = !currentUser.hasDeposited && !currentUser.firstDepositBonusClaimed;
     const registrationBonus = isFirstDeposit ? 10 : 0;
@@ -1889,134 +1972,278 @@ export function App() {
     const unlockedReward = Math.min(maxTenPercent, availableReward);
     const roundedUnlocked = Math.round(unlockedReward * 100) / 100;
 
-    const totalAddedToDeposit = amount + registrationBonus + roundedUnlocked;
-
-    const updatedUser: User = {
-      ...currentUser,
-      hasDeposited: true,
-      firstDepositBonusClaimed: true,
-      depositBalance: (currentUser.depositBalance || 0) + totalAddedToDeposit,
-      bonusRewardBalance: Math.max(0, (currentUser.bonusRewardBalance || 0) - roundedUnlocked),
-      walletBalance: (currentUser.depositBalance || 0) + totalAddedToDeposit + (currentUser.winningBalance || 0) + (currentUser.referralBalance || 0),
+    const newDepositReq: DepositRequest = {
+      id: `dep_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      userPhone: currentUser.phone,
+      userEmail: currentUser.email,
+      amount,
+      paymentMethod: method,
+      utrNumber: cleanUtr || `UTR-${Date.now()}`,
+      proofImageUrl: proofUrl,
+      status: 'pending',
+      requestDate: new Date().toISOString(),
+      registrationBonus,
+      bonusRewardUnlock: roundedUnlocked,
     };
 
-    setCurrentUser(updatedUser);
+    // Update deposits state & localStorage
+    setDeposits((prev) => {
+      const next = [newDepositReq, ...prev];
+      try {
+        localStorage.setItem('apna_tambola_deposits', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
 
-    // Update in users state array & localStorage
+    // Save to Firestore
+    try {
+      setDoc(doc(db, 'deposits', newDepositReq.id), newDepositReq).catch(() => {});
+    } catch (e) {}
+
+    // Save to Server REST API
+    try {
+      fetch('/api/deposits/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDepositReq),
+      }).catch(() => {});
+    } catch (e) {}
+
+    // Add Pending Transaction
+    const pendingTxn: WalletTransaction = {
+      id: `txn_dep_${Date.now()}`,
+      userId: currentUser.id,
+      type: 'deposit',
+      amount,
+      balanceAfter: currentUser.walletBalance,
+      description: `डिपॉजिट अनुरोध: ₹${amount} (${method}) | UTR: ${cleanUtr || 'सत्यापन लंबित'} - एडमिन अप्रूवल प्रतीक्षारत`,
+      paymentMethod: method,
+      referenceId: newDepositReq.id,
+      utrNumber: cleanUtr,
+      proofImageUrl: proofUrl,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'pending',
+    };
+    setTransactions((prev) => [pendingTxn, ...prev]);
+
+    // Send user real-time notification
+    const depNotif: UserNotificationItem = {
+      id: `un_dep_${Date.now()}`,
+      category: 'wallet_credit',
+      title: `⏳ डिपॉजिट अनुरोध दर्ज: ₹${amount}`,
+      message: `आपका ₹${amount} का डिपॉजिट अनुरोध (UTR: ${cleanUtr || 'लंबित'}) एडमिन को भेजा गया है। एडमिन द्वारा बैंक/UPI पेमेंट चेक करके OK करते ही फण्ड तुरंत आपके वॉलेट में आ जाएगा।`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'wallet',
+      amount,
+    };
+    setUserNotifications((prev) => [depNotif, ...prev]);
+
+    return true;
+  };
+
+  // 7a. Admin Approve Deposit (Credits User Wallet + First Deposit Bonus + Daily Reward Unlock)
+  const handleApproveDeposit = async (depositId: string, remarks?: string): Promise<boolean> => {
+    const deposit = deposits.find((d) => d.id === depositId);
+    if (!deposit) return false;
+
+    const targetUser = users.find((u) => u.id === deposit.userId);
+    if (!targetUser) return false;
+
+    const regBonus = deposit.registrationBonus || 0;
+    const rewUnlock = deposit.bonusRewardUnlock || 0;
+    const totalCredit = deposit.amount + regBonus + rewUnlock;
+
+    const newDepositBal = (targetUser.depositBalance || 0) + totalCredit;
+    const newBonusRewBal = Math.max(0, (targetUser.bonusRewardBalance || 0) - rewUnlock);
+    const newTotalWallet = newDepositBal + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0);
+
+    const updatedTargetUser: User = {
+      ...targetUser,
+      hasDeposited: true,
+      firstDepositBonusClaimed: true,
+      depositBalance: newDepositBal,
+      bonusRewardBalance: newBonusRewBal,
+      walletBalance: newTotalWallet,
+    };
+
+    // Update deposits state
+    setDeposits((prev) => {
+      const next = prev.map((d) =>
+        d.id === depositId
+          ? {
+              ...d,
+              status: 'approved' as const,
+              adminRemarks: remarks || 'Payment verified and approved by Admin',
+              approvedAt: new Date().toISOString(),
+            }
+          : d
+      );
+      try {
+        localStorage.setItem('apna_tambola_deposits', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // Update users state
     setUsers((prev) => {
-      const nextUsers = prev.map((u) => (u.id === updatedUser.id ? updatedUser : u));
+      const nextUsers = prev.map((u) => (u.id === updatedTargetUser.id ? updatedTargetUser : u));
       try {
         localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
       } catch (e) {}
       return nextUsers;
     });
 
-    // Save update to Firestore
-    try {
-      setDoc(
-        doc(db, 'users', updatedUser.id),
-        {
-          hasDeposited: true,
-          firstDepositBonusClaimed: true,
-          depositBalance: updatedUser.depositBalance,
-          bonusRewardBalance: updatedUser.bonusRewardBalance,
-          walletBalance: updatedUser.walletBalance,
-        },
-        { merge: true }
-      ).catch(() => {});
-    } catch (e) {}
+    if (currentUser && currentUser.id === updatedTargetUser.id) {
+      setCurrentUser(updatedTargetUser);
+    }
 
-    // Save update to server API
+    // Update Firestore & Server API
     try {
-      fetch('/api/users/update-balances', {
+      setDoc(doc(db, 'deposits', depositId), {
+        status: 'approved',
+        adminRemarks: remarks || 'Payment verified by Admin',
+        approvedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+
+      setDoc(doc(db, 'users', updatedTargetUser.id), {
+        hasDeposited: true,
+        firstDepositBonusClaimed: true,
+        depositBalance: updatedTargetUser.depositBalance,
+        bonusRewardBalance: updatedTargetUser.bonusRewardBalance,
+        walletBalance: updatedTargetUser.walletBalance,
+      }, { merge: true }).catch(() => {});
+
+      fetch('/api/deposits/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: updatedUser.id,
-          depositBalance: updatedUser.depositBalance,
-          bonusRewardBalance: updatedUser.bonusRewardBalance,
-          walletBalance: updatedUser.walletBalance,
-          hasDeposited: true,
-          firstDepositBonusClaimed: true,
-        }),
+        body: JSON.stringify({ depositId, remarks }),
       }).catch(() => {});
     } catch (e) {}
 
-    const newTxn: WalletTransaction = {
-      id: `txn_${Date.now()}`,
-      userId: currentUser.id,
-      type: 'deposit',
-      amount,
-      balanceAfter: updatedUser.walletBalance,
-      description: `Deposit via ${method}${utrNumber ? ` (UTR: ${utrNumber})` : ''}`,
-      paymentMethod: method,
-      referenceId: utrNumber || `UPI-DEP-${Math.floor(100000 + Math.random() * 900000)}`,
-      utrNumber,
-      proofImageUrl: proofUrl,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
-      status: 'completed',
+    // Update transaction status
+    setTransactions((prev) => {
+      const updated = prev.map((t) => {
+        if (t.referenceId === depositId || (t.utrNumber && t.utrNumber === deposit.utrNumber && t.userId === deposit.userId)) {
+          return {
+            ...t,
+            status: 'completed' as const,
+            balanceAfter: newTotalWallet,
+            description: `डिपॉजिट स्वीकृत (UTR: ${deposit.utrNumber}) - एडमिन द्वारा OK किया गया`,
+          };
+        }
+        return t;
+      });
+      return updated;
+    });
+
+    // Send user notification
+    const successNotif: UserNotificationItem = {
+      id: `un_dep_ok_${Date.now()}`,
+      category: 'wallet_credit',
+      title: `✅ डिपॉजिट स्वीकृत: ₹${deposit.amount}`,
+      message: `बधाई! एडमिन ने आपका UTR (${deposit.utrNumber}) चेक करके ₹${deposit.amount} का डिपॉजिट OK कर दिया है। ₹${totalCredit} आपके टिकट वॉलेट में जोड़ दिया गया है!`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'wallet',
+      amount: totalCredit,
     };
+    setUserNotifications((prev) => [successNotif, ...prev]);
 
-    const txnsToAdd: WalletTransaction[] = [newTxn];
+    return true;
+  };
 
-    // If first deposit, add ₹10 registration bonus transaction & notification
-    if (registrationBonus > 0) {
-      const regBonusTxn: WalletTransaction = {
-        id: `txn_reg_bonus_${Date.now()}`,
-        userId: currentUser.id,
-        type: 'signup_bonus',
-        amount: registrationBonus,
-        balanceAfter: updatedUser.walletBalance,
-        description: `🎁 प्रथम डिपॉजिट रजिस्ट्रेशन बोनस: ₹10 का वेलकम बोनस आपके पहले डिपॉजिट में जोड़ा गया (1 बार)`,
-        paymentMethod: 'Registration Bonus',
-        referenceId: `REG-BONUS-${Math.floor(100000 + Math.random() * 900000)}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
-        status: 'completed',
+  // 7b. Admin Reject Deposit & Block Fraudulent User ID
+  const handleRejectDeposit = async (depositId: string, reason?: string): Promise<boolean> => {
+    const deposit = deposits.find((d) => d.id === depositId);
+    if (!deposit) return false;
+
+    const targetUser = users.find((u) => u.id === deposit.userId);
+
+    // Update deposits state
+    setDeposits((prev) => {
+      const next = prev.map((d) =>
+        d.id === depositId
+          ? {
+              ...d,
+              status: 'rejected' as const,
+              adminRemarks: reason || 'Fake/Invalid UTR - User ID Blocked',
+            }
+          : d
+      );
+      try {
+        localStorage.setItem('apna_tambola_deposits', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // Block User
+    if (targetUser) {
+      const blockedUser: User = {
+        ...targetUser,
+        status: 'blocked',
+        isBlocked: true,
       };
-      txnsToAdd.unshift(regBonusTxn);
 
-      const regBonusNotif: UserNotificationItem = {
-        id: `un_reg_bonus_${Date.now()}`,
-        category: 'wallet_credit',
-        title: `🎁 प्रथम डिपॉजिट पर ₹10 रजिस्ट्रेशन बोनस प्राप्त!`,
-        message: `बधाई! आपके पहले डिपॉजिट पर ₹10 का रजिस्ट्रेशन बोनस सफलतापूर्वक आपके टिकट वॉलेट में जोड़ दिया गया है। अब आप तंबोला टिकट खरीदकर खेल सकते हैं!`,
-        timestamp: 'Just now',
-        read: false,
-        actionTab: 'wallet',
-        amount: registrationBonus,
-      };
-      setUserNotifications((prev) => [regBonusNotif, ...prev]);
+      setUsers((prev) => {
+        const nextUsers = prev.map((u) => (u.id === blockedUser.id ? blockedUser : u));
+        try {
+          localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
+        } catch (e) {}
+        return nextUsers;
+      });
+
+      if (currentUser && currentUser.id === blockedUser.id) {
+        setCurrentUser(blockedUser);
+      }
+
+      try {
+        setDoc(doc(db, 'users', blockedUser.id), { status: 'blocked', isBlocked: true }, { merge: true }).catch(() => {});
+      } catch (e) {}
     }
 
-    if (roundedUnlocked > 0) {
-      const bonusTxn: WalletTransaction = {
-        id: `txn_reward_bonus_${Date.now()}`,
-        userId: currentUser.id,
-        type: 'reward_bonus_unlock',
-        amount: roundedUnlocked,
-        balanceAfter: updatedUser.walletBalance,
-        description: `🎁 दैनिक रिवार्ड अनलॉक (10% डिपॉजिट बोनस): ₹${amount} के रिचार्ज पर ₹${roundedUnlocked.toFixed(2)} रिवार्ड वॉलेट से टिकट वॉलेट में जोड़ा गया`,
-        paymentMethod: 'Daily Reward Wallet',
-        referenceId: `REW-UNL-${Math.floor(100000 + Math.random() * 900000)}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
-        status: 'completed',
-      };
-      txnsToAdd.unshift(bonusTxn);
+    // Update Firestore & Server API
+    try {
+      setDoc(doc(db, 'deposits', depositId), {
+        status: 'rejected',
+        adminRemarks: reason || 'Invalid UTR - ID Blocked',
+      }, { merge: true }).catch(() => {});
 
-      const bonusNotif: UserNotificationItem = {
-        id: `un_rew_${Date.now()}`,
-        category: 'wallet_credit',
-        title: `🎁 10% रिवार्ड बोनस अनलॉक: ₹${roundedUnlocked.toFixed(2)} टिकट वॉलेट में जुड़ा!`,
-        message: `बधाई! आपके ₹${amount} रिचार्ज पर आपके दैनिक रिवार्ड वॉलेट (स्पिन/स्क्रैच) से ₹${roundedUnlocked.toFixed(2)} टिकट वॉलेट में सफलतापूर्वक ट्रांसफर हो गए हैं।`,
-        timestamp: 'Just now',
-        read: false,
-        actionTab: 'wallet',
-        amount: roundedUnlocked,
-      };
-      setUserNotifications((prev) => [bonusNotif, ...prev]);
-    }
+      fetch('/api/deposits/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ depositId, reason }),
+      }).catch(() => {});
+    } catch (e) {}
 
-    setTransactions((prev) => [...txnsToAdd, ...prev]);
+    // Update transaction
+    setTransactions((prev) =>
+      prev.map((t) => {
+        if (t.referenceId === depositId || (t.utrNumber && t.utrNumber === deposit.utrNumber && t.userId === deposit.userId)) {
+          return {
+            ...t,
+            status: 'failed' as const,
+            description: `डिपॉजिट अस्वीकृत (फर्जी UTR: ${deposit.utrNumber}) - आईडी ब्लॉक की गई`,
+          };
+        }
+        return t;
+      })
+    );
+
+    // Send user notification
+    const blockNotif: UserNotificationItem = {
+      id: `un_dep_rej_${Date.now()}`,
+      category: 'wallet_credit',
+      title: `🚫 डिपॉजिट अस्वीकृत एवं खाता ब्लॉक`,
+      message: `अमान्य / फर्जी UTR (${deposit.utrNumber}) सबमिट करने के कारण आपका डिपॉजिट अस्वीकृत कर दिया गया है एवं आपकी आईडी ब्लॉक कर दी गई है।`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'support',
+    };
+    setUserNotifications((prev) => [blockNotif, ...prev]);
+
     return true;
   };
 
@@ -3241,6 +3468,7 @@ export function App() {
             games={games}
             users={users}
             withdrawals={withdrawals}
+            deposits={deposits}
             commissions={commissions}
             tickets={tickets}
             transactions={transactions}
@@ -3258,6 +3486,8 @@ export function App() {
             onDeleteGame={handleDeleteGame}
             onApproveWithdrawal={handleApproveWithdrawal}
             onRejectWithdrawal={handleRejectWithdrawal}
+            onApproveDeposit={handleApproveDeposit}
+            onRejectDeposit={handleRejectDeposit}
             onUpdateWalletBalance={handleUpdateWalletBalance}
             onToggleKYC={handleToggleKYC}
             onToggleBlockUser={handleToggleBlockUser}

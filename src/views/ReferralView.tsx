@@ -251,12 +251,61 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
     handleShareWhatsApp();
   };
 
+  // Compute comprehensive active referral members list combining props & live allUsers
+  const activeReferralMembers = useMemo<ReferralMember[]>(() => {
+    const map = new Map<string, ReferralMember>();
+
+    // 1. Seed with passed referral members
+    (referralMembers || []).forEach((m) => {
+      if (m && m.id) map.set(m.id, m);
+    });
+
+    if (!currentUser || !allUsers || allUsers.length === 0) {
+      return Array.from(map.values());
+    }
+
+    // 2. Dynamically calculate 8-level downline members from allUsers
+    const visited = new Set<string>([currentUser.id]);
+    let currentParents: User[] = [currentUser];
+
+    for (let depth = 1; depth <= 8; depth++) {
+      const children = allUsers.filter(
+        (u) => !visited.has(u.id) && currentParents.some((p) => isChildOf(u, p))
+      );
+      if (children.length === 0) break;
+
+      children.forEach((child) => {
+        visited.add(child.id);
+        const existing = map.get(child.id);
+        const userComms = commissions
+          .filter((c) => c.sourceUserId === child.id && c.status === 'approved')
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
+
+        map.set(child.id, {
+          id: child.id,
+          name: child.name,
+          email: child.email,
+          phone: child.phone,
+          level: depth,
+          joinedDate: child.createdAt ? new Date(child.createdAt).toLocaleDateString('en-GB') : (existing?.joinedDate || 'Recently'),
+          ticketsBought: existing?.ticketsBought || 0,
+          commissionEarned: userComms || existing?.commissionEarned || 0,
+          avatar: child.avatar || existing?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+        });
+      });
+
+      currentParents = children;
+    }
+
+    return Array.from(map.values());
+  }, [currentUser, allUsers, referralMembers, commissions]);
+
   const totalEarnings = commissions
     .filter((c) => c.status === 'approved')
     .reduce((acc, c) => acc + c.commissionAmount, 0);
 
-  const directMembersCount = referralMembers.filter((m) => m.level === 1).length;
-  const teamMembersCount = referralMembers.length;
+  const directMembersCount = activeReferralMembers.filter((m) => m.level === 1).length;
+  const teamMembersCount = activeReferralMembers.length;
 
   const levelStats = [
     { level: 1, percent: '2.0%', name: 'Direct Referral Income (L1)', desc: 'Earned on every direct member ticket purchase', color: 'from-amber-500/20 border-amber-400/50 text-amber-300' },
@@ -269,7 +318,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
     { level: 8, percent: '0.1%', name: 'Team Referral Income (L8)', desc: '8th-tier network ticket purchases', color: 'from-rose-600/20 border-rose-500/50 text-rose-300' },
   ];
 
-  const filteredMembers = referralMembers.filter((m) => {
+  const filteredMembers = activeReferralMembers.filter((m) => {
     if (selectedLevelFilter === 'all') return true;
     return m.level === selectedLevelFilter;
   });

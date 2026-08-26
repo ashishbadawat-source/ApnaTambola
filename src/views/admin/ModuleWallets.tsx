@@ -14,24 +14,48 @@ import {
   Plus,
   Minus,
   RefreshCw,
+  Check,
+  Ban,
+  Copy,
+  AlertTriangle,
+  Sparkles,
+  Phone,
+  Mail,
+  User as UserIcon,
+  CreditCard,
+  QrCode,
 } from 'lucide-react';
-import { User, WalletTransaction, TransactionType, TransactionStatus } from '../../types';
+import { User, WalletTransaction, DepositRequest } from '../../types';
 
 interface ModuleWalletsProps {
   users: User[];
   transactions: WalletTransaction[];
+  deposits?: DepositRequest[];
   onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
+  onApproveDeposit?: (depositId: string, remarks?: string) => Promise<boolean>;
+  onRejectDeposit?: (depositId: string, reason?: string) => Promise<boolean>;
 }
 
 export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   users,
   transactions,
+  deposits = [],
   onUpdateWalletBalance,
+  onApproveDeposit,
+  onRejectDeposit,
 }) => {
-  const [activeTab, setActiveTab] = useState<'transactions' | 'balances'>('transactions');
+  const [activeTab, setActiveTab] = useState<'deposits' | 'transactions' | 'balances'>('deposits');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [depositStatusFilter, setDepositStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
+
+  // Reject / Block Confirmation Modal
+  const [rejectingDeposit, setRejectingDeposit] = useState<DepositRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('अमान्य / फर्जी UTR — पेमेंट प्राप्त नहीं हुआ (Fake/Invalid UTR)');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   // Wallet Adjust Modal
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -45,6 +69,24 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   const totalUserReferrals = users.reduce((sum, u) => sum + (u.referralBalance || 0), 0);
   const totalPlatformLiabilities = totalUserDeposits + totalUserWinnings + totalUserReferrals;
 
+  const pendingDepositsCount = deposits.filter((d) => d.status === 'pending').length;
+
+  const filteredDeposits = deposits.filter((d) => {
+    if (depositStatusFilter !== 'all' && d.status !== depositStatusFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return (
+        d.id.toLowerCase().includes(q) ||
+        d.userName.toLowerCase().includes(q) ||
+        (d.userPhone && d.userPhone.toLowerCase().includes(q)) ||
+        (d.userEmail && d.userEmail.toLowerCase().includes(q)) ||
+        (d.utrNumber && d.utrNumber.toLowerCase().includes(q)) ||
+        d.userId.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
   const filteredTransactions = transactions.filter((tx) => {
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
     if (statusFilter !== 'all' && tx.status !== statusFilter) return false;
@@ -53,11 +95,41 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
       return (
         tx.id.toLowerCase().includes(q) ||
         tx.description.toLowerCase().includes(q) ||
-        (tx.referenceId && tx.referenceId.toLowerCase().includes(q))
+        (tx.referenceId && tx.referenceId.toLowerCase().includes(q)) ||
+        (tx.utrNumber && tx.utrNumber.toLowerCase().includes(q))
       );
     }
     return true;
   });
+
+  const handleCopyUtr = (utr: string) => {
+    navigator.clipboard?.writeText(utr);
+    setCopiedUtr(utr);
+    setTimeout(() => setCopiedUtr(null), 2000);
+  };
+
+  const handleApprove = async (dep: DepositRequest) => {
+    if (!onApproveDeposit) return;
+    setActionLoading(true);
+    const success = await onApproveDeposit(dep.id, 'UTR Verified & Payment Received - Approved');
+    setActionLoading(false);
+    if (success) {
+      setActionNotice(`✓ डिपॉजिट ₹${dep.amount} स्वीकृत कर दिया गया और ${dep.userName} के वॉलेट में फंड जमा हो गया!`);
+      setTimeout(() => setActionNotice(null), 4000);
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectingDeposit || !onRejectDeposit) return;
+    setActionLoading(true);
+    const success = await onRejectDeposit(rejectingDeposit.id, rejectReason);
+    setActionLoading(false);
+    if (success) {
+      setActionNotice(`✓ डिपॉजिट रिजेक्ट कर दिया गया और फर्जी UTR के कारण यूजर ${rejectingDeposit.userName} (ID: ${rejectingDeposit.userId}) को तुरंत ब्लॉक (Block) कर दिया गया!`);
+      setRejectingDeposit(null);
+      setTimeout(() => setActionNotice(null), 5000);
+    }
+  };
 
   const handleAdjustSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,14 +149,32 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
         <div>
           <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
             <Wallet className="w-6 h-6 text-amber-400" />
-            <span>Platform Wallets & Transaction Ledger</span>
+            <span>Platform Wallets &amp; UTR Verification System</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-400">
-            Audit player wallet balances, trace instant UPI deposits, monitor prize payouts, and execute audited ledger corrections.
+            यूजर द्वारा जमा किए गए UTR का सत्यापन करें, OK करके बैलेंस क्रेडिट करें अथवा फर्जी UTR को रिजेक्ट व ID ब्लॉक करें।
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-start sm:self-auto overflow-x-auto max-w-full">
+          <button
+            onClick={() => setActiveTab('deposits')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeTab === 'deposits'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+            }`}
+          >
+            <QrCode className="w-4 h-4" />
+            <span>📥 UTR Deposit Requests</span>
+            {pendingDepositsCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white font-black text-[10px] animate-pulse">
+                {pendingDepositsCount}
+              </span>
+            )}
+          </button>
+
           <button
             onClick={() => setActiveTab('transactions')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -95,6 +185,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
           >
             Transactions Ledger
           </button>
+
           <button
             onClick={() => setActiveTab('balances')}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -107,6 +198,13 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
           </button>
         </div>
       </div>
+
+      {actionNotice && (
+        <div className="p-4 rounded-2xl bg-emerald-950/90 border-2 border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2.5 shadow-xl animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>{actionNotice}</span>
+        </div>
+      )}
 
       {/* Financial Health Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
@@ -123,24 +221,233 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
-          <div className="text-[11px] text-pink-400 uppercase font-black">Player Winnings</div>
-          <div className="text-2xl font-black text-pink-300 mt-1">₹{totalUserWinnings.toLocaleString('en-IN')}</div>
-          <div className="text-[10px] text-emerald-400 mt-0.5">Eligible for instant withdrawal</div>
+          <div className="text-[11px] text-pink-400 uppercase font-black">Pending UTR Verifications</div>
+          <div className="text-2xl font-black text-amber-300 mt-1">{pendingDepositsCount}</div>
+          <div className="text-[10px] text-amber-400/80 mt-0.5">Needs Admin OK/Verification</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
-          <div className="text-[11px] text-emerald-400 uppercase font-black">Referral Commission Pool</div>
-          <div className="text-2xl font-black text-emerald-300 mt-1">₹{totalUserReferrals.toLocaleString('en-IN')}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">Earned from downlines</div>
+          <div className="text-[11px] text-emerald-400 uppercase font-black">Player Winnings</div>
+          <div className="text-2xl font-black text-emerald-300 mt-1">₹{totalUserWinnings.toLocaleString('en-IN')}</div>
+          <div className="text-[10px] text-emerald-400 mt-0.5">Eligible for withdrawal</div>
         </div>
       </div>
 
-      {activeTab === 'transactions' ? (
-        /* Transactions Ledger Table */
+      {/* TAB 1: UTR DEPOSIT APPROVALS */}
+      {activeTab === 'deposits' && (
+        <div className="rounded-2xl bg-slate-900/90 border-2 border-amber-400/40 p-5 space-y-4 shadow-xl">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { id: 'all', label: `All Requests (${deposits.length})` },
+                { id: 'pending', label: `⏳ Pending Verification (${pendingDepositsCount})` },
+                { id: 'approved', label: '✅ Approved' },
+                { id: 'rejected', label: '❌ Rejected / Blocked' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setDepositStatusFilter(tab.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    depositStatusFilter === tab.id
+                      ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative w-full md:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search UTR, User Name, Phone, ID..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950/80 text-slate-400 uppercase font-black text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="px-4 py-3.5">User / Player Details</th>
+                  <th className="px-4 py-3.5">Deposit Amount</th>
+                  <th className="px-4 py-3.5">12-Digit UTR Number</th>
+                  <th className="px-4 py-3.5">Payment Method / Time</th>
+                  <th className="px-4 py-3.5">Bonus Benefits</th>
+                  <th className="px-4 py-3.5">Status</th>
+                  <th className="px-4 py-3.5 text-right">Admin Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                {filteredDeposits.length > 0 ? (
+                  filteredDeposits.map((dep) => {
+                    const matchedUser = users.find((u) => u.id === dep.userId);
+                    const isUserBlocked = matchedUser?.isBlocked || matchedUser?.status === 'blocked';
+
+                    return (
+                      <tr key={dep.id} className="hover:bg-slate-800/40 transition-colors">
+                        {/* User Details */}
+                        <td className="px-4 py-3.5">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-white text-xs">{dep.userName}</span>
+                              {isUserBlocked && (
+                                <span className="px-1.5 py-0.2 rounded bg-red-500/20 text-red-400 text-[9px] font-black border border-red-500/40">
+                                  BLOCKED
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] font-mono text-amber-400">ID: {dep.userId}</div>
+                            <div className="text-[10px] text-slate-400">{dep.userPhone || dep.userEmail || '—'}</div>
+                          </div>
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-4 py-3.5">
+                          <div className="text-sm font-black text-emerald-400">₹{dep.amount.toLocaleString('en-IN')}</div>
+                          <div className="text-[10px] text-slate-400">Ticket Wallet Fund</div>
+                        </td>
+
+                        {/* UTR Number */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-amber-400/40 font-mono text-xs text-amber-300 w-fit">
+                            <span className="font-bold select-all">{dep.utrNumber}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyUtr(dep.utrNumber)}
+                              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer ml-1"
+                              title="Copy UTR"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                          {copiedUtr === dep.utrNumber && (
+                            <span className="text-[9px] text-emerald-400 font-bold block mt-0.5">✓ Copied to clipboard!</span>
+                          )}
+                        </td>
+
+                        {/* Method & Date */}
+                        <td className="px-4 py-3.5 space-y-0.5">
+                          <div className="text-white font-medium text-xs">{dep.paymentMethod || 'UPI'}</div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                            <span>
+                              {dep.requestDate ? new Date(dep.requestDate).toLocaleString('en-IN', {
+                                day: '2-digit',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              }) : 'Recent'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Bonuses */}
+                        <td className="px-4 py-3.5 space-y-0.5">
+                          {dep.registrationBonus ? (
+                            <span className="inline-block px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-black border border-amber-400/40">
+                              🎁 +₹{dep.registrationBonus} 1st Bonus
+                            </span>
+                          ) : null}
+                          {dep.bonusRewardUnlock ? (
+                            <span className="inline-block px-2 py-0.5 rounded bg-pink-500/20 text-pink-300 text-[10px] font-black border border-pink-500/40 ml-1">
+                              ✨ +₹{dep.bonusRewardUnlock} Reward
+                            </span>
+                          ) : null}
+                          {!dep.registrationBonus && !dep.bonusRewardUnlock && (
+                            <span className="text-[10px] text-slate-500">Standard Recharge</span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black border ${
+                              dep.status === 'approved'
+                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                : dep.status === 'pending'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                                : 'bg-red-500/20 text-red-300 border-red-500/40'
+                            }`}
+                          >
+                            {dep.status === 'approved' ? (
+                              <>
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>APPROVED (स्वीकृत)</span>
+                              </>
+                            ) : dep.status === 'pending' ? (
+                              <>
+                                <Clock className="w-3 h-3 text-amber-400" />
+                                <span>PENDING VERIFICATION</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-3 h-3 text-red-400" />
+                                <span>REJECTED (खाता ब्लॉक)</span>
+                              </>
+                            )}
+                          </span>
+                          {dep.adminRemarks && (
+                            <div className="text-[10px] text-slate-400 mt-1 max-w-xs">{dep.adminRemarks}</div>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3.5 text-right">
+                          {dep.status === 'pending' ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={actionLoading}
+                                onClick={() => handleApprove(dep)}
+                                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                                title="Approve deposit and credit user wallet"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>OK / Approve</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={actionLoading}
+                                onClick={() => setRejectingDeposit(dep)}
+                                className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                                title="Reject and block user ID"
+                              >
+                                <Ban className="w-3.5 h-3.5" />
+                                <span>Reject &amp; Block</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 font-medium">Processed</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                      कोई डिपॉजिट अनुरोध नहीं मिला (No deposit requests found)
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: TRANSACTIONS LEDGER */}
+      {activeTab === 'transactions' && (
         <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-xl">
           <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              {/* Type Filter */}
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
@@ -152,10 +459,10 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                 <option value="prize_won">Winning Amount</option>
                 <option value="ticket_purchase">Ticket Payments</option>
                 <option value="referral_commission">Referral Commission</option>
+                <option value="signup_bonus">Signup / Deposit Bonus</option>
                 <option value="refund">Refunds</option>
               </select>
 
-              {/* Status Filter */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -196,7 +503,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-300">
                 {filteredTransactions.map((tx) => {
-                  const isCredit = ['deposit', 'prize_won', 'referral_commission', 'refund'].includes(tx.type);
+                  const isCredit = ['deposit', 'prize_won', 'referral_commission', 'signup_bonus', 'refund'].includes(tx.type);
                   return (
                     <tr key={tx.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3 font-mono text-[11px] text-slate-400">
@@ -233,7 +540,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-[10px] text-slate-400">
-                        {tx.referenceId || tx.paymentMethod || 'SYSTEM'}
+                        {tx.utrNumber || tx.referenceId || tx.paymentMethod || 'SYSTEM'}
                       </td>
                     </tr>
                   );
@@ -242,8 +549,10 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
             </table>
           </div>
         </div>
-      ) : (
-        /* Balances Overview Table */
+      )}
+
+      {/* TAB 3: BALANCES OVERVIEW */}
+      {activeTab === 'balances' && (
         <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -287,6 +596,58 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Deposit & Block User Modal */}
+      {rejectingDeposit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border-2 border-red-500 rounded-3xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-red-500/30 pb-3">
+              <div className="flex items-center gap-2 text-red-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="text-base font-black text-white">डिपॉजिट रिजेक्ट &amp; ID ब्लॉक करें</h3>
+              </div>
+              <button onClick={() => setRejectingDeposit(null)} className="text-slate-400 hover:text-white cursor-pointer">✕</button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-500/30 space-y-1.5 text-xs text-slate-300">
+              <div>प्लेयर: <strong className="text-white">{rejectingDeposit.userName}</strong> (ID: {rejectingDeposit.userId})</div>
+              <div>राशि: <strong className="text-red-300 font-bold">₹{rejectingDeposit.amount}</strong></div>
+              <div>UTR नंबर: <strong className="text-amber-300 font-mono">{rejectingDeposit.utrNumber}</strong></div>
+              <p className="text-[11px] text-red-300 pt-1">
+                ⚠️ <strong>नोट:</strong> रिजेक्ट करने पर यह डिपॉजिट रद्द होगा और इस यूजर की ID को तुरंत ब्लॉक (Block) कर दिया जाएगा ताकि कोई फर्जी UTR न डाल सके।
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-300 font-bold">रिजेक्शन का कारण (Reason for Rejection):</label>
+              <input
+                type="text"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectingDeposit(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold cursor-pointer"
+              >
+                रद्द करें (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={handleConfirmReject}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs shadow-lg shadow-red-500/20 active:scale-95 transition-all cursor-pointer"
+              >
+                {actionLoading ? 'Blocking & Rejecting...' : '🚫 रिजेक्ट व ID ब्लॉक करें'}
+              </button>
+            </div>
           </div>
         </div>
       )}

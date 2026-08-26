@@ -1,105 +1,61 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 🛡️ Global Default Deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // 🔒 Core Helper Functions
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.email == 'ashishbadawat@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
-    }
-
     // 👤 Users Collection (Allows cross-device registration, login and profile updates)
     match /users/{userId} {
-      allow get, list: if true;
-      allow create, update, delete: if isValidId(userId);
+      allow read, write: if true;
     }
 
     // 🤝 Referral Commissions Collection
     match /commissions/{commissionId} {
-      allow get, list: if true;
-      allow create, update, delete: if isValidId(commissionId);
+      allow read, write: if true;
     }
 
     // 🎮 Games Collection (Public lobby matches, Admin managed)
     match /games/{gameId} {
-      allow get: if isValidId(gameId);
-      allow list: if true;
-      allow create, update, delete: if isValidId(gameId) && isAdmin();
+      allow read, write: if true;
     }
 
     // 🎟️ Tickets Collection
     match /tickets/{ticketId} {
-      allow get: if isValidId(ticketId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(ticketId) && isSignedIn() && incoming().userId == request.auth.uid;
-      allow update: if isValidId(ticketId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow delete: if isValidId(ticketId) && isAdmin();
+      allow read, write: if true;
     }
 
     // 💳 Wallet Transactions
     match /transactions/{transactionId} {
-      allow get: if isValidId(transactionId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(transactionId) && isSignedIn() && (incoming().userId == request.auth.uid || isAdmin());
-      allow update, delete: if isValidId(transactionId) && isAdmin();
+      allow read, write: if true;
     }
 
-    // 📥 Deposit Requests (Recharge)
+    // 📥 Deposit Requests (Recharge & UTR Verification)
     match /deposits/{depositId} {
-      allow get: if isValidId(depositId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(depositId) && isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if isValidId(depositId) && isAdmin();
+      allow read, write: if true;
     }
 
     // 📤 Withdrawal Requests (Payout)
     match /withdrawals/{withdrawalId} {
-      allow get: if isValidId(withdrawalId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isValidId(withdrawalId) && isSignedIn() && incoming().userId == request.auth.uid;
-      allow update, delete: if isValidId(withdrawalId) && isAdmin();
+      allow read, write: if true;
     }
 
     // 🏆 Winners Collection (Public leaderboards)
     match /winners/{winnerId} {
-      allow get, list: if true;
-      allow create, update, delete: if isValidId(winnerId) && isAdmin();
+      allow read, write: if true;
     }
 
-    // ⚙️ System settings / Admins
+    // ⚙️ System settings / Notifications / Admins
     match /admins/{adminId} {
-      allow read, write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /system/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
+    }
+
+    match /notifications/{notifId} {
+      allow read, write: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }

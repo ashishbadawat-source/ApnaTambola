@@ -240,6 +240,7 @@ export interface DepositRequest {
   userId: string;
   userName: string;
   userPhone: string;
+  userEmail?: string;
   amount: number;
   paymentMethod: string;
   utrNumber: string;
@@ -248,6 +249,8 @@ export interface DepositRequest {
   requestDate: string;
   processedDate?: string;
   adminRemarks?: string;
+  registrationBonus?: number;
+  bonusRewardUnlock?: number;
 }
 
 export interface WithdrawalRequest {

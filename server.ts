@@ -12,6 +12,7 @@ import {
   INITIAL_COMMISSIONS,
   INITIAL_TRANSACTIONS,
   INITIAL_WITHDRAWALS,
+  INITIAL_DEPOSITS,
   INITIAL_SUPPORT_TICKETS,
   INITIAL_SITE_SETTINGS,
 } from './src/data/mockData';
@@ -29,6 +30,7 @@ import {
   ReferralMember,
   WalletTransaction,
   WithdrawalRequest,
+  DepositRequest,
   SupportTicket,
   SiteSettings,
   PrizeCode,
@@ -53,6 +55,7 @@ let referralMembers: ReferralMember[] = [...INITIAL_REFERRAL_MEMBERS];
 let commissions: ReferralCommission[] = [...INITIAL_COMMISSIONS];
 let transactions: WalletTransaction[] = [...INITIAL_TRANSACTIONS];
 let withdrawals: WithdrawalRequest[] = [...INITIAL_WITHDRAWALS];
+let deposits: DepositRequest[] = [...INITIAL_DEPOSITS];
 let supportTickets: SupportTicket[] = [...INITIAL_SUPPORT_TICKETS];
 let siteSettings: SiteSettings = { ...INITIAL_SITE_SETTINGS };
 
@@ -77,9 +80,10 @@ function loadStateFromDisk() {
       if (Array.isArray(data.commissions) && data.commissions.length > 0) commissions = data.commissions;
       if (Array.isArray(data.transactions) && data.transactions.length > 0) transactions = data.transactions;
       if (Array.isArray(data.withdrawals) && data.withdrawals.length > 0) withdrawals = data.withdrawals;
+      if (Array.isArray(data.deposits) && data.deposits.length > 0) deposits = data.deposits;
       if (Array.isArray(data.supportTickets) && data.supportTickets.length > 0) supportTickets = data.supportTickets;
       if (data.siteSettings) siteSettings = { ...siteSettings, ...data.siteSettings };
-      console.log(`[Storage] Loaded persistent data: ${users.length} users, ${commissions.length} commissions, ${tickets.length} tickets`);
+      console.log(`[Storage] Loaded persistent data: ${users.length} users, ${commissions.length} commissions, ${deposits.length} deposits`);
     } else {
       saveStateToDisk();
     }
@@ -98,6 +102,7 @@ function saveStateToDisk() {
       commissions,
       transactions,
       withdrawals,
+      deposits,
       supportTickets,
       siteSettings,
       updatedAt: new Date().toISOString(),
@@ -455,10 +460,200 @@ async function startServer() {
       winners,
       transactions,
       withdrawals,
+      deposits,
       supportTickets,
       siteSettings,
       serverTime: new Date().toISOString(),
     });
+  });
+
+  // Deposits API (Admin UTR Verification & User Recharge Workflow)
+  app.get('/api/deposits', (req: Request, res: Response) => {
+    res.json(deposits);
+  });
+
+  app.post('/api/deposits/request', (req: Request, res: Response) => {
+    try {
+      const {
+        userId,
+        userName,
+        userPhone,
+        userEmail,
+        amount,
+        paymentMethod,
+        utrNumber,
+        proofImageUrl,
+        registrationBonus,
+        bonusRewardUnlock,
+      } = req.body;
+
+      const numAmount = Number(amount) || 0;
+      if (numAmount < 10) {
+        return res.status(400).json({ success: false, error: 'Minimum deposit amount is ₹10.' });
+      }
+
+      const user = users.find((u) => u.id === userId);
+      const newDeposit: DepositRequest = {
+        id: `dep_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+        userId: userId || (user ? user.id : 'usr_anon'),
+        userName: userName || (user ? user.name : 'Unknown User'),
+        userPhone: userPhone || (user ? user.phone : ''),
+        userEmail: userEmail || (user ? user.email : ''),
+        amount: numAmount,
+        paymentMethod: paymentMethod || 'UPI',
+        utrNumber: utrNumber || `UPI${Date.now()}`,
+        proofImageUrl: proofImageUrl || '',
+        status: 'pending',
+        requestDate: new Date().toISOString(),
+        registrationBonus: registrationBonus !== undefined ? registrationBonus : (user && !user.hasDeposited && !user.firstDepositBonusClaimed ? 10 : 0),
+        bonusRewardUnlock: Number(bonusRewardUnlock) || 0,
+      };
+
+      deposits.unshift(newDeposit);
+
+      // Create a pending wallet transaction
+      const pendingTxn: WalletTransaction = {
+        id: `txn_${Date.now()}`,
+        userId: newDeposit.userId,
+        type: 'deposit',
+        amount: numAmount,
+        balanceAfter: user ? user.walletBalance : 0,
+        description: `डिपॉजिट अनुरोध (UTR: ${newDeposit.utrNumber}) — एडमिन सत्यापन लंबित (Pending Verification)`,
+        paymentMethod: newDeposit.paymentMethod,
+        referenceId: newDeposit.utrNumber,
+        utrNumber: newDeposit.utrNumber,
+        proofImageUrl: newDeposit.proofImageUrl,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'pending',
+      };
+      transactions.unshift(pendingTxn);
+
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        deposit: newDeposit,
+        transaction: pendingTxn,
+        message: 'Deposit request submitted. Balance will be added once Admin verifies UTR.',
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/deposits/approve', (req: Request, res: Response) => {
+    try {
+      const { depositId, adminRemarks } = req.body;
+      const deposit = deposits.find((d) => d.id === depositId);
+      if (!deposit) {
+        return res.status(404).json({ success: false, error: 'Deposit request not found.' });
+      }
+
+      deposit.status = 'approved';
+      deposit.processedDate = new Date().toISOString();
+      deposit.adminRemarks = adminRemarks || 'UTR Verified & Payment Received - Approved';
+
+      const targetUser = users.find((u) => u.id === deposit.userId);
+      if (targetUser) {
+        const bonus1st = deposit.registrationBonus || (!targetUser.hasDeposited && !targetUser.firstDepositBonusClaimed ? 10 : 0);
+        const rewardUnlock = deposit.bonusRewardUnlock || 0;
+        const totalDepositCredit = deposit.amount + bonus1st + rewardUnlock;
+
+        targetUser.depositBalance = (targetUser.depositBalance || 0) + totalDepositCredit;
+        targetUser.bonusRewardBalance = Math.max(0, (targetUser.bonusRewardBalance || 0) - rewardUnlock);
+        targetUser.hasDeposited = true;
+        targetUser.firstDepositBonusClaimed = true;
+        targetUser.walletBalance = (targetUser.depositBalance || 0) + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0);
+
+        // Update transaction status
+        const txn = transactions.find((t) => t.referenceId === deposit.utrNumber || t.utrNumber === deposit.utrNumber);
+        if (txn) {
+          txn.status = 'completed';
+          txn.balanceAfter = targetUser.walletBalance;
+          txn.description = `Deposit approved via ${deposit.paymentMethod} (UTR: ${deposit.utrNumber})`;
+        } else {
+          transactions.unshift({
+            id: `txn_${Date.now()}`,
+            userId: targetUser.id,
+            type: 'deposit',
+            amount: deposit.amount,
+            balanceAfter: targetUser.walletBalance,
+            description: `डिपॉजिट स्वीकृत (UTR: ${deposit.utrNumber})`,
+            paymentMethod: deposit.paymentMethod,
+            referenceId: deposit.utrNumber,
+            utrNumber: deposit.utrNumber,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'completed',
+          });
+        }
+
+        // Add 1st Deposit Bonus transaction if applicable
+        if (bonus1st > 0) {
+          transactions.unshift({
+            id: `txn_reg_${Date.now()}`,
+            userId: targetUser.id,
+            type: 'signup_bonus',
+            amount: bonus1st,
+            balanceAfter: targetUser.walletBalance,
+            description: `🎁 प्रथम डिपॉजिट बोनस: ₹10 वेलकम बोनस टिकट वॉलेट में जमा किया गया`,
+            paymentMethod: 'Registration Bonus',
+            referenceId: `REG-DEP-BONUS-${deposit.utrNumber}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'completed',
+          });
+        }
+      }
+
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        deposit,
+        user: targetUser,
+        message: 'Deposit approved and wallet balance credited successfully.',
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.post('/api/deposits/reject', (req: Request, res: Response) => {
+    try {
+      const { depositId, reason } = req.body;
+      const deposit = deposits.find((d) => d.id === depositId);
+      if (!deposit) {
+        return res.status(404).json({ success: false, error: 'Deposit request not found.' });
+      }
+
+      deposit.status = 'rejected';
+      deposit.processedDate = new Date().toISOString();
+      deposit.adminRemarks = reason || 'अमान्य / फर्जी UTR — पेमेंट प्राप्त नहीं हुआ (Fake/Invalid UTR)';
+
+      // User ID Block Requirement: "और अगर एडमिन ने रिजेक्ट किया तो id ब्लॉक होगा"
+      const targetUser = users.find((u) => u.id === deposit.userId);
+      if (targetUser) {
+        targetUser.isBlocked = true;
+        targetUser.status = 'blocked';
+
+        // Update transaction status
+        const txn = transactions.find((t) => t.referenceId === deposit.utrNumber || t.utrNumber === deposit.utrNumber);
+        if (txn) {
+          txn.status = 'failed';
+          txn.description = `डिपॉजिट अस्वीकृत (फर्जी UTR पाए जाने पर खाता ब्लॉक कर दिया गया)`;
+        }
+      }
+
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        deposit,
+        user: targetUser,
+        message: 'डिपॉजिट रिजेक्ट कर दिया गया है और फर्जी UTR के कारण यूजर ID को तुरंत ब्लॉक (Block) कर दिया गया है।',
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   // Tickets List & Sync

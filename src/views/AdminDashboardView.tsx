@@ -26,6 +26,7 @@ import {
   TambolaTicket,
   TicketColorThemeId,
   WalletTransaction,
+  DepositRequest,
   ActivityLog,
   AdminNotification,
   LoginHistoryEntry,
@@ -53,6 +54,7 @@ interface AdminDashboardViewProps {
   games: TambolaGame[];
   users: User[];
   withdrawals: WithdrawalRequest[];
+  deposits?: DepositRequest[];
   commissions: ReferralCommission[];
   tickets: TambolaTicket[];
   transactions?: WalletTransaction[];
@@ -70,6 +72,8 @@ interface AdminDashboardViewProps {
   onDeleteGame?: (gameId: string) => Promise<boolean>;
   onApproveWithdrawal: (id: string) => Promise<boolean>;
   onRejectWithdrawal: (id: string) => Promise<boolean>;
+  onApproveDeposit?: (depositId: string, remarks?: string) => Promise<boolean>;
+  onRejectDeposit?: (depositId: string, reason?: string) => Promise<boolean>;
   onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
   onToggleKYC: (userId: string) => Promise<boolean>;
   onToggleBlockUser?: (userId: string) => Promise<boolean>;
@@ -93,6 +97,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   games,
   users,
   withdrawals,
+  deposits = [],
   commissions,
   tickets,
   transactions = [],
@@ -110,6 +115,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onDeleteGame,
   onApproveWithdrawal,
   onRejectWithdrawal,
+  onApproveDeposit,
+  onRejectDeposit,
   onUpdateWalletBalance,
   onToggleKYC,
   onToggleBlockUser,
@@ -138,6 +145,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   };
 
   const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
+  const pendingDepositsCount = deposits.filter((d) => d.status === 'pending').length;
   const liveGamesCount = games.filter((g) => g.status === 'live').length;
 
   const NAV_ITEMS = [
@@ -148,7 +156,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     { id: 'tickets', label: '5. Ticket Management', icon: Ticket, badge: `${tickets.length}` },
     { id: 'prizes', label: '6. Prize Management', icon: Trophy, badge: null },
     { id: 'referrals', label: '7. 5-Level Referral', icon: Share2, badge: 'MLM' },
-    { id: 'wallets', label: '8. Wallets & Ledger', icon: Wallet, badge: null },
+    { id: 'wallets', label: '8. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
     { id: 'withdrawals', label: '9. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
     { id: 'reports', label: '10. Reports & Analytics', icon: BarChart3, badge: null },
     { id: 'notifications', label: '11. Notifications', icon: Bell, badge: null },
@@ -310,7 +318,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           <ModuleWallets
             users={users}
             transactions={transactions}
+            deposits={deposits}
             onUpdateWalletBalance={onUpdateWalletBalance}
+            onApproveDeposit={onApproveDeposit}
+            onRejectDeposit={onRejectDeposit}
           />
         )}
 
