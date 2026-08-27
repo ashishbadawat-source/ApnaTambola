@@ -46,6 +46,8 @@ interface ModuleUsersProps {
   onDeleteUser?: (userId: string) => Promise<boolean> | void;
   onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
   transactions?: WalletTransaction[];
+  onForceRefresh?: () => void;
+  isSyncing?: boolean;
 }
 
 export const ModuleUsers: React.FC<ModuleUsersProps> = ({
@@ -58,6 +60,8 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   onDeleteUser,
   onBatchDeleteUsers,
   transactions = [],
+  onForceRefresh,
+  isSyncing = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'newest' | 'active' | 'inactive' | 'blocked' | 'kyc_pending' | 'kyc_verified' | 'vip'>('all');
@@ -315,6 +319,18 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
             <span className="text-emerald-400 font-bold">KYC Verified: </span>
             <strong className="text-emerald-300 font-black">{users.filter((u) => u.kycStatus === 'verified').length}</strong>
           </div>
+          {onForceRefresh && (
+            <button
+              type="button"
+              onClick={onForceRefresh}
+              disabled={isSyncing}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              title="सभी डिवाइस से तुरंत लाइव यूज़र डेटा रीफ्रेश करें"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+              <span>{isSyncing ? 'सिंक हो रहा है...' : '🔄 लाइव सिंक (Sync Now)'}</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowAddUserModal(true)}

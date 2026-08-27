@@ -536,14 +536,33 @@ export function App() {
           if (Array.isArray(data.users) && data.users.length > 0) {
             setUsers((prev) => {
               const map = new Map<string, User>();
-              prev.forEach((u) => map.set(u.id, u));
-              data.users.forEach((u: User) => map.set(u.id, u));
-              return Array.from(map.values());
+              // Use server data as authority, preserve local custom state
+              prev.forEach((u) => {
+                if (u && u.id) map.set(u.id, u);
+              });
+              data.users.forEach((u: User) => {
+                if (u && u.id) {
+                  const existing = map.get(u.id);
+                  map.set(u.id, { ...(existing || {}), ...u });
+                }
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+              });
+              try {
+                localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
             });
-            // Also sync active currentUser if updated remotely
+
+            // Also sync active currentUser if updated remotely (e.g. referral bonus credited on another device)
             setCurrentUser((prev) => {
               if (!prev) return null;
-              const remote = data.users.find((u: User) => u.id === prev.id);
+              const remote = data.users.find(
+                (u: User) => u.id === prev.id || (prev.phone && u.phone && u.phone.replace(/\D/g, '') === prev.phone.replace(/\D/g, ''))
+              );
               if (remote) {
                 return { ...prev, ...remote };
               }
@@ -589,7 +608,7 @@ export function App() {
     // Initial immediate sync
     pollServerSync();
 
-    const intervalId = setInterval(pollServerSync, 2500);
+    const intervalId = setInterval(pollServerSync, 1500);
 
     const handleWindowFocus = () => {
       pollServerSync();
@@ -718,13 +737,34 @@ export function App() {
           if (Array.isArray(data.users) && data.users.length > 0) {
             setUsers((prev) => {
               const map = new Map<string, User>();
-              prev.forEach((u) => map.set(u.id, u));
-              data.users.forEach((u: User) => map.set(u.id, u));
-              const merged = Array.from(map.values());
+              prev.forEach((u) => {
+                if (u && u.id) map.set(u.id, u);
+              });
+              data.users.forEach((u: User) => {
+                if (u && u.id) {
+                  const existing = map.get(u.id);
+                  map.set(u.id, { ...(existing || {}), ...u });
+                }
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+              });
               try {
                 localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
               } catch {}
               return merged;
+            });
+
+            // Also update active logged-in user
+            setCurrentUser((prev) => {
+              if (!prev) return null;
+              const remote = data.users.find(
+                (u: User) => u.id === prev.id || (prev.phone && u.phone && u.phone.replace(/\D/g, '') === prev.phone.replace(/\D/g, ''))
+              );
+              if (remote) return { ...prev, ...remote };
+              return prev;
             });
           }
           if (Array.isArray(data.tickets) && data.tickets.length > 0) {
@@ -3314,6 +3354,8 @@ export function App() {
               referralMembers={computedReferralMembers}
               commissions={commissions}
               onOpenDeposit={() => handleNavigate('wallet')}
+              onForceRefresh={handleForceRefresh}
+              isSyncing={isSyncing}
             />
           ) : (
             <ProtectedViewGate
@@ -3453,6 +3495,8 @@ export function App() {
             onUpdateUser={handleRegisterUser}
             onDeleteUser={handleDeleteUser}
             onBatchDeleteUsers={handleBatchDeleteUsers}
+            onForceRefresh={handleForceRefresh}
+            isSyncing={isSyncing}
           />
         )}
 

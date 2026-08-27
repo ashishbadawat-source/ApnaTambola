@@ -20,6 +20,7 @@ import {
   List,
   Search,
   Key,
+  RefreshCw,
 } from 'lucide-react';
 import { User, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
@@ -30,6 +31,8 @@ interface ReferralViewProps {
   referralMembers: ReferralMember[];
   commissions: ReferralCommission[];
   onOpenDeposit: () => void;
+  onForceRefresh?: () => void;
+  isSyncing?: boolean;
 }
 
 interface TreeNode {
@@ -46,6 +49,8 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   referralMembers,
   commissions,
   onOpenDeposit,
+  onForceRefresh,
+  isSyncing = false,
 }) => {
   const [copied, setCopied] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | 'all'>('all');
@@ -373,9 +378,23 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
           <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/80 border border-amber-400/40 space-y-3 lg:w-96 shadow-xl">
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-400 font-bold uppercase">My Referral ID</span>
-              <span className="font-mono text-base font-black text-amber-400">
-                {currentUser.referralCode}
-              </span>
+              <div className="flex items-center gap-2">
+                {onForceRefresh && (
+                  <button
+                    type="button"
+                    onClick={onForceRefresh}
+                    disabled={isSyncing}
+                    className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 text-[11px] font-bold flex items-center gap-1 border border-slate-700 cursor-pointer disabled:opacity-50"
+                    title="रिफ्रेश डायरेक्ट टीम (Live Sync Downline)"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+                    <span className="hidden sm:inline">{isSyncing ? 'सिंक...' : 'Sync'}</span>
+                  </button>
+                )}
+                <span className="font-mono text-base font-black text-amber-400">
+                  {currentUser.referralCode}
+                </span>
+              </div>
             </div>
 
             {/* Link Copy input */}

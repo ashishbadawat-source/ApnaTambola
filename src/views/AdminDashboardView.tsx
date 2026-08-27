@@ -90,6 +90,8 @@ interface AdminDashboardViewProps {
   onUpdateUser?: (user: User) => void;
   onDeleteUser?: (userId: string) => Promise<boolean> | void;
   onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
+  onForceRefresh?: () => void;
+  isSyncing?: boolean;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -133,6 +135,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onUpdateUser,
   onDeleteUser,
   onBatchDeleteUsers,
+  onForceRefresh,
+  isSyncing,
 }) => {
   const [internalTab, setInternalTab] = useState<string>('dashboard');
   const activeTab = activeModule || internalTab;
@@ -260,6 +264,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onRegisterUser={onRegisterUser}
             onDeleteUser={onDeleteUser}
             onBatchDeleteUsers={onBatchDeleteUsers}
+            onForceRefresh={onForceRefresh}
+            isSyncing={isSyncing}
           />
         )}
 
@@ -311,6 +317,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onApproveCommission={onApproveCommission}
             onReverseCommission={onReverseCommission}
             onUpdateUser={onUpdateUser || onRegisterUser}
+            onForceRefresh={onForceRefresh}
+            isSyncing={isSyncing}
           />
         )}
 

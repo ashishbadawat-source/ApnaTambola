@@ -40,6 +40,8 @@ interface ModuleReferralsProps {
   onApproveCommission?: (commissionId: string) => void;
   onReverseCommission?: (commissionId: string) => void;
   onUpdateUser?: (user: User) => void;
+  onForceRefresh?: () => void;
+  isSyncing?: boolean;
 }
 
 interface AdminTreeNode {
@@ -54,6 +56,8 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
   onApproveCommission,
   onReverseCommission,
   onUpdateUser,
+  onForceRefresh,
+  isSyncing = false,
 }) => {
   const [enabled, setEnabled] = useState(true);
   const [levels, setLevels] = useState({
@@ -261,6 +265,18 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          {onForceRefresh && (
+            <button
+              type="button"
+              onClick={onForceRefresh}
+              disabled={isSyncing}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+              title="सभी डिवाइस से तुरंत लाइव रेफरल डेटा रीफ्रेश करें"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+              <span>{isSyncing ? 'सिंक हो रहा है...' : '🔄 लाइव सिंक (Sync Now)'}</span>
+            </button>
+          )}
           <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
             <span className="text-emerald-400 font-bold">Total Distributed: </span>
             <strong className="text-emerald-300 font-black">₹{totalCommissionsPaid.toFixed(2)}</strong>
