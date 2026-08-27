@@ -32,6 +32,7 @@ import {
 import { ReferralCommission, User } from '../../types';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { isDirectChildOf, findReferrerInList } from '../../utils/referralMatcher';
 
 interface ModuleReferralsProps {
   users: User[];
@@ -78,52 +79,6 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
   const [downlineViewMode, setDownlineViewMode] = useState<'tree' | 'table'>('tree');
   const [adminCollapsedNodes, setAdminCollapsedNodes] = useState<Record<string, boolean>>({});
 
-  // Helper matching function
-  const isDirectMatch = (child: User, parent: User) => {
-    if (!child || !parent || child.id === parent.id) return false;
-    const pId = (parent.id || '').trim().toUpperCase();
-    const pCode = (parent.referralCode || '').trim().toUpperCase();
-    const pPhone = parent.phone ? parent.phone.replace(/\D/g, '') : '';
-    const pEmail = (parent.email || '').trim().toLowerCase();
-    const pName = (parent.name || '').trim().toUpperCase();
-
-    // 1. Direct referredByUserId match
-    if (child.referredByUserId) {
-      const cRefUserId = child.referredByUserId.trim().toUpperCase();
-      if (cRefUserId === pId || (pCode && cRefUserId === pCode)) {
-        return true;
-      }
-    }
-
-    // 2. targetReferredBy code match
-    if (child.referredBy) {
-      const clean = child.referredBy.trim().toUpperCase();
-      const cleanLower = child.referredBy.trim().toLowerCase();
-      const cleanDigits = clean.replace(/\D/g, '');
-
-      if (pCode && clean === pCode) return true;
-      if (pId && clean === pId) return true;
-
-      const pCodeNoPrefix = pCode.replace(/^REF-?/, '');
-      const cleanNoPrefix = clean.replace(/^REF-?/, '');
-      if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === clean || cleanNoPrefix === pCode)) return true;
-
-      if (pCode && (clean.includes(pCode) || pCode.includes(clean))) return true;
-      if (pId && (clean.includes(pId) || pId.includes(clean))) return true;
-
-      if (pEmail && cleanLower === pEmail) return true;
-
-      if (pPhone && cleanDigits) {
-        if (cleanDigits === pPhone || pPhone.endsWith(cleanDigits) || cleanDigits.endsWith(pPhone)) return true;
-        if (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6)) return true;
-      }
-
-      if (pName && clean === pName) return true;
-    }
-
-    return false;
-  };
-
   // Selected User for Trace
   const currentTraceUser = useMemo(() => {
     return users.find((u) => u.id === selectedTraceUserId) || users[0] || null;
@@ -135,7 +90,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
 
     const buildTree = (parentNode: User, depth: number, visited: Set<string>): AdminTreeNode[] => {
       if (depth > 8) return [];
-      const children = users.filter((u) => !visited.has(u.id) && isDirectMatch(u, parentNode));
+      const children = users.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode));
       return children.map((ch) => {
         const nextVisited = new Set(visited);
         nextVisited.add(ch.id);
@@ -163,7 +118,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
     let currentChild: User = currentTraceUser;
 
     for (let depth = 1; depth <= 8; depth++) {
-      const parent = users.find((u) => !visitedIds.has(u.id) && isDirectMatch(currentChild, u));
+      const parent = users.find((u) => !visitedIds.has(u.id) && isDirectChildOf(currentChild, u));
       if (parent) {
         visitedIds.add(parent.id);
         let reason = 'Referred By Code / ID Match';
@@ -183,7 +138,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
   // Compute Direct Downline (Level 1 Referrals) for selected user
   const directDownline = useMemo(() => {
     if (!currentTraceUser) return [];
-    return users.filter((u) => u.id !== currentTraceUser.id && isDirectMatch(u, currentTraceUser));
+    return users.filter((u) => u.id !== currentTraceUser.id && isDirectChildOf(u, currentTraceUser));
   }, [currentTraceUser, users]);
 
   // Filtered User list for search autocomplete

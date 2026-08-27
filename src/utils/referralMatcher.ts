@@ -1,0 +1,156 @@
+import { User } from '../types';
+
+/**
+ * Cleanly extracts a referral code from any raw input (plain code, URL, query param, hash, etc.)
+ */
+export function extractReferralCode(input: string | null | undefined): string {
+  if (!input) return '';
+  let str = String(input).trim();
+  if (!str) return '';
+
+  // Extract from full URLs or query strings
+  if (
+    str.includes('?ref=') ||
+    str.includes('&ref=') ||
+    str.includes('?referral=') ||
+    str.includes('&referral=') ||
+    str.includes('?r=') ||
+    str.includes('&r=') ||
+    str.includes('#ref=')
+  ) {
+    const match = str.match(/[?&#](?:ref|referral|r)=([^&#\s]+)/i);
+    if (match && match[1]) {
+      str = decodeURIComponent(match[1]);
+    }
+  }
+
+  // Remove leading / trailing quotes, slashes, or hashes
+  str = str.replace(/^[/\\#?&]+/, '').replace(/['"]/g, '').trim();
+
+  return str.toUpperCase();
+}
+
+/**
+ * Bulletproof check if child user was referred by parent user
+ */
+export function isDirectChildOf(child: User | null | undefined, parent: User | null | undefined): boolean {
+  if (!child || !parent) return false;
+  if (child.id === parent.id) return false;
+
+  const pId = (parent.id || '').trim().toUpperCase();
+  const pCode = (parent.referralCode || '').trim().toUpperCase();
+  const pCodeNoPrefix = pCode.replace(/^REF-?/, '');
+  const pPhone = (parent.phone || '').replace(/\D/g, '');
+  const pEmail = (parent.email || '').trim().toLowerCase();
+  const pName = (parent.name || '').trim().toUpperCase();
+
+  // 1. Direct referredByUserId match (highest accuracy)
+  if (child.referredByUserId) {
+    const cRefUserId = child.referredByUserId.trim().toUpperCase();
+    if (cRefUserId === pId) return true;
+    if (pCode && cRefUserId === pCode) return true;
+    if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '') === pCodeNoPrefix) return true;
+  }
+
+  // 2. Matching child.referredBy string
+  if (child.referredBy) {
+    const cleanRaw = extractReferralCode(child.referredBy);
+    const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '');
+    const cleanDigits = cleanRaw.replace(/\D/g, '');
+    const cleanLower = String(child.referredBy).trim().toLowerCase();
+
+    // Exact referral code match
+    if (pCode && cleanRaw === pCode) return true;
+    if (pId && cleanRaw === pId) return true;
+
+    // Without prefix comparison
+    if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === cleanRaw || cleanNoPrefix === pCode)) {
+      return true;
+    }
+
+    // Substring / contains match
+    if (pCode && (cleanRaw.includes(pCode) || pCode.includes(cleanRaw))) return true;
+    if (pCodeNoPrefix && (cleanRaw.includes(pCodeNoPrefix) || pCodeNoPrefix.includes(cleanRaw))) return true;
+    if (pId && (cleanRaw.includes(pId) || pId.includes(cleanRaw))) return true;
+
+    // Email match
+    if (pEmail && cleanLower === pEmail) return true;
+
+    // Phone matching (full phone or 10-digit / last 6-digit match)
+    if (cleanDigits.length >= 6 && pPhone) {
+      if (
+        pPhone === cleanDigits ||
+        pPhone.endsWith(cleanDigits) ||
+        cleanDigits.endsWith(pPhone) ||
+        (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6))
+      ) {
+        return true;
+      }
+    }
+
+    // Name match
+    if (pName && (cleanRaw === pName || cleanNoPrefix === pName)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Searches a user array for a matching referrer by referralCode, userId, phone, email, or name
+ */
+export function findReferrerInList(
+  referralInput: string | null | undefined,
+  usersList: User[],
+  excludeUserId?: string
+): User | null {
+  if (!referralInput || !usersList || usersList.length === 0) return null;
+
+  const cleanRaw = extractReferralCode(referralInput);
+  if (!cleanRaw || cleanRaw.length < 2) return null;
+
+  const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '');
+  const digitsOnly = cleanRaw.replace(/\D/g, '');
+  const cleanLower = String(referralInput).trim().toLowerCase();
+
+  return (
+    usersList.find((u) => {
+      if (!u || (excludeUserId && u.id === excludeUserId)) return false;
+
+      const uId = (u.id || '').trim().toUpperCase();
+      const uCode = (u.referralCode || '').trim().toUpperCase();
+      const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+      const uPhone = (u.phone || '').replace(/\D/g, '');
+      const uEmail = (u.email || '').trim().toLowerCase();
+      const uName = (u.name || '').trim().toUpperCase();
+
+      // 1. Direct referralCode or user ID exact match
+      if (uCode && (uCode === cleanRaw || uCodeNoPrefix === cleanNoPrefix)) return true;
+      if (uId && uId === cleanRaw) return true;
+
+      // 2. Substring matches
+      if (uCode && (cleanRaw.includes(uCode) || uCode.includes(cleanRaw))) return true;
+      if (uCodeNoPrefix && cleanNoPrefix && (cleanRaw.includes(uCodeNoPrefix) || uCodeNoPrefix.includes(cleanRaw))) return true;
+      if (uId && (cleanRaw.includes(uId) || uId.includes(cleanRaw))) return true;
+
+      // 3. Phone matching
+      if (digitsOnly.length >= 6 && uPhone) {
+        if (
+          uPhone === digitsOnly ||
+          uPhone.endsWith(digitsOnly) ||
+          digitsOnly.endsWith(uPhone) ||
+          (uPhone.length >= 6 && digitsOnly.length >= 6 && uPhone.slice(-6) === digitsOnly.slice(-6))
+        ) {
+          return true;
+        }
+      }
+
+      // 4. Email match
+      if (uEmail && cleanLower === uEmail) return true;
+
+      // 5. Name match
+      if (uName && (cleanRaw === uName || cleanNoPrefix === uName)) return true;
+
+      return false;
+    }) || null
+  );
+}

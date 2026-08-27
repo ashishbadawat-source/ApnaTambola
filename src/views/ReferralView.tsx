@@ -22,6 +22,7 @@ import {
   Key,
 } from 'lucide-react';
 import { User, ReferralMember, ReferralCommission } from '../types';
+import { isDirectChildOf } from '../utils/referralMatcher';
 
 interface ReferralViewProps {
   currentUser: User;
@@ -52,59 +53,13 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   const [treeSearch, setTreeSearch] = useState('');
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
 
-  // Helper matching function for parent-child relationship
-  const isChildOf = (child: User, parent: User) => {
-    if (!child || !parent || child.id === parent.id) return false;
-    const pId = (parent.id || '').trim().toUpperCase();
-    const pCode = (parent.referralCode || '').trim().toUpperCase();
-    const pPhone = parent.phone ? parent.phone.replace(/\D/g, '') : '';
-    const pEmail = (parent.email || '').trim().toLowerCase();
-    const pName = (parent.name || '').trim().toUpperCase();
-
-    // 1. Direct referredByUserId match
-    if (child.referredByUserId) {
-      const cRefUserId = child.referredByUserId.trim().toUpperCase();
-      if (cRefUserId === pId || (pCode && cRefUserId === pCode)) {
-        return true;
-      }
-    }
-
-    // 2. targetReferredBy code match
-    if (child.referredBy) {
-      const clean = child.referredBy.trim().toUpperCase();
-      const cleanLower = child.referredBy.trim().toLowerCase();
-      const cleanDigits = clean.replace(/\D/g, '');
-
-      if (pCode && clean === pCode) return true;
-      if (pId && clean === pId) return true;
-
-      const pCodeNoPrefix = pCode.replace(/^REF-?/, '');
-      const cleanNoPrefix = clean.replace(/^REF-?/, '');
-      if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === clean || cleanNoPrefix === pCode)) return true;
-
-      if (pCode && (clean.includes(pCode) || pCode.includes(clean))) return true;
-      if (pId && (clean.includes(pId) || pId.includes(clean))) return true;
-
-      if (pEmail && cleanLower === pEmail) return true;
-
-      if (pPhone && cleanDigits) {
-        if (cleanDigits === pPhone || pPhone.endsWith(cleanDigits) || cleanDigits.endsWith(pPhone)) return true;
-        if (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6)) return true;
-      }
-
-      if (pName && clean === pName) return true;
-    }
-
-    return false;
-  };
-
   // Build Full Recursive Downline Tree
   const downlineTree = useMemo(() => {
     if (!currentUser) return null;
 
     const buildSubtree = (parentNode: User, currentDepth: number, visited: Set<string>): TreeNode[] => {
       if (currentDepth > 8) return [];
-      const directChildren = allUsers.filter((u) => !visited.has(u.id) && isChildOf(u, parentNode));
+      const directChildren = allUsers.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode));
       
       return directChildren.map((childUser) => {
         const nextVisited = new Set(visited);

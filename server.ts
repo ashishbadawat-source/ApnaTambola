@@ -5,6 +5,7 @@ import { createServer as createViteServer } from 'vite';
 import {
   DEFAULT_USER,
   ADMIN_USER,
+  INITIAL_USERS,
   INITIAL_GAMES,
   INITIAL_USER_TICKETS,
   INITIAL_WINNERS,
@@ -21,6 +22,11 @@ import {
   generateTicketId,
   verifyClaim,
 } from './src/utils/tambolaTicket';
+import {
+  extractReferralCode,
+  findReferrerInList,
+  isDirectChildOf,
+} from './src/utils/referralMatcher';
 import {
   User,
   TambolaGame,
@@ -47,7 +53,7 @@ import {
 const DATA_FILE = path.join(process.cwd(), 'server_store.json');
 
 // In-Memory Durable Server State
-let users: User[] = [ADMIN_USER];
+let users: User[] = [ADMIN_USER, ...(INITIAL_USERS || []).filter((u) => u.id !== ADMIN_USER.id)];
 let games: TambolaGame[] = [...INITIAL_GAMES];
 let tickets: TambolaTicket[] = [...INITIAL_USER_TICKETS];
 let winners: GameWinner[] = [...INITIAL_WINNERS];
@@ -62,19 +68,22 @@ let siteSettings: SiteSettings = { ...INITIAL_SITE_SETTINGS };
 // Load persistent state from disk on boot
 function loadStateFromDisk() {
   try {
+    const userMap = new Map<string, User>();
+    [ADMIN_USER, ...(INITIAL_USERS || [])].forEach((u) => {
+      if (u && u.id) userMap.set(u.id, u);
+    });
+
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const data = JSON.parse(raw);
       if (Array.isArray(data.users) && data.users.length > 0) {
-        const userMap = new Map<string, User>();
-        [ADMIN_USER].forEach((u) => userMap.set(u.id, u));
         data.users.forEach((u: User) => {
           if (u && u.id) {
             userMap.set(u.id, { ...(userMap.get(u.id) || {}), ...u });
           }
         });
-        users = Array.from(userMap.values());
       }
+      users = Array.from(userMap.values());
       if (Array.isArray(data.games) && data.games.length > 0) games = data.games;
       if (Array.isArray(data.tickets) && data.tickets.length > 0) tickets = data.tickets;
       if (Array.isArray(data.commissions) && data.commissions.length > 0) commissions = data.commissions;
@@ -85,6 +94,7 @@ function loadStateFromDisk() {
       if (data.siteSettings) siteSettings = { ...siteSettings, ...data.siteSettings };
       console.log(`[Storage] Loaded persistent data: ${users.length} users, ${commissions.length} commissions, ${deposits.length} deposits`);
     } else {
+      users = Array.from(userMap.values());
       saveStateToDisk();
     }
   } catch (e) {
@@ -182,7 +192,12 @@ async function startServer() {
       const phone = body.phone || (body.user && body.user.phone);
       const email = body.email || (body.user && body.user.email);
       const password = body.password || (body.user && body.user.password);
-      const referralCodeInput = body.referralCodeInput || body.referredBy || (body.user && (body.user.referredBy || body.user.referredByUserId)) || '';
+      const rawReferralInput =
+        body.referralCodeInput ||
+        body.referredBy ||
+        body.referralCode ||
+        (body.user && (body.user.referredBy || body.user.referredByUserId)) ||
+        '';
       const selectedAvatar = body.selectedAvatar || body.avatar || (body.user && body.user.avatar);
       const providedId = body.id || (body.user && body.user.id);
       const providedRefCode = body.referralCode || (body.user && body.user.referralCode);
@@ -197,8 +212,8 @@ async function startServer() {
         (u) => (u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits)) || (providedId && u.id === providedId)
       );
 
-      // Resolve referrer
-      const cleanRef = referralCodeInput ? String(referralCodeInput).trim().toUpperCase() : '';
+      // Resolve referrer using bulletproof matcher
+      const cleanRef = extractReferralCode(rawReferralInput);
       let referrer: User | null = null;
 
       if (providedReferredByUserId) {
@@ -206,31 +221,28 @@ async function startServer() {
       }
 
       if (!referrer && cleanRef) {
-        referrer =
-          users.find((u) => {
-            const uCode = (u.referralCode || '').trim().toUpperCase();
-            const uId = (u.id || '').trim().toUpperCase();
-            const uPhone = (u.phone || '').replace(/\D/g, '');
-            const uName = (u.name || '').trim().toUpperCase();
-            const cleanDigits = cleanRef.replace(/\D/g, '');
-
-            if (uCode && (uCode === cleanRef || cleanRef.includes(uCode) || uCode.includes(cleanRef))) return true;
-            if (uId && (uId === cleanRef || cleanRef.includes(uId) || uId.includes(cleanRef))) return true;
-            if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
-            if (uName && cleanRef === uName) return true;
-            return false;
-          }) || null;
+        referrer = findReferrerInList(cleanRef, users, providedId);
       }
 
       const finalId = providedId || (existingUserIdx >= 0 ? users[existingUserIdx].id : `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`);
-      const resolvedReferralCode = providedRefCode || (existingUserIdx >= 0 ? users[existingUserIdx].referralCode : `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`);
-      const finalReferredBy = referrer ? (referrer.referralCode || referrer.id || cleanRef) : (cleanRef || '');
-      const finalReferredByUserId = referrer ? referrer.id : (providedReferredByUserId || '');
+      const resolvedReferralCode =
+        providedRefCode ||
+        (existingUserIdx >= 0 && users[existingUserIdx].referralCode
+          ? users[existingUserIdx].referralCode
+          : `REF-${String(name).replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`);
+
+      const finalReferredBy = referrer
+        ? (referrer.referralCode || referrer.id || cleanRef)
+        : (cleanRef || (body.user && body.user.referredBy) || '');
+
+      const finalReferredByUserId = referrer
+        ? referrer.id
+        : (providedReferredByUserId || (body.user && body.user.referredByUserId) || '');
 
       const newUser: User = {
         id: finalId,
         name: String(name).trim(),
-        email: email ? String(email).trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
+        email: email ? String(email).trim() : `${String(name).toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
         phone: `+91 ${phoneDigits}`,
         password: password || '123456',
         role: 'user',
@@ -248,7 +260,7 @@ async function startServer() {
         referredByUserId: finalReferredByUserId,
         kycStatus: 'verified',
         avatar: selectedAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-        createdAt: existingUserIdx >= 0 ? users[existingUserIdx].createdAt : new Date().toISOString(),
+        createdAt: existingUserIdx >= 0 ? users[existingUserIdx].createdAt : (body.user?.createdAt || new Date().toISOString()),
         bankDetails: {
           accountName: String(name).trim(),
           accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
@@ -303,6 +315,7 @@ async function startServer() {
         user: newUser,
         referrer,
         commission: joinComm,
+        totalUsers: users.length,
         message: 'User registered successfully!',
       });
     } catch (err: any) {

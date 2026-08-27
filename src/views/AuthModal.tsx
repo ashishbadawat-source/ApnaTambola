@@ -24,6 +24,7 @@ import { User, ReferralCommission } from '../types';
 import { playWinningFanfare, playNumberCallSound } from '../utils/audio';
 import { auth, googleProvider, signInWithPopup, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { extractReferralCode, findReferrerInList } from '../utils/referralMatcher';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -639,28 +640,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Resolve referredBy code and exact referrer profile first
-    const cleanRefCode = referralCodeInput ? referralCodeInput.trim().toUpperCase() : '';
+    const rawRefInput = referralCodeInput || pendingReferralCode || localStorage.getItem('apna_tambola_pending_referral') || '';
+    const cleanRefCode = extractReferralCode(rawRefInput);
     let finalReferrer: User | null = matchedReferrer || null;
 
     if (!finalReferrer && cleanRefCode) {
-      const cleanNoPrefix = cleanRefCode.replace(/^REF-?/, '');
-      const digitsOnly = cleanRefCode.replace(/\D/g, '');
-
-      // 1. Check local loaded users
-      finalReferrer =
-        allUsers.find((u) => {
-          const uCode = (u.referralCode || '').trim().toUpperCase();
-          const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
-          const uId = (u.id || '').trim().toUpperCase();
-          const uPhone = (u.phone || '').replace(/\D/g, '');
-          const uName = (u.name || '').trim().toUpperCase();
-
-          if (uCode && (uCode === cleanRefCode || uCodeNoPrefix === cleanNoPrefix || cleanRefCode.includes(uCode) || uCode.includes(cleanRefCode))) return true;
-          if (uId && (uId === cleanRefCode || cleanRefCode.includes(uId) || uId.includes(cleanRefCode))) return true;
-          if (digitsOnly.length >= 6 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone))) return true;
-          if (uName && (cleanRefCode === uName || cleanNoPrefix === uName)) return true;
-          return false;
-        }) || null;
+      // 1. Check local loaded users using robust matcher
+      finalReferrer = findReferrerInList(cleanRefCode, allUsers);
 
       // 2. Proactively search Firestore directly if not yet in local allUsers memory
       if (!finalReferrer) {
@@ -672,26 +658,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           } else {
             const allUsersSnap = await getDocs(collection(db, 'users'));
             if (!allUsersSnap.empty) {
-              allUsersSnap.forEach((d) => {
-                if (finalReferrer) return;
-                const data = d.data() as User;
-                const u = { ...data, id: d.id };
-                const uCode = (u.referralCode || '').trim().toUpperCase();
-                const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
-                const uId = (u.id || '').trim().toUpperCase();
-                const uPhone = (u.phone || '').replace(/\D/g, '');
-                const uName = (u.name || '').trim().toUpperCase();
-
-                if (uCode && (uCode === cleanRefCode || uCodeNoPrefix === cleanNoPrefix || cleanRefCode.includes(uCode) || uCode.includes(cleanRefCode))) {
-                  finalReferrer = u;
-                } else if (uId && (uId === cleanRefCode || cleanRefCode.includes(uId) || uId.includes(cleanRefCode))) {
-                  finalReferrer = u;
-                } else if (digitsOnly.length >= 6 && uPhone && (uPhone === digitsOnly || uPhone.endsWith(digitsOnly) || digitsOnly.endsWith(uPhone))) {
-                  finalReferrer = u;
-                } else if (uName && (cleanRefCode === uName || cleanNoPrefix === uName)) {
-                  finalReferrer = u;
-                }
-              });
+              const fsList: User[] = [];
+              allUsersSnap.forEach((d) => fsList.push({ ...(d.data() as User), id: d.id }));
+              finalReferrer = findReferrerInList(cleanRefCode, fsList);
             }
           }
         } catch (err) {
@@ -723,7 +692,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       // Save to server backend
       try {
-        fetch('/api/users/register', {
+        await fetch('/api/users/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -745,7 +714,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       // Save to Firestore
       try {
         const sanitizedUser = JSON.parse(JSON.stringify(updatedUser));
-        setDoc(doc(db, 'users', updatedUser.id), sanitizedUser, { merge: true }).catch(() => {});
+        await setDoc(doc(db, 'users', updatedUser.id), sanitizedUser, { merge: true }).catch(() => {});
       } catch (err) {}
 
       // Credit direct sponsor if new referral
@@ -799,7 +768,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     // Create New Registered User (₹10 Bonus will be added on their 1st deposit)
     const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
     const formattedPhone = `+91 ${phoneDigits}`;
-    const newUser: User = {
+    let newUser: User = {
       id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
       name: name.trim(),
       email: email ? email.trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
@@ -832,7 +801,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     // Save to server backend via REST API for instant cross-device and cross-browser sync
     try {
-      fetch('/api/users/register', {
+      const serverRes = await fetch('/api/users/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -848,18 +817,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
           selectedAvatar: newUser.avatar,
         }),
-      }).catch((e) => console.warn('Server registration notice:', e));
+      });
+      if (serverRes.ok) {
+        const serverData = await serverRes.json();
+        if (serverData.user) {
+          newUser = { ...newUser, ...serverData.user };
+        }
+        if (serverData.referrer && !finalReferrer) {
+          finalReferrer = serverData.referrer;
+        }
+      }
     } catch (e) {
-      console.warn('Fetch error:', e);
+      console.warn('Server registration call notice:', e);
     }
 
     // Save to Firestore users collection so all other devices receive this new user in real-time
-    // Wrap in non-blocking timeout so registration NEVER gets stuck if Firestore is slow or offline
     try {
       const sanitizedUser = JSON.parse(JSON.stringify(newUser));
       const firestoreSavePromise = setDoc(doc(db, 'users', newUser.id), sanitizedUser);
-      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1200));
-      Promise.race([firestoreSavePromise, timeoutPromise]).catch((e) =>
+      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1500));
+      await Promise.race([firestoreSavePromise, timeoutPromise]).catch((e) =>
         console.warn('Firestore user save notice:', e)
       );
     } catch (err) {

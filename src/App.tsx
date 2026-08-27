@@ -26,6 +26,7 @@ import { TemplateSelectorModal } from './components/TemplateSelectorModal';
 import { initTawkScript, syncUserToTawk } from './utils/tawk';
 import { initBrevoConversations, syncUserToBrevoConversations } from './utils/brevoConversations';
 import { AppTemplateId, getAppTemplate } from './utils/appThemes';
+import { isDirectChildOf, findReferrerInList, extractReferralCode } from './utils/referralMatcher';
 import {
   INITIAL_GAMES,
   INITIAL_USERS,
@@ -833,63 +834,11 @@ export function App() {
   const computedReferralMembers = React.useMemo<ReferralMember[]>(() => {
     if (!currentUser) return [];
 
-    const isDirectMatch = (child: User, parent: User) => {
-      if (!child || !parent || child.id === parent.id) return false;
-
-      const pId = (parent.id || '').trim().toUpperCase();
-      const pCode = (parent.referralCode || '').trim().toUpperCase();
-      const pPhone = parent.phone ? parent.phone.replace(/\D/g, '') : '';
-      const pEmail = (parent.email || '').trim().toLowerCase();
-      const pName = (parent.name || '').trim().toUpperCase();
-
-      // 1. Direct referredByUserId match
-      if (child.referredByUserId) {
-        const cRefUserId = child.referredByUserId.trim().toUpperCase();
-        if (cRefUserId === pId || (pCode && cRefUserId === pCode)) {
-          return true;
-        }
-      }
-
-      // 2. targetReferredBy code match
-      if (child.referredBy) {
-        const clean = child.referredBy.trim().toUpperCase();
-        const cleanLower = child.referredBy.trim().toLowerCase();
-        const cleanDigits = clean.replace(/\D/g, '');
-
-        // Exact matches
-        if (pCode && clean === pCode) return true;
-        if (pId && clean === pId) return true;
-
-        // Strip prefix "REF-" / "ref-"
-        const pCodeNoPrefix = pCode.replace(/^REF-?/, '');
-        const cleanNoPrefix = clean.replace(/^REF-?/, '');
-        if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === clean || cleanNoPrefix === pCode)) return true;
-
-        // Substring / URL param matches
-        if (pCode && (clean.includes(pCode) || pCode.includes(clean))) return true;
-        if (pId && (clean.includes(pId) || pId.includes(clean))) return true;
-
-        // Email match
-        if (pEmail && cleanLower === pEmail) return true;
-
-        // Phone matching (full or last 6-10 digits)
-        if (pPhone && cleanDigits) {
-          if (cleanDigits === pPhone || pPhone.endsWith(cleanDigits) || cleanDigits.endsWith(pPhone)) return true;
-          if (pPhone.length >= 6 && cleanDigits.length >= 6 && pPhone.slice(-6) === cleanDigits.slice(-6)) return true;
-        }
-
-        // Name match (case-insensitive)
-        if (pName && clean === pName) return true;
-      }
-
-      return false;
-    };
-
     const results: ReferralMember[] = [];
     const addedUserIds = new Set<string>();
 
     // Level 1: Direct Referrals (Users who signed up with currentUser's referral code)
-    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectMatch(u, currentUser));
+    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser));
     l1Users.forEach((u) => {
       addedUserIds.add(u.id);
       const userTickets = tickets.filter((t) => t.userId === u.id).length;
@@ -912,7 +861,7 @@ export function App() {
 
     // Level 2: Users referred by Level 1
     const l2Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectChildOf(u, p))
     );
     l2Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -933,7 +882,7 @@ export function App() {
 
     // Level 3: Users referred by Level 2
     const l3Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectChildOf(u, p))
     );
     l3Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -954,7 +903,7 @@ export function App() {
 
     // Level 4: Users referred by Level 3
     const l4Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectChildOf(u, p))
     );
     l4Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -975,7 +924,7 @@ export function App() {
 
     // Level 5: Users referred by Level 4
     const l5Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectChildOf(u, p))
     );
     l5Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -996,7 +945,7 @@ export function App() {
 
     // Level 6: Users referred by Level 5
     const l6Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectChildOf(u, p))
     );
     l6Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -1017,7 +966,7 @@ export function App() {
 
     // Level 7: Users referred by Level 6
     const l7Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectChildOf(u, p))
     );
     l7Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -1038,7 +987,7 @@ export function App() {
 
     // Level 8: Users referred by Level 7
     const l8Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectMatch(u, p))
+      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectChildOf(u, p))
     );
     l8Users.forEach((u) => {
       addedUserIds.add(u.id);
