@@ -225,7 +225,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     for (let depth = 1; depth <= 8; depth++) {
       const children = allUsers.filter(
-        (u) => !visited.has(u.id) && currentParents.some((p) => isChildOf(u, p))
+        (u) => !visited.has(u.id) && currentParents.some((p) => isDirectChildOf(u, p))
       );
       if (children.length === 0) break;
 

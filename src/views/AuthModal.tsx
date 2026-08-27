@@ -640,7 +640,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     // Resolve referredBy code and exact referrer profile first
-    const rawRefInput = referralCodeInput || pendingReferralCode || localStorage.getItem('apna_tambola_pending_referral') || '';
+    const rawRefInput = referralCodeInput || (typeof window !== 'undefined' ? localStorage.getItem('apna_tambola_pending_referral') || '' : '');
     const cleanRefCode = extractReferralCode(rawRefInput);
     let finalReferrer: User | null = matchedReferrer || null;
 
