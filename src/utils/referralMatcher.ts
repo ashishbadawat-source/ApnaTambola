@@ -1,7 +1,7 @@
-import { User } from '../types';
+import { User, ReferralCommission } from '../types';
 
 /**
- * Cleanly extracts a referral code from any raw input (plain code, URL, query param, hash, etc.)
+ * Cleanly extracts a referral code from any raw input (plain code, URL, query param, hash, phone, etc.)
  */
 export function extractReferralCode(input: string | null | undefined): string {
   if (!input) return '';
@@ -33,13 +33,17 @@ export function extractReferralCode(input: string | null | undefined): string {
 /**
  * Bulletproof check if child user was referred by parent user
  */
-export function isDirectChildOf(child: User | null | undefined, parent: User | null | undefined): boolean {
+export function isDirectChildOf(
+  child: User | null | undefined,
+  parent: User | null | undefined,
+  commissionsList?: ReferralCommission[]
+): boolean {
   if (!child || !parent) return false;
   if (child.id === parent.id) return false;
 
   const pId = (parent.id || '').trim().toUpperCase();
   const pCode = (parent.referralCode || '').trim().toUpperCase();
-  const pCodeNoPrefix = pCode.replace(/^REF-?/, '');
+  const pCodeNoPrefix = pCode.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
   const pPhone = (parent.phone || '').replace(/\D/g, '');
   const pEmail = (parent.email || '').trim().toLowerCase();
   const pName = (parent.name || '').trim().toUpperCase();
@@ -49,13 +53,13 @@ export function isDirectChildOf(child: User | null | undefined, parent: User | n
     const cRefUserId = child.referredByUserId.trim().toUpperCase();
     if (cRefUserId === pId) return true;
     if (pCode && cRefUserId === pCode) return true;
-    if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '') === pCodeNoPrefix) return true;
+    if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '') === pCodeNoPrefix) return true;
   }
 
   // 2. Matching child.referredBy string
   if (child.referredBy) {
     const cleanRaw = extractReferralCode(child.referredBy);
-    const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '');
+    const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
     const cleanDigits = cleanRaw.replace(/\D/g, '');
     const cleanLower = String(child.referredBy).trim().toLowerCase();
 
@@ -70,7 +74,7 @@ export function isDirectChildOf(child: User | null | undefined, parent: User | n
 
     // Substring / contains match
     if (pCode && (cleanRaw.includes(pCode) || pCode.includes(cleanRaw))) return true;
-    if (pCodeNoPrefix && (cleanRaw.includes(pCodeNoPrefix) || pCodeNoPrefix.includes(cleanRaw))) return true;
+    if (pCodeNoPrefix && cleanNoPrefix && (cleanRaw.includes(pCodeNoPrefix) || pCodeNoPrefix.includes(cleanNoPrefix))) return true;
     if (pId && (cleanRaw.includes(pId) || pId.includes(cleanRaw))) return true;
 
     // Email match
@@ -89,7 +93,15 @@ export function isDirectChildOf(child: User | null | undefined, parent: User | n
     }
 
     // Name match
-    if (pName && (cleanRaw === pName || cleanNoPrefix === pName)) return true;
+    if (pName && (cleanRaw === pName || cleanNoPrefix === pName.replace(/[^A-Z0-9]/g, ''))) return true;
+  }
+
+  // 3. Check direct commissions log if provided
+  if (commissionsList && commissionsList.length > 0) {
+    const hasJoinComm = commissionsList.some(
+      (c) => c.userId === parent.id && c.sourceUserId === child.id && (c.level === 1 || c.gameId === 'signup_bonus')
+    );
+    if (hasJoinComm) return true;
   }
 
   return false;
@@ -108,7 +120,7 @@ export function findReferrerInList(
   const cleanRaw = extractReferralCode(referralInput);
   if (!cleanRaw || cleanRaw.length < 2) return null;
 
-  const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '');
+  const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
   const digitsOnly = cleanRaw.replace(/\D/g, '');
   const cleanLower = String(referralInput).trim().toLowerCase();
 
@@ -118,7 +130,7 @@ export function findReferrerInList(
 
       const uId = (u.id || '').trim().toUpperCase();
       const uCode = (u.referralCode || '').trim().toUpperCase();
-      const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
+      const uCodeNoPrefix = uCode.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
       const uPhone = (u.phone || '').replace(/\D/g, '');
       const uEmail = (u.email || '').trim().toLowerCase();
       const uName = (u.name || '').trim().toUpperCase();
@@ -148,9 +160,10 @@ export function findReferrerInList(
       if (uEmail && cleanLower === uEmail) return true;
 
       // 5. Name match
-      if (uName && (cleanRaw === uName || cleanNoPrefix === uName)) return true;
+      if (uName && (cleanRaw === uName || cleanNoPrefix === uName.replace(/[^A-Z0-9]/g, ''))) return true;
 
       return false;
     }) || null
   );
 }
+

@@ -64,7 +64,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     const buildSubtree = (parentNode: User, currentDepth: number, visited: Set<string>): TreeNode[] => {
       if (currentDepth > 8) return [];
-      const directChildren = allUsers.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode));
+      const directChildren = allUsers.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode, commissions));
       
       return directChildren.map((childUser) => {
         const nextVisited = new Set(visited);
@@ -230,7 +230,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     for (let depth = 1; depth <= 8; depth++) {
       const children = allUsers.filter(
-        (u) => !visited.has(u.id) && currentParents.some((p) => isDirectChildOf(u, p))
+        (u) => !visited.has(u.id) && currentParents.some((p) => isDirectChildOf(u, p, commissions))
       );
       if (children.length === 0) break;
 
@@ -259,6 +259,29 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     return Array.from(map.values());
   }, [currentUser, allUsers, referralMembers, commissions]);
+
+  // Direct Level 1 Referrals computed live from allUsers
+  const directReferralsList = useMemo(() => {
+    if (!currentUser || !allUsers || allUsers.length === 0) return [];
+    return allUsers
+      .filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser, commissions))
+      .map((u) => {
+        const memberMeta = referralMembers.find((m) => m.id === u.id);
+        const earned = commissions
+          .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id && c.status === 'approved')
+          .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
+        return {
+          ...u,
+          ticketsBought: memberMeta?.ticketsBought || 0,
+          commissionEarned: earned || memberMeta?.commissionEarned || 0,
+        };
+      })
+      .sort((a, b) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+  }, [currentUser, allUsers, commissions, referralMembers]);
 
   const totalEarnings = commissions
     .filter((c) => c.status === 'approved')
@@ -487,6 +510,160 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
           </span>
         </div>
       </div>
+
+      {/* 🎯 DIRECT REFERRAL MEMBERS (LEVEL 1) LIVE SECTION */}
+      <section className="p-4 sm:p-6 rounded-3xl bg-slate-900/95 border-2 border-amber-400/50 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-amber-400" />
+              <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                <span>🎯 डायरेक्ट रेफरल सदस्य (Direct Referrals - Level 1)</span>
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-xs">
+                {directReferralsList.length} Players
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              आपके रेफरल कोड से दूसरे किसी भी फोन या डिवाइस से रजिस्टर करने वाले खिलाड़ियों की लाइव सूची।
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>Real-Time Sync</span>
+            </span>
+            {onForceRefresh && (
+              <button
+                type="button"
+                onClick={onForceRefresh}
+                disabled={isSyncing}
+                className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                title="सभी डिवाइस से तुरंत लाइव रेफरल रीफ्रेश करें"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+                <span>{isSyncing ? 'सिंक...' : 'रीफ्रेश (Sync)'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {directReferralsList.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-950 text-slate-400 uppercase font-black text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th className="px-3 py-3">Player / User</th>
+                  <th className="px-3 py-3">User ID</th>
+                  <th className="px-3 py-3">Mobile Number</th>
+                  <th className="px-3 py-3">Joined Date & Time</th>
+                  <th className="px-3 py-3">Tickets Played</th>
+                  <th className="px-3 py-3 text-right">Commission Earned</th>
+                  <th className="px-3 py-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                {directReferralsList.map((user) => {
+                  const isNew = user.createdAt && (Date.now() - new Date(user.createdAt).getTime() < 48 * 60 * 60 * 1000);
+                  return (
+                    <tr key={user.id} className="hover:bg-slate-800/40 transition-colors">
+                      {/* Player Profile */}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={user.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
+                            alt={user.name}
+                            className="w-8 h-8 rounded-full object-cover border border-amber-400/40 shrink-0"
+                          />
+                          <div>
+                            <div className="font-bold text-white text-xs flex items-center gap-1.5">
+                              <span>{user.name}</span>
+                              {isNew && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-400/40">
+                                  NEW
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate-400">{user.email || 'No email'}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* User ID */}
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono font-bold text-purple-300 text-xs bg-purple-950/60 px-2 py-0.5 rounded border border-purple-800/50 select-all">
+                            {user.id}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Mobile */}
+                      <td className="px-3 py-3 font-medium text-slate-200">
+                        {user.phone || 'N/A'}
+                      </td>
+
+                      {/* Joined Date & Time */}
+                      <td className="px-3 py-3">
+                        <div className="text-slate-200 font-medium">
+                          {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          }) : 'Today'}
+                        </div>
+                        {user.createdAt && (
+                          <div className="text-[10px] text-slate-400">
+                            {new Date(user.createdAt).toLocaleTimeString('en-IN', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Tickets */}
+                      <td className="px-3 py-3 font-bold text-white">
+                        {user.ticketsBought || 0} tickets
+                      </td>
+
+                      {/* Commission */}
+                      <td className="px-3 py-3 text-right font-black text-amber-400 text-sm">
+                        +₹{(user.commissionEarned || 0).toFixed(2)}
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-3 py-3 text-center">
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black">
+                          🟢 Active
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-6 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-3">
+            <Users className="w-8 h-8 text-amber-400/60 mx-auto" />
+            <div>
+              <h4 className="font-bold text-white text-sm">अभी तक कोई डायरेक्ट रेफरल नहीं जुड़ा है</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+                अपना रेफरल कोड <strong className="text-amber-400 font-mono select-all">{currentUser.referralCode}</strong> या रेफरल लिंक शेयर करें। जब कोई नया यूजर दूसरे डिवाइस से रजिस्टर करेगा, वो तुरंत यहाँ और एडमिन पैनल में दिखाई देगा!
+              </p>
+            </div>
+            <button
+              onClick={handleShareWhatsApp}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>रेफरल लिंक WhatsApp पर शेयर करें</span>
+            </button>
+          </div>
+        )}
+      </section>
 
       {/* 8 Level-Wise Income Cards */}
       <section className="space-y-4">

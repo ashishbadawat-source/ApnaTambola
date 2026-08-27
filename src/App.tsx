@@ -878,7 +878,7 @@ export function App() {
     const addedUserIds = new Set<string>();
 
     // Level 1: Direct Referrals (Users who signed up with currentUser's referral code)
-    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser));
+    const l1Users = users.filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser, commissions));
     l1Users.forEach((u) => {
       addedUserIds.add(u.id);
       const userTickets = tickets.filter((t) => t.userId === u.id).length;
@@ -901,7 +901,7 @@ export function App() {
 
     // Level 2: Users referred by Level 1
     const l2Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l1Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l2Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -922,7 +922,7 @@ export function App() {
 
     // Level 3: Users referred by Level 2
     const l3Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l2Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l3Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -943,7 +943,7 @@ export function App() {
 
     // Level 4: Users referred by Level 3
     const l4Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l3Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l4Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -964,7 +964,7 @@ export function App() {
 
     // Level 5: Users referred by Level 4
     const l5Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l4Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l5Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -985,7 +985,7 @@ export function App() {
 
     // Level 6: Users referred by Level 5
     const l6Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l5Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l6Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -1006,7 +1006,7 @@ export function App() {
 
     // Level 7: Users referred by Level 6
     const l7Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l6Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l7Users.forEach((u) => {
       addedUserIds.add(u.id);
@@ -1027,7 +1027,7 @@ export function App() {
 
     // Level 8: Users referred by Level 7
     const l8Users = users.filter(
-      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectChildOf(u, p))
+      (u) => !addedUserIds.has(u.id) && l7Users.some((p) => isDirectChildOf(u, p, commissions))
     );
     l8Users.forEach((u) => {
       addedUserIds.add(u.id);

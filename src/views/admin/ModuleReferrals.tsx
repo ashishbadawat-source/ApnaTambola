@@ -94,7 +94,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
 
     const buildTree = (parentNode: User, depth: number, visited: Set<string>): AdminTreeNode[] => {
       if (depth > 8) return [];
-      const children = users.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode));
+      const children = users.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode, commissions));
       return children.map((ch) => {
         const nextVisited = new Set(visited);
         nextVisited.add(ch.id);
@@ -108,7 +108,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
 
     const rootVisited = new Set<string>([currentTraceUser.id]);
     return buildTree(currentTraceUser, 1, rootVisited);
-  }, [currentTraceUser, users]);
+  }, [currentTraceUser, users, commissions]);
 
   const toggleAdminCollapse = (id: string) => {
     setAdminCollapsedNodes((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -122,7 +122,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
     let currentChild: User = currentTraceUser;
 
     for (let depth = 1; depth <= 8; depth++) {
-      const parent = users.find((u) => !visitedIds.has(u.id) && isDirectChildOf(currentChild, u));
+      const parent = users.find((u) => !visitedIds.has(u.id) && isDirectChildOf(currentChild, u, commissions));
       if (parent) {
         visitedIds.add(parent.id);
         let reason = 'Referred By Code / ID Match';
@@ -137,13 +137,13 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
       }
     }
     return chain;
-  }, [currentTraceUser, users]);
+  }, [currentTraceUser, users, commissions]);
 
   // Compute Direct Downline (Level 1 Referrals) for selected user
   const directDownline = useMemo(() => {
     if (!currentTraceUser) return [];
-    return users.filter((u) => u.id !== currentTraceUser.id && isDirectChildOf(u, currentTraceUser));
-  }, [currentTraceUser, users]);
+    return users.filter((u) => u.id !== currentTraceUser.id && isDirectChildOf(u, currentTraceUser, commissions));
+  }, [currentTraceUser, users, commissions]);
 
   // Filtered User list for search autocomplete
   const traceFilteredUsers = useMemo(() => {
