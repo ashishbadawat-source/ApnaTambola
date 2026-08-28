@@ -674,7 +674,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3.5">
           {levelStats.map((lvl) => {
-            const count = referralMembers.filter((m) => m.level === lvl.level).length;
+            const count = activeReferralMembers.filter((m) => m.level === lvl.level).length;
             const earned = commissions
               .filter((c) => c.level === lvl.level && c.status === 'approved')
               .reduce((acc, c) => acc + c.commissionAmount, 0);
@@ -719,7 +719,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
               <FolderTree className="w-5 h-5 text-amber-400" />
               <span>डाउनलाइन टीम नेटवर्क (Downline Genealogy Network)</span>
               <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30 text-xs font-bold">
-                {referralMembers.length} Members
+                {activeReferralMembers.length} Members
               </span>
             </h3>
             <p className="text-xs text-slate-400">
@@ -823,7 +823,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
                   </div>
                   <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800">
                     <span className="text-[10px] text-slate-400 block">Total Team</span>
-                    <strong className="text-purple-300 font-black text-sm">{referralMembers.length} Members</strong>
+                    <strong className="text-purple-300 font-black text-sm">{activeReferralMembers.length} Members</strong>
                   </div>
                   <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800">
                     <span className="text-[10px] text-slate-400 block">Earned Comm</span>
