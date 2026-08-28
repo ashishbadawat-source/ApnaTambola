@@ -185,9 +185,9 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
     },
     {
       id: 'referral',
-      name: '5-Level Affiliate Portal',
-      nameHi: '6. रेफरल & 5-लेवल इनकम',
-      desc: 'अपनी 5-लेवल टीम बनाएं और डाउनलाइन के हर खिलाड़ी द्वारा खरीदे गए टिकट पर 7.8% लाइफटाइम कमीशन ऑटो-क्रेडिट पाएं।',
+      name: '8-Level Affiliate Portal',
+      nameHi: '6. रेफरल & 8-लेवल इनकम',
+      desc: 'अपनी 8-लेवल टीम बनाएं और डाउनलाइन के हर खिलाड़ी द्वारा खरीदे गए टिकट पर 4.6% लाइफटाइम कमीशन ऑटो-क्रेडिट पाएं।',
       icon: Users,
       themeName: 'Amethyst Purple (बैंगनी)',
       colorTitle: 'पर्पल वायलेट थीम',

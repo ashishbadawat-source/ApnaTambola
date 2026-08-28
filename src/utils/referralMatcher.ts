@@ -8,7 +8,7 @@ export function extractReferralCode(input: string | null | undefined): string {
   let str = String(input).trim();
   if (!str) return '';
 
-  // Extract from full URLs or query strings
+  // Extract from full URLs, query strings, or hash params
   if (
     str.includes('?ref=') ||
     str.includes('&ref=') ||
@@ -16,9 +16,11 @@ export function extractReferralCode(input: string | null | undefined): string {
     str.includes('&referral=') ||
     str.includes('?r=') ||
     str.includes('&r=') ||
-    str.includes('#ref=')
+    str.includes('#ref=') ||
+    str.includes('/register?ref=') ||
+    str.includes('ref=')
   ) {
-    const match = str.match(/[?&#](?:ref|referral|r)=([^&#\s]+)/i);
+    const match = str.match(/(?:[?&#]|register\?)(?:ref|referral|r)=([^&#\s]+)/i);
     if (match && match[1]) {
       str = decodeURIComponent(match[1]);
     }
@@ -48,26 +50,46 @@ export function isDirectChildOf(
   const pEmail = (parent.email || '').trim().toLowerCase();
   const pName = (parent.name || '').trim().toUpperCase();
 
-  // 1. Direct referredByUserId match (highest accuracy)
-  if (child.referredByUserId) {
-    const cRefUserId = child.referredByUserId.trim().toUpperCase();
+  const childObj = child as any;
+
+  // 1. Direct referredByUserId or sponsorId match (highest accuracy)
+  const childReferrerUserIds = [
+    child.referredByUserId,
+    childObj.sponsorId,
+    childObj.referrerId,
+    childObj.uplineId,
+    childObj.parentUserId,
+  ].filter(Boolean) as string[];
+
+  for (const cRefUserIdRaw of childReferrerUserIds) {
+    const cRefUserId = String(cRefUserIdRaw).trim().toUpperCase();
     if (cRefUserId === pId) return true;
     if (pCode && cRefUserId === pCode) return true;
     if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '') === pCodeNoPrefix) return true;
   }
 
-  // 2. Matching child.referredBy string
-  if (child.referredBy) {
-    const cleanRaw = extractReferralCode(child.referredBy);
+  // 2. Matching child.referredBy or sponsorCode / referrerCode strings
+  const childReferrerCodes = [
+    child.referredBy,
+    childObj.sponsorCode,
+    childObj.referrerCode,
+    childObj.referrer,
+    childObj.sponsor,
+    childObj.upline,
+    childObj.uplineCode,
+  ].filter(Boolean) as string[];
+
+  for (const rawCode of childReferrerCodes) {
+    const cleanRaw = extractReferralCode(rawCode);
     const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
     const cleanDigits = cleanRaw.replace(/\D/g, '');
-    const cleanLower = String(child.referredBy).trim().toLowerCase();
+    const cleanLower = String(rawCode).trim().toLowerCase();
 
     // Exact referral code match
     if (pCode && cleanRaw === pCode) return true;
     if (pId && cleanRaw === pId) return true;
 
-    // Without prefix comparison
+    // Without prefix comparison (e.g. ASH772 vs REF-ASH772)
     if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === cleanRaw || cleanNoPrefix === pCode)) {
       return true;
     }
