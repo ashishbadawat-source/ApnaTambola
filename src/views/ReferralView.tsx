@@ -211,20 +211,13 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
     handleShareWhatsApp();
   };
 
-  // Compute comprehensive active referral members list combining props & live allUsers
+  // Compute comprehensive active referral members list dynamically from live allUsers
   const activeReferralMembers = useMemo<ReferralMember[]>(() => {
-    const map = new Map<string, ReferralMember>();
-
-    // 1. Seed with passed referral members
-    (referralMembers || []).forEach((m) => {
-      if (m && m.id) map.set(m.id, m);
-    });
-
     if (!currentUser || !allUsers || allUsers.length === 0) {
-      return Array.from(map.values());
+      return [];
     }
 
-    // 2. Dynamically calculate 8-level downline members from allUsers
+    const map = new Map<string, ReferralMember>();
     const visited = new Set<string>([currentUser.id]);
     let currentParents: User[] = [currentUser];
 
@@ -236,9 +229,9 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
       children.forEach((child) => {
         visited.add(child.id);
-        const existing = map.get(child.id);
+        const meta = referralMembers?.find((m) => m.id === child.id);
         const userComms = commissions
-          .filter((c) => c.sourceUserId === child.id && c.status === 'approved')
+          .filter((c) => c.sourceUserId === child.id && (c.userId === currentUser.id || !c.userId) && c.status === 'approved')
           .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
 
         map.set(child.id, {
@@ -247,10 +240,10 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
           email: child.email,
           phone: child.phone,
           level: depth,
-          joinedDate: child.createdAt ? new Date(child.createdAt).toLocaleDateString('en-GB') : (existing?.joinedDate || 'Recently'),
-          ticketsBought: existing?.ticketsBought || 0,
-          commissionEarned: userComms || existing?.commissionEarned || 0,
-          avatar: child.avatar || existing?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+          joinedDate: child.createdAt ? new Date(child.createdAt).toLocaleDateString('en-GB') : (meta?.joinedDate || 'Recently'),
+          ticketsBought: meta?.ticketsBought || 0,
+          commissionEarned: userComms || meta?.commissionEarned || 0,
+          avatar: child.avatar || meta?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
         });
       });
 
@@ -266,7 +259,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
     return allUsers
       .filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser, commissions))
       .map((u) => {
-        const memberMeta = referralMembers.find((m) => m.id === u.id);
+        const memberMeta = referralMembers?.find((m) => m.id === u.id);
         const earned = commissions
           .filter((c) => c.sourceUserId === u.id && c.userId === currentUser.id && c.status === 'approved')
           .reduce((sum, c) => sum + (c.commissionAmount || 0), 0);
@@ -284,7 +277,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   }, [currentUser, allUsers, commissions, referralMembers]);
 
   const totalEarnings = commissions
-    .filter((c) => c.status === 'approved')
+    .filter((c) => (c.userId === currentUser?.id || !c.userId) && c.status === 'approved')
     .reduce((acc, c) => acc + c.commissionAmount, 0);
 
   const directMembersCount = activeReferralMembers.filter((m) => m.level === 1).length;

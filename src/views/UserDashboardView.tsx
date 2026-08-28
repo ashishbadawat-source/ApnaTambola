@@ -32,6 +32,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember } from '../types';
+import { isDirectChildOf } from '../utils/referralMatcher';
 
 interface UserDashboardViewProps {
   currentUser?: User | null;
@@ -63,34 +64,26 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
     return matchedGame && matchedGame.status !== 'completed';
   });
 
-  // Upline sponsor lookup
+  // Upline sponsor lookup using canonical referral matching
   const uplineUser = currentUser ? (
     allUsers.find((u) => {
       if (!currentUser || u.id === currentUser.id) return false;
-      if (currentUser.referredByUserId && u.id === currentUser.referredByUserId) return true;
-      const refCode = (currentUser.referredBy || '').trim().toUpperCase();
-      const refNoPrefix = refCode.replace(/^REF-?/, '');
-      const uCode = (u.referralCode || '').trim().toUpperCase();
-      const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
-      const uId = (u.id || '').trim().toUpperCase();
-      const uPhone = (u.phone || '').replace(/\D/g, '');
-      const cleanDigits = refCode.replace(/\D/g, '');
-
-      if (uCode && (uCode === refCode || uCodeNoPrefix === refNoPrefix || refCode.includes(uCode) || uCode.includes(refCode))) return true;
-      if (uId && (uId === refCode || refCode.includes(uId) || uId.includes(refCode))) return true;
-      if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
-      if (u.name && refCode === u.name.trim().toUpperCase()) return true;
-      return false;
+      return isDirectChildOf(currentUser, u);
     }) || null
   ) : null;
 
   // Calculate player stats
   const totalGamesPlayed = currentUser?.gamesPlayed || 0;
   const totalWinnings = currentUser?.totalWon || 0;
-  const directReferralCount = referralMembers
+  const directLiveUsers = currentUser
+    ? allUsers.filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser))
+    : [];
+  const directReferralCount = referralMembers && referralMembers.length > 0
     ? referralMembers.filter((m) => m.level === 1).length
-    : (currentUser?.referralCount || 0);
-  const referralCount = referralMembers ? referralMembers.length : directReferralCount;
+    : directLiveUsers.length;
+  const referralCount = referralMembers && referralMembers.length > 0
+    ? referralMembers.length
+    : directLiveUsers.length;
   const isDepositor = Boolean(
     currentUser?.hasDeposited ||
     (currentUser?.depositBalance || 0) > 0 ||
