@@ -33,6 +33,8 @@ interface ReferralViewProps {
   onOpenDeposit: () => void;
   onForceRefresh?: () => void;
   isSyncing?: boolean;
+  onRegisterUser?: (newUser: User) => void;
+  onOpenAuth?: (mode?: 'login' | 'register') => void;
 }
 
 interface TreeNode {
@@ -51,12 +53,19 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   onOpenDeposit,
   onForceRefresh,
   isSyncing = false,
+  onRegisterUser,
+  onOpenAuth,
 }) => {
   const [copied, setCopied] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | 'all'>('all');
   const [viewMode, setViewMode] = useState<'tree' | 'table'>('tree');
   const [treeSearch, setTreeSearch] = useState('');
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
+  const [showTestReferralModal, setShowTestReferralModal] = useState(false);
+  const [testMemberName, setTestMemberName] = useState('Rahul Verma');
+  const [testMemberPhone, setTestMemberPhone] = useState(`98${Math.floor(10000000 + Math.random() * 90000000)}`);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulationSuccess, setSimulationSuccess] = useState<string | null>(null);
 
   // Build Full Recursive Downline Tree
   const downlineTree = useMemo(() => {
@@ -209,6 +218,68 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     // Fallback to WhatsApp
     handleShareWhatsApp();
+  };
+
+  const handleSimulateDirectReferral = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!testMemberName.trim()) return;
+    setIsSimulating(true);
+    setSimulationSuccess(null);
+
+    const newUserId = `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+    const cleanPhone = testMemberPhone.replace(/\D/g, '') || `98${Math.floor(10000000 + Math.random() * 90000000)}`;
+    const cleanRef = currentUser.referralCode || `REF-${currentUser.id.slice(0, 6).toUpperCase()}`;
+
+    const newMember: User = {
+      id: newUserId,
+      name: testMemberName.trim(),
+      phone: `+91 ${cleanPhone}`,
+      email: `${testMemberName.trim().toLowerCase().replace(/\s+/g, '')}${Math.floor(10 + Math.random() * 90)}@gmail.com`,
+      password: 'password123',
+      role: 'user',
+      avatar: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 1000)}?auto=format&fit=crop&w=160&q=80`,
+      walletBalance: 10,
+      depositBalance: 0,
+      winningBalance: 10,
+      referralBalance: 0,
+      bonusRewardBalance: 0,
+      referralCode: `REF-${testMemberName.slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+      referredBy: cleanRef,
+      referredByUserId: currentUser.id,
+      kycStatus: 'verified',
+      createdAt: new Date().toISOString(),
+      status: 'active',
+      isBlocked: false,
+    };
+
+    if (onRegisterUser) {
+      onRegisterUser(newMember);
+    }
+
+    try {
+      await fetch('/api/users/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user: newMember,
+          id: newMember.id,
+          name: newMember.name,
+          phone: newMember.phone,
+          email: newMember.email,
+          referralCode: newMember.referralCode,
+          referredBy: cleanRef,
+          referredByUserId: currentUser.id,
+          referralCodeInput: cleanRef,
+        }),
+      });
+    } catch (err) {}
+
+    setIsSimulating(false);
+    setSimulationSuccess(`✓ ${newMember.name} (+91 ${cleanPhone}) सफलतापूर्वक आपके डायरेक्ट रेफरल (Level 1) में जुड़ गए हैं!`);
+    setShowTestReferralModal(false);
+    if (onForceRefresh) {
+      setTimeout(onForceRefresh, 300);
+    }
   };
 
   // Compute comprehensive active referral members list dynamically from live allUsers
@@ -522,17 +593,48 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+          <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setTestMemberPhone(`98${Math.floor(10000000 + Math.random() * 90000000)}`);
+                setShowTestReferralModal(true);
+              }}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+              title="डायरेक्ट रेफरल सिस्टम टेस्ट करने के लिए तुरंत टेस्ट यूज़र जोड़ें"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>+ टेस्ट रेफरल जोड़ें (Test)</span>
+            </button>
+
+            {onOpenAuth && (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('apna_tambola_pending_referral', currentUser.referralCode);
+                  } catch (e) {}
+                  onOpenAuth('register');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                title="मेरे रेफरल कोड के साथ रजिस्ट्रेशन फॉर्म खोलें"
+              >
+                <Gift className="w-3.5 h-3.5" />
+                <span>नया रजिस्ट्रेशन फॉर्म</span>
+              </button>
+            )}
+
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
               <span>Real-Time Sync</span>
             </span>
+
             {onForceRefresh && (
               <button
                 type="button"
                 onClick={onForceRefresh}
                 disabled={isSyncing}
-                className="px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
                 title="सभी डिवाइस से तुरंत लाइव रेफरल रीफ्रेश करें"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
@@ -541,6 +643,21 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
             )}
           </div>
         </div>
+
+        {simulationSuccess && (
+          <div className="p-3 rounded-2xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-bold flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{simulationSuccess}</span>
+            </div>
+            <button
+              onClick={() => setSimulationSuccess(null)}
+              className="text-emerald-400 hover:text-white font-black ml-2 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {directReferralsList.length > 0 ? (
           <div className="overflow-x-auto">
@@ -647,13 +764,121 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
                 अपना रेफरल कोड <strong className="text-amber-400 font-mono select-all">{currentUser.referralCode}</strong> या रेफरल लिंक शेयर करें। जब कोई नया यूजर दूसरे डिवाइस से रजिस्टर करेगा, वो तुरंत यहाँ और एडमिन पैनल में दिखाई देगा!
               </p>
             </div>
-            <button
-              onClick={handleShareWhatsApp}
-              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>रेफरल लिंक WhatsApp पर शेयर करें</span>
-            </button>
+            <div className="flex items-center justify-center gap-2 flex-wrap pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTestMemberPhone(`98${Math.floor(10000000 + Math.random() * 90000000)}`);
+                  setShowTestReferralModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-lg hover:from-amber-300"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>⚡ 1-क्लिक में टेस्ट मेंबर जोड़कर देखें</span>
+              </button>
+              <button
+                onClick={handleShareWhatsApp}
+                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>रेफरल लिंक WhatsApp पर शेयर करें</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal for Quick Test Referral Addition */}
+        {showTestReferralModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-amber-400 p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-black text-white">
+                    लाइव टेस्ट: नया डायरेक्ट रेफरल जोड़ें
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTestReferralModal(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300">
+                यह आपके रेफरल कोड <strong className="text-amber-400 font-mono">{currentUser.referralCode}</strong> से तुरंत एक नया टेस्ट यूज़र बनाकर आपके डायरेक्ट रेफरल (Level 1) में जोड़ेगा।
+              </p>
+
+              <form onSubmit={handleSimulateDirectReferral} className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                    खिलाड़ी का नाम (Player Name):
+                  </label>
+                  <input
+                    type="text"
+                    value={testMemberName}
+                    onChange={(e) => setTestMemberName(e.target.value)}
+                    required
+                    placeholder="e.g. Rahul Verma"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
+                    मोबाइल नंबर (Mobile Number):
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-amber-400">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={testMemberPhone}
+                      onChange={(e) => setTestMemberPhone(e.target.value.replace(/\D/g, ''))}
+                      required
+                      className="w-full pl-12 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-mono font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 text-[11px] text-amber-300 space-y-1 font-mono">
+                  <div>स्पॉन्सर कोड: <strong className="text-white">{currentUser.referralCode}</strong></div>
+                  <div>स्पॉन्सर नाम: <strong className="text-white">{currentUser.name}</strong></div>
+                  <div>लेवल: <strong className="text-emerald-400">Level 1 (Direct)</strong></div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowTestReferralModal(false)}
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold"
+                  >
+                    रद्द करें (Cancel)
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSimulating}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg disabled:opacity-50"
+                  >
+                    {isSimulating ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>जोड़ा जा रहा है...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>तुरंत रजिस्टर करें</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </section>

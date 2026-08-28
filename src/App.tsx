@@ -3356,6 +3356,8 @@ export function App() {
               onOpenDeposit={() => handleNavigate('wallet')}
               onForceRefresh={handleForceRefresh}
               isSyncing={isSyncing}
+              onRegisterUser={handleRegisterUser}
+              onOpenAuth={handleOpenAuth}
             />
           ) : (
             <ProtectedViewGate
