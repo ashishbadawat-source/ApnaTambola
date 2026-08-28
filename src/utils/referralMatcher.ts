@@ -68,6 +68,9 @@ export function isDirectChildOf(
     if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '') === pCodeNoPrefix) return true;
   }
 
+  // Admin alias matching check (handles REF-ADM001, REF-ADMIN, ADM001, ADMIN, etc.)
+  const isAdminParent = parent.role === 'admin' || pId === 'USR_ADMIN_001' || pCode.includes('ADMIN') || pCode.includes('ADM');
+
   // 2. Matching child.referredBy or sponsorCode / referrerCode strings
   const childReferrerCodes = [
     child.referredBy,
@@ -84,6 +87,21 @@ export function isDirectChildOf(
     const cleanNoPrefix = cleanRaw.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
     const cleanDigits = cleanRaw.replace(/\D/g, '');
     const cleanLower = String(rawCode).trim().toLowerCase();
+
+    // Admin alias check
+    if (isAdminParent) {
+      if (
+        cleanRaw === 'REF-ADMIN' ||
+        cleanRaw === 'REF-ADM001' ||
+        cleanRaw === 'REF-ADM' ||
+        cleanNoPrefix === 'ADMIN' ||
+        cleanNoPrefix === 'ADM001' ||
+        cleanNoPrefix === 'ADM' ||
+        cleanRaw.includes('ADM')
+      ) {
+        return true;
+      }
+    }
 
     // Exact referral code match
     if (pCode && cleanRaw === pCode) return true;
