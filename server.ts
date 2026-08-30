@@ -306,13 +306,25 @@ async function startServer() {
       const cleanRef = extractReferralCode(rawReferralInput);
       let referrer: User | null = null;
 
+      // Check if client provided the resolved referrerUser object
+      if (body.referrerUser && body.referrerUser.id) {
+        referrer = body.referrerUser;
+        // Make sure it exists or is updated in memory users array
+        const refIdx = users.findIndex((u) => u.id === body.referrerUser.id);
+        if (refIdx >= 0) {
+          users[refIdx] = { ...users[refIdx], ...body.referrerUser };
+        } else {
+          users.push(body.referrerUser);
+        }
+      }
+
       // Prevent self-referral
       const isSelfReferral =
         (providedId && (providedId === cleanRef || providedId === rawReferralInput)) ||
         (existingUserIdx >= 0 && (users[existingUserIdx].referralCode === cleanRef || users[existingUserIdx].id === cleanRef));
 
       if (!isSelfReferral) {
-        if (providedReferredByUserId) {
+        if (!referrer && providedReferredByUserId) {
           referrer = users.find((u) => u.id === providedReferredByUserId || (u as any).user_id === providedReferredByUserId) || null;
         }
 
@@ -329,10 +341,10 @@ async function startServer() {
           ? users[existingUserIdx].referralCode
           : `REF-${String(name).replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`);
 
-      // Critical: If no valid referrer, referrer_id is explicitly null (never assign random user)
-      const finalReferrerId = referrer ? referrer.id : null;
-      const finalReferredBy = referrer ? (referrer.referralCode || referrer.id) : '';
-      const finalReferredByUserId = referrer ? referrer.id : '';
+      // Preserve referral code and referrer ID even if referrer user was temporarily cold
+      const finalReferrerId = referrer ? referrer.id : (providedReferredByUserId || (cleanRef ? cleanRef : null));
+      const finalReferredBy = referrer ? (referrer.referralCode || referrer.id) : (cleanRef || rawReferralInput || body.referredBy || (body.user && body.user.referredBy) || '');
+      const finalReferredByUserId = referrer ? referrer.id : (providedReferredByUserId || '');
 
       const nowIso = new Date().toISOString();
 
@@ -381,9 +393,10 @@ async function startServer() {
       // STEP 4: Award referrer bonus & commission record atomically
       let joinComm: ReferralCommission | null = null;
       if (referrer) {
-        referrer.walletBalance = (referrer.walletBalance || 0) + 10;
-        referrer.referralBalance = (referrer.referralBalance || 0) + 10;
-        referrer.referralCount = (referrer.referralCount || 0) + 1;
+        const refInArray = users.find((u) => u.id === referrer!.id) || referrer;
+        refInArray.walletBalance = (refInArray.walletBalance || 0) + 10;
+        refInArray.referralBalance = (refInArray.referralBalance || 0) + 10;
+        refInArray.referralCount = (refInArray.referralCount || 0) + 1;
 
         const existingJoinComm = commissions.find(
           (c) => c.userId === referrer!.id && c.sourceUserId === newUser.id && c.gameId === 'signup_bonus'

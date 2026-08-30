@@ -798,8 +798,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         firstDepositBonusClaimed: false,
         hasDeposited: false,
         referralCode: resolvedReferralCode,
+        referrer_id: finalReferredByUserId || (finalReferrer ? finalReferrer.id : (cleanRefCode ? cleanRefCode : null)),
         referredBy: finalReferredByCode || '',
-        referredByUserId: finalReferredByUserId || '',
+        referredByUserId: finalReferredByUserId || (finalReferrer ? finalReferrer.id : ''),
         kycStatus: 'verified',
         avatar: selectedAvatar || AVATAR_OPTIONS[0],
         createdAt: new Date().toISOString(),
@@ -825,9 +826,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             email: newUser.email,
             password: newUser.password,
             referralCode: newUser.referralCode,
+            referrer_id: newUser.referrer_id,
             referredBy: newUser.referredBy,
             referredByUserId: newUser.referredByUserId,
             referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
+            referrerUser: finalReferrer,
             selectedAvatar: newUser.avatar,
           }),
         });
@@ -1045,6 +1048,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           referralBalance: 0,
           bonusRewardBalance: 0,
           referralCode: `REF-${(fbUser.displayName || 'GOOG').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+          referrer_id: googleReferrer ? googleReferrer.id : (cleanGRef || null),
           referredBy: googleReferrer ? (googleReferrer.referralCode || googleReferrer.id || cleanGRef) : (cleanGRef || ''),
           referredByUserId: googleReferrer ? googleReferrer.id : '',
           kycStatus: 'verified',
@@ -1057,6 +1061,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             upiId: `${(fbUser.email || 'player').split('@')[0]}@upi`,
           },
         };
+
+        try {
+          fetch('/api/users/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user: appUser,
+              id: appUser.id,
+              name: appUser.name,
+              email: appUser.email,
+              referralCode: appUser.referralCode,
+              referrer_id: appUser.referrer_id,
+              referredBy: appUser.referredBy,
+              referredByUserId: appUser.referredByUserId,
+              referrerUser: googleReferrer,
+              referralCodeInput: cleanGRef,
+            }),
+          }).catch(() => {});
+        } catch (e) {}
 
         try {
           const sanitizedGoogleUser = JSON.parse(JSON.stringify(appUser));

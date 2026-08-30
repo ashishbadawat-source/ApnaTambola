@@ -233,8 +233,20 @@ export function App() {
         setShowAdminLoginModal(true);
       }
 
-      // Check referral link
-      const refCode = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('r');
+      // Robust Check for referral link across query parameters, hash, or pathname
+      let refCode = urlParams.get('ref') || urlParams.get('referral') || urlParams.get('r') || urlParams.get('sponsor') || urlParams.get('refCode') || '';
+      
+      if (!refCode && window.location.hash) {
+        const hashMatch = window.location.hash.match(/[?&#](ref|referral|r|sponsor)=([^&#]+)/i) || window.location.hash.match(/#ref=([^&#]+)/i);
+        if (hashMatch && hashMatch[2]) refCode = decodeURIComponent(hashMatch[2]);
+        else if (hashMatch && hashMatch[1] && !window.location.hash.includes('=')) refCode = decodeURIComponent(hashMatch[1]);
+      }
+
+      if (!refCode && window.location.pathname) {
+        const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/i);
+        if (pathMatch && pathMatch[1]) refCode = pathMatch[1];
+      }
+
       if (refCode && refCode.trim()) {
         const cleanRef = refCode.trim().toUpperCase();
         localStorage.setItem('apna_tambola_pending_referral', cleanRef);
