@@ -86,6 +86,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [otpTimer, setOtpTimer] = useState(30);
 
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [existingUserFound, setExistingUserFound] = useState<User | null>(null);
   const [isResetPasswordMode, setIsResetPasswordMode] = useState(false);
   const [resetNewPassword, setResetNewPassword] = useState('');
@@ -600,132 +601,279 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatusMessage(null);
+    setIsSubmitting(true);
 
-    const name = registerName.trim();
-    const phoneDigits = cleanPhone(registerPhone);
-    const email = registerEmail.trim();
-    const pwd = registerPassword;
-    const confirmPwd = registerConfirmPassword;
+    try {
+      const name = registerName.trim();
+      const phoneDigits = cleanPhone(registerPhone);
+      const email = registerEmail.trim();
+      const pwd = registerPassword;
+      const confirmPwd = registerConfirmPassword;
 
-    if (!name) {
-      setStatusMessage({
-        type: 'error',
-        text: lang === 'hi' ? 'कृपया अपना पूरा नाम दर्ज करें।' : 'Please enter your full name.',
-      });
-      return;
-    }
+      if (!name) {
+        setStatusMessage({
+          type: 'error',
+          text: lang === 'hi' ? 'कृपया अपना पूरा नाम दर्ज करें।' : 'Please enter your full name.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
-    if (phoneDigits.length !== 10) {
-      setStatusMessage({
-        type: 'error',
-        text: lang === 'hi' ? 'कृपया सही 10-अंकों का मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.',
-      });
-      return;
-    }
+      if (!phoneDigits || phoneDigits.length !== 10) {
+        setStatusMessage({
+          type: 'error',
+          text: lang === 'hi' ? 'कृपया 10-अंकों का सही मोबाइल नंबर दर्ज करें (उदा. 9876543210)।' : 'Please enter a valid 10-digit mobile number.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
-    if (!pwd || pwd.length < 4) {
-      setStatusMessage({
-        type: 'error',
-        text: lang === 'hi' ? 'पासवर्ड कम से कम 4 अक्षरों का होना चाहिए।' : 'Password must be at least 4 characters long.',
-      });
-      return;
-    }
+      if (!pwd || pwd.length < 4) {
+        setStatusMessage({
+          type: 'error',
+          text: lang === 'hi' ? 'पासवर्ड कम से कम 4 अक्षरों का होना चाहिए।' : 'Password must be at least 4 characters long.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
-    if (pwd !== confirmPwd) {
-      setStatusMessage({
-        type: 'error',
-        text: lang === 'hi' ? 'पासवर्ड और कन्फर्म पासवर्ड एक समान नहीं हैं।' : 'Passwords do not match.',
-      });
-      return;
-    }
+      if (pwd !== confirmPwd) {
+        setStatusMessage({
+          type: 'error',
+          text: lang === 'hi' ? 'पासवर्ड और कन्फर्म पासवर्ड एक समान नहीं हैं।' : 'Passwords do not match.',
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
-    // Resolve referredBy code and exact referrer profile first
-    const rawRefInput = referralCodeInput || (typeof window !== 'undefined' ? localStorage.getItem('apna_tambola_pending_referral') || '' : '');
-    const cleanRefCode = extractReferralCode(rawRefInput);
-    let finalReferrer: User | null = matchedReferrer || null;
+      // Resolve referredBy code and exact referrer profile first
+      const rawRefInput = referralCodeInput || (typeof window !== 'undefined' ? localStorage.getItem('apna_tambola_pending_referral') || '' : '');
+      const cleanRefCode = extractReferralCode(rawRefInput);
+      let finalReferrer: User | null = matchedReferrer || null;
 
-    if (!finalReferrer && cleanRefCode) {
-      // 1. Check local loaded users using robust matcher
-      finalReferrer = findReferrerInList(cleanRefCode, allUsers);
+      if (!finalReferrer && cleanRefCode) {
+        // 1. Check local loaded users using robust matcher
+        finalReferrer = findReferrerInList(cleanRefCode, allUsers);
 
-      // 2. Proactively search Firestore directly if not yet in local allUsers memory
-      if (!finalReferrer) {
-        try {
-          const qRef = query(collection(db, 'users'), where('referralCode', '==', cleanRefCode));
-          const snapRef = await getDocs(qRef);
-          if (!snapRef.empty) {
-            finalReferrer = { ...(snapRef.docs[0].data() as User), id: snapRef.docs[0].id };
-          } else {
-            const allUsersSnap = await getDocs(collection(db, 'users'));
-            if (!allUsersSnap.empty) {
-              const fsList: User[] = [];
-              allUsersSnap.forEach((d) => fsList.push({ ...(d.data() as User), id: d.id }));
-              finalReferrer = findReferrerInList(cleanRefCode, fsList);
+        // 2. Proactively search Firestore directly if not yet in local allUsers memory
+        if (!finalReferrer) {
+          try {
+            const qRef = query(collection(db, 'users'), where('referralCode', '==', cleanRefCode));
+            const snapRef = await getDocs(qRef);
+            if (!snapRef.empty) {
+              finalReferrer = { ...(snapRef.docs[0].data() as User), id: snapRef.docs[0].id };
+            } else {
+              const allUsersSnap = await getDocs(collection(db, 'users'));
+              if (!allUsersSnap.empty) {
+                const fsList: User[] = [];
+                allUsersSnap.forEach((d) => fsList.push({ ...(d.data() as User), id: d.id }));
+                finalReferrer = findReferrerInList(cleanRefCode, fsList);
+              }
             }
+          } catch (err) {
+            console.warn('Direct referrer search in Firestore notice:', err);
           }
-        } catch (err) {
-          console.warn('Direct referrer search in Firestore notice:', err);
         }
       }
-    }
 
-    const finalReferredByCode = finalReferrer ? (finalReferrer.referralCode || finalReferrer.id || cleanRefCode) : cleanRefCode;
-    const finalReferredByUserId = finalReferrer ? finalReferrer.id : '';
+      const finalReferredByCode = finalReferrer ? (finalReferrer.referralCode || finalReferrer.id || cleanRefCode) : cleanRefCode;
+      const finalReferredByUserId = finalReferrer ? finalReferrer.id : '';
 
-    // Check if phone or email already registered
-    const existingPhone = allUsers.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
-    const existingEmail = email ? allUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase()) : null;
-    const existingUser = existingPhone || existingEmail;
+      // Check if phone or email already registered
+      const existingPhone = allUsers.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits));
+      const existingEmail = email ? allUsers.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase()) : null;
+      const existingUser = existingPhone || existingEmail;
 
-    if (existingUser) {
-      // If user is registering with details & referral code, seamlessly update and connect under the sponsor!
-      const updatedUser: User = {
-        ...existingUser,
-        name: name || existingUser.name,
-        password: pwd || existingUser.password,
-        avatar: selectedAvatar || existingUser.avatar,
-        referredBy: finalReferredByCode || existingUser.referredBy || '',
-        referredByUserId: finalReferredByUserId || existingUser.referredByUserId || '',
+      if (existingUser) {
+        // If user is registering with details & referral code, seamlessly update and connect under the sponsor!
+        const updatedUser: User = {
+          ...existingUser,
+          name: name || existingUser.name,
+          password: pwd || existingUser.password,
+          avatar: selectedAvatar || existingUser.avatar,
+          referredBy: finalReferredByCode || existingUser.referredBy || '',
+          referredByUserId: finalReferredByUserId || existingUser.referredByUserId || '',
+          status: 'active',
+          isBlocked: false,
+        };
+
+        // Save to server backend
+        try {
+          fetch('/api/users/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user: updatedUser,
+              id: updatedUser.id,
+              name: updatedUser.name,
+              phone: updatedUser.phone,
+              email: updatedUser.email,
+              password: updatedUser.password,
+              referralCode: updatedUser.referralCode,
+              referredBy: updatedUser.referredBy,
+              referredByUserId: updatedUser.referredByUserId,
+              referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
+              selectedAvatar: updatedUser.avatar,
+            }),
+          }).catch((e) => console.warn('Server registration update notice:', e));
+        } catch (e) {}
+
+        // Save to Firestore
+        try {
+          const sanitizedUser = JSON.parse(JSON.stringify(updatedUser));
+          setDoc(doc(db, 'users', updatedUser.id), sanitizedUser, { merge: true }).catch(() => {});
+        } catch (err) {}
+
+        // Credit direct sponsor if new referral
+        if (finalReferrer) {
+          try {
+            const joinCommission: ReferralCommission = {
+              id: `comm_join_${Date.now()}_${updatedUser.id}`,
+              userId: finalReferrer.id,
+              userName: finalReferrer.name,
+              sourceUserId: updatedUser.id,
+              sourceUserName: updatedUser.name,
+              gameId: 'signup_bonus',
+              gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
+              ticketId: 'REG-DIRECT',
+              level: 1,
+              percentage: 10,
+              baseAmount: 10,
+              commissionAmount: 10,
+              transactionId: `TXN-REF-${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              status: 'approved',
+            };
+            const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
+            setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
+            fetch('/api/commissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(sanitizedComm),
+            }).catch(() => {});
+          } catch (err) {}
+        }
+
+        // Broadcast registration event across tabs
+        try {
+          if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+            const bc = new BroadcastChannel('apna_tambola_sync');
+            bc.postMessage({ type: 'NEW_USER_REGISTERED', user: updatedUser });
+            bc.close();
+          }
+        } catch (e) {}
+
+        if (onRegisterUser) {
+          onRegisterUser(updatedUser);
+        }
+        playWinningFanfare();
+        setStatusMessage({
+          type: 'success',
+          text: lang === 'hi' ? '🎉 खाता सफलतापूर्वक अपडेट और लॉगिन हो गया!' : '🎉 Account updated and logged in successfully!',
+        });
+        setTimeout(() => {
+          onLogin(updatedUser);
+          onClose();
+        }, 500);
+        return;
+      }
+
+      // Create New Registered User
+      const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
+      const formattedPhone = `+91 ${phoneDigits}`;
+      let newUser: User = {
+        id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+        name: name.trim(),
+        email: email ? email.trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
+        phone: formattedPhone,
+        password: pwd,
+        role: 'user',
         status: 'active',
         isBlocked: false,
+        walletBalance: 0,
+        depositBalance: 0,
+        winningBalance: 0,
+        referralBalance: 0,
+        bonusRewardBalance: 0,
+        firstDepositBonusClaimed: false,
+        hasDeposited: false,
+        referralCode: resolvedReferralCode,
+        referredBy: finalReferredByCode || '',
+        referredByUserId: finalReferredByUserId || '',
+        kycStatus: 'verified',
+        avatar: selectedAvatar || AVATAR_OPTIONS[0],
+        createdAt: new Date().toISOString(),
+        bankDetails: {
+          accountName: name.trim(),
+          accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
+          ifsc: 'SBIN0001234',
+          bankName: 'State Bank of India',
+          upiId: `${phoneDigits}@upi`,
+        },
       };
 
-      // Save to server backend
+      // Save to server backend via REST API for instant cross-device and cross-browser sync
       try {
-        await fetch('/api/users/register', {
+        const serverRes = await fetch('/api/users/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            user: updatedUser,
-            id: updatedUser.id,
-            name: updatedUser.name,
-            phone: updatedUser.phone,
-            email: updatedUser.email,
-            password: updatedUser.password,
-            referralCode: updatedUser.referralCode,
-            referredBy: updatedUser.referredBy,
-            referredByUserId: updatedUser.referredByUserId,
+            user: newUser,
+            id: newUser.id,
+            name: newUser.name,
+            phone: newUser.phone,
+            email: newUser.email,
+            password: newUser.password,
+            referralCode: newUser.referralCode,
+            referredBy: newUser.referredBy,
+            referredByUserId: newUser.referredByUserId,
             referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
-            selectedAvatar: updatedUser.avatar,
+            selectedAvatar: newUser.avatar,
           }),
-        }).catch((e) => console.warn('Server registration update notice:', e));
-      } catch (e) {}
+        });
+        if (serverRes.ok) {
+          const serverData = await serverRes.json();
+          if (serverData.user) {
+            newUser = { ...newUser, ...serverData.user };
+          }
+          if (serverData.referrer && !finalReferrer) {
+            finalReferrer = serverData.referrer;
+          }
+        }
+      } catch (e) {
+        console.warn('Server registration call notice:', e);
+      }
 
-      // Save to Firestore
+      // Save to Firestore users collection so all other devices receive this new user in real-time
       try {
-        const sanitizedUser = JSON.parse(JSON.stringify(updatedUser));
-        await setDoc(doc(db, 'users', updatedUser.id), sanitizedUser, { merge: true }).catch(() => {});
-      } catch (err) {}
+        const sanitizedUser = JSON.parse(JSON.stringify(newUser));
+        const firestoreSavePromise = setDoc(doc(db, 'users', newUser.id), sanitizedUser);
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1500));
+        await Promise.race([firestoreSavePromise, timeoutPromise]).catch((e) =>
+          console.warn('Firestore user save notice:', e)
+        );
+      } catch (err) {
+        console.error('Firestore user save error:', err);
+      }
 
-      // Credit direct sponsor if new referral
+      // If referred by another user, update the referrer in Firestore and award direct referral bonus & commission doc
       if (finalReferrer) {
         try {
+          const updatedReferrer: User = {
+            ...finalReferrer,
+            referralBalance: (finalReferrer.referralBalance || 0) + 10,
+            walletBalance: (finalReferrer.walletBalance || 0) + 10,
+          };
+          const sanitizedReferrer = JSON.parse(JSON.stringify(updatedReferrer));
+          setDoc(doc(db, 'users', finalReferrer.id), sanitizedReferrer, { merge: true }).catch(() => {});
+
+          // Create direct commission record
           const joinCommission: ReferralCommission = {
-            id: `comm_join_${Date.now()}_${updatedUser.id}`,
+            id: `comm_join_${Date.now()}_${newUser.id}`,
             userId: finalReferrer.id,
             userName: finalReferrer.name,
-            sourceUserId: updatedUser.id,
-            sourceUserName: updatedUser.name,
+            sourceUserId: newUser.id,
+            sourceUserName: newUser.name,
             gameId: 'signup_bonus',
             gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
             ticketId: 'REG-DIRECT',
@@ -739,168 +887,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           };
           const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
           setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
+
+          // Also post commission to server
           fetch('/api/commissions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(sanitizedComm),
           }).catch(() => {});
-        } catch (err) {}
+        } catch (err) {
+          console.warn('Could not update referrer notice:', err);
+        }
       }
 
-      // Broadcast registration event across tabs
+      // Broadcast registration event across local tabs and windows
       try {
         if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const bc = new BroadcastChannel('apna_tambola_sync');
-          bc.postMessage({ type: 'NEW_USER_REGISTERED', user: updatedUser });
+          bc.postMessage({ type: 'NEW_USER_REGISTERED', user: newUser });
           bc.close();
         }
       } catch (e) {}
 
       if (onRegisterUser) {
-        onRegisterUser(updatedUser);
+        onRegisterUser(newUser);
       }
       playWinningFanfare();
-      onLogin(updatedUser);
-      onClose();
-      return;
-    }
-
-    // Create New Registered User (₹10 Bonus will be added on their 1st deposit)
-    const resolvedReferralCode = `REF-${name.replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`;
-    const formattedPhone = `+91 ${phoneDigits}`;
-    let newUser: User = {
-      id: `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
-      name: name.trim(),
-      email: email ? email.trim() : `${name.toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
-      phone: formattedPhone,
-      password: pwd,
-      role: 'user',
-      status: 'active',
-      isBlocked: false,
-      walletBalance: 0,
-      depositBalance: 0,
-      winningBalance: 0,
-      referralBalance: 0,
-      bonusRewardBalance: 0,
-      firstDepositBonusClaimed: false,
-      hasDeposited: false,
-      referralCode: resolvedReferralCode,
-      referredBy: finalReferredByCode || '',
-      referredByUserId: finalReferredByUserId || '',
-      kycStatus: 'verified',
-      avatar: selectedAvatar || AVATAR_OPTIONS[0],
-      createdAt: new Date().toISOString(),
-      bankDetails: {
-        accountName: name.trim(),
-        accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
-        ifsc: 'SBIN0001234',
-        bankName: 'State Bank of India',
-        upiId: `${phoneDigits}@upi`,
-      },
-    };
-
-    // Save to server backend via REST API for instant cross-device and cross-browser sync
-    try {
-      const serverRes = await fetch('/api/users/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user: newUser,
-          id: newUser.id,
-          name: newUser.name,
-          phone: newUser.phone,
-          email: newUser.email,
-          password: newUser.password,
-          referralCode: newUser.referralCode,
-          referredBy: newUser.referredBy,
-          referredByUserId: newUser.referredByUserId,
-          referralCodeInput: cleanRefCode || (finalReferrer ? finalReferrer.referralCode : ''),
-          selectedAvatar: newUser.avatar,
-        }),
+      setStatusMessage({
+        type: 'success',
+        text: lang === 'hi' ? '🎉 खाता सफलतापूर्वक बन गया! लॉगिन हो रहे हैं...' : '🎉 Account created successfully! Logging in...',
       });
-      if (serverRes.ok) {
-        const serverData = await serverRes.json();
-        if (serverData.user) {
-          newUser = { ...newUser, ...serverData.user };
-        }
-        if (serverData.referrer && !finalReferrer) {
-          finalReferrer = serverData.referrer;
-        }
-      }
-    } catch (e) {
-      console.warn('Server registration call notice:', e);
+      setTimeout(() => {
+        onLogin(newUser);
+        onClose();
+      }, 500);
+    } catch (err: any) {
+      console.error('Registration submit error:', err);
+      setStatusMessage({
+        type: 'error',
+        text: lang === 'hi' ? `रजिस्ट्रेशन में त्रुटि: ${err?.message || 'कृपया दोबारा प्रयास करें'}` : `Registration failed: ${err?.message || 'Please try again'}`,
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Save to Firestore users collection so all other devices receive this new user in real-time
-    try {
-      const sanitizedUser = JSON.parse(JSON.stringify(newUser));
-      const firestoreSavePromise = setDoc(doc(db, 'users', newUser.id), sanitizedUser);
-      const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 1500));
-      await Promise.race([firestoreSavePromise, timeoutPromise]).catch((e) =>
-        console.warn('Firestore user save notice:', e)
-      );
-    } catch (err) {
-      console.error('Firestore user save error:', err);
-    }
-
-    // If referred by another user, update the referrer in Firestore and award direct referral bonus & commission doc
-    if (finalReferrer) {
-      try {
-        const updatedReferrer: User = {
-          ...finalReferrer,
-          referralBalance: (finalReferrer.referralBalance || 0) + 10,
-          walletBalance: (finalReferrer.walletBalance || 0) + 10,
-        };
-        const sanitizedReferrer = JSON.parse(JSON.stringify(updatedReferrer));
-        setDoc(doc(db, 'users', finalReferrer.id), sanitizedReferrer, { merge: true }).catch(() => {});
-
-        // Create direct commission record
-        const joinCommission: ReferralCommission = {
-          id: `comm_join_${Date.now()}_${newUser.id}`,
-          userId: finalReferrer.id,
-          userName: finalReferrer.name,
-          sourceUserId: newUser.id,
-          sourceUserName: newUser.name,
-          gameId: 'signup_bonus',
-          gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
-          ticketId: 'REG-DIRECT',
-          level: 1,
-          percentage: 10,
-          baseAmount: 10,
-          commissionAmount: 10,
-          transactionId: `TXN-REF-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          status: 'approved',
-        };
-        const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
-        setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
-
-        // Also post commission to server
-        fetch('/api/commissions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sanitizedComm),
-        }).catch(() => {});
-      } catch (err) {
-        console.warn('Could not update referrer notice:', err);
-      }
-    }
-
-    // Broadcast registration event across local tabs and windows
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        const bc = new BroadcastChannel('apna_tambola_sync');
-        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: newUser });
-        bc.close();
-      }
-    } catch (e) {}
-
-    if (onRegisterUser) {
-      onRegisterUser(newUser);
-    }
-    playWinningFanfare();
-    onLogin(newUser);
-    onClose();
   };
 
   // ==================== PASSWORD RESET HANDLER ====================
@@ -1753,9 +1781,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </span>
                 <input
                   type="tel"
-                  maxLength={10}
+                  maxLength={14}
                   value={registerPhone}
-                  onChange={(e) => setRegisterPhone(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, '');
+                    if (raw.startsWith('91') && raw.length > 10) {
+                      setRegisterPhone(raw.slice(2, 12));
+                    } else if (raw.startsWith('0') && raw.length > 10) {
+                      setRegisterPhone(raw.slice(1, 11));
+                    } else {
+                      setRegisterPhone(raw.slice(0, 10));
+                    }
+                  }}
                   placeholder={t.phonePlaceholder}
                   className="w-full pl-14 pr-3.5 py-2 rounded-xl bg-slate-950/90 border border-slate-700 text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
                   required
@@ -1770,7 +1807,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <span>{t.emailLabel}</span>
               </label>
               <input
-                type="email"
+                type="text"
                 value={registerEmail}
                 onChange={(e) => setRegisterEmail(e.target.value)}
                 placeholder={t.emailPlaceholder}
@@ -1808,6 +1845,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   placeholder="Confirm Password"
                   className="w-full px-3 py-2 rounded-xl bg-slate-950/90 border border-slate-700 text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                   required
+                  minLength={4}
                 />
               </div>
             </div>
@@ -1895,19 +1933,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 checked={agreedTerms}
                 onChange={(e) => setAgreedTerms(e.target.checked)}
                 className="rounded accent-amber-500 w-4 h-4 cursor-pointer"
-                required
               />
               <span>{t.agreeTerms}</span>
             </label>
 
+            {/* Bottom Status Message (if any) */}
+            {statusMessage && (
+              <div
+                className={`p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  statusMessage.type === 'success'
+                    ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-300'
+                    : 'bg-red-950/90 border border-red-500/50 text-red-200'
+                }`}
+              >
+                {statusMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                )}
+                <span>{statusMessage.text}</span>
+              </div>
+            )}
+
             {/* Submit Register Button */}
             <button
               type="submit"
-              disabled={!agreedTerms}
+              disabled={!agreedTerms || isSubmitting}
               className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:scale-[1.02]"
             >
-              <Gift className="w-4 h-4" />
-              <span>{t.registerBtn}</span>
+              {isSubmitting ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                  <span>{lang === 'hi' ? 'रजिस्टर किया जा रहा है...' : 'Creating Account...'}</span>
+                </>
+              ) : (
+                <>
+                  <Gift className="w-4 h-4" />
+                  <span>{t.registerBtn}</span>
+                </>
+              )}
             </button>
           </form>
         )}

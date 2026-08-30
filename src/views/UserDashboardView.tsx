@@ -610,23 +610,26 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 👥 MY DIRECT REFERRALS (मेरे डायरेक्ट रेफरल्स) - Real-time Database Powered */}
-      <div className="rounded-3xl bg-gradient-to-br from-[#1a0b2e] via-[#120824] to-[#0a0414] border-2 border-purple-400 p-5 sm:p-6 shadow-2xl shadow-purple-950/60 space-y-4">
+      {/* 👥 MY DIRECT REFERRALS (मेरे डायरेक्ट रेफरल्स - LEVEL 1) - Real-time Database Powered & Flashing */}
+      <div className="rounded-3xl bg-gradient-to-br from-[#1a0b2e] via-[#120824] to-[#0a0414] border-2 border-amber-400 p-5 sm:p-6 shadow-2xl shadow-purple-950/60 space-y-4 relative overflow-hidden">
+        {/* Golden Flash Accent Top Light Bar */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse pointer-events-none" />
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-500/30">
           <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-400/40 shadow-inner">
-              <Users className="w-6 h-6 text-purple-300" />
+            <div className="p-3 rounded-2xl bg-amber-400/20 text-amber-300 border border-amber-400/50 shadow-inner animate-pulse">
+              <Users className="w-6 h-6 text-amber-300" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg sm:text-xl font-black text-white">
-                  MY DIRECT REFERRALS (मेरे डायरेक्ट रेफरल्स)
+                  MY DIRECT REFERRALS (लेवल 1 डायरेक्ट मेंबर्स)
                 </h3>
-                <span className="px-2.5 py-0.5 rounded-full bg-purple-500 text-white font-black text-xs font-mono shadow">
-                  {directLiveUsers.length} Direct Users
+                <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs font-mono shadow-md animate-pulse">
+                  ⚡ {directLiveUsers.length} DIRECT MEMBERS
                 </span>
               </div>
-              <p className="text-xs text-purple-200/80 mt-0.5">
+              <p className="text-xs text-amber-200/80 mt-0.5">
                 सीधे आपके रेफरल लिंक से जुड़े खिलाड़ी (Database-Verified Level 1 Downline)
               </p>
             </div>
@@ -653,15 +656,19 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
         {/* Quick Search & Count Filter */}
         {directLiveUsers.length > 0 && (
           <div className="flex items-center justify-between gap-3">
-            <div className="text-xs text-slate-300 font-bold">
-              कुल डायरेक्ट सक्रिय सदस्य: <strong className="text-amber-300 font-mono">{directLiveUsers.length} लोग</strong>
+            <div className="text-xs text-slate-300 font-bold flex items-center gap-1.5">
+              <span>कुल डायरेक्ट सक्रिय सदस्य:</span>
+              <strong className="text-amber-300 font-mono text-sm">{directLiveUsers.length} लोग</strong>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px]">
+                🟢 2.0% L1 Commission Active
+              </span>
             </div>
             <input
               type="text"
               value={directSearch}
               onChange={(e) => setDirectSearch(e.target.value)}
               placeholder="Search by name, ID or mobile..."
-              className="bg-slate-950/80 border border-purple-400/30 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+              className="bg-slate-950/80 border border-amber-400/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
             />
           </div>
         )}
@@ -689,13 +696,14 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             </div>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-purple-500/40 bg-slate-950/90 shadow-inner">
+          <div className="overflow-x-auto rounded-2xl border border-amber-500/40 bg-slate-950/90 shadow-inner">
             <table className="w-full text-left text-xs">
-              <thead className="bg-purple-950/60 text-purple-300 uppercase font-black text-[10px] tracking-wider border-b border-purple-500/30">
+              <thead className="bg-purple-950/60 text-amber-300 uppercase font-black text-[10px] tracking-wider border-b border-purple-500/30">
                 <tr>
                   <th className="px-3.5 py-3">Player Name</th>
                   <th className="px-3.5 py-3">User ID</th>
                   <th className="px-3.5 py-3">Contact</th>
+                  <th className="px-3.5 py-3">Level Status</th>
                   <th className="px-3.5 py-3">Referral Code</th>
                   <th className="px-3.5 py-3">Registration Date</th>
                   <th className="px-3.5 py-3">Status</th>
@@ -708,20 +716,30 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                       <img
                         src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
                         alt={u.name}
-                        className="w-7 h-7 rounded-full object-cover border border-purple-400/40 shrink-0"
+                        className="w-8 h-8 rounded-full object-cover border-2 border-amber-400 shrink-0"
                       />
-                      <span>{u.name}</span>
+                      <div>
+                        <div className="font-bold text-white flex items-center gap-1.5">
+                          <span>{u.name}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{u.email}</span>
+                      </div>
                     </td>
                     <td className="px-3.5 py-3 font-mono text-[11px] text-purple-300 font-bold select-all">
                       {u.id}
                     </td>
-                    <td className="px-3.5 py-3 font-mono text-[11px] text-slate-400">
+                    <td className="px-3.5 py-3 font-mono text-[11px] text-slate-200 font-bold">
                       {u.phone ? `${u.phone.slice(0, 7)}XXXX` : 'N/A'}
+                    </td>
+                    <td className="px-3.5 py-3">
+                      <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-[9px] shadow animate-pulse">
+                        ⚡ LEVEL 1 DIRECT
+                      </span>
                     </td>
                     <td className="px-3.5 py-3 font-mono font-black text-amber-300">
                       {u.referralCode}
                     </td>
-                    <td className="px-3.5 py-3 text-slate-400 text-[11px]">
+                    <td className="px-3.5 py-3 text-slate-300 text-[11px]">
                       {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today'}
                     </td>
                     <td className="px-3.5 py-3">

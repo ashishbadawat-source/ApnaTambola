@@ -61,14 +61,17 @@ export function isDirectChildOf(
     childObj.referrerId,
     childObj.uplineId,
     childObj.parentUserId,
+    childObj.sponsorUserId,
   ].filter(Boolean) as string[];
 
   for (const cRefUserIdRaw of childReferrerUserIds) {
     const cRefUserId = String(cRefUserIdRaw).trim().toUpperCase();
+    if (!cRefUserId) continue;
     if (cRefUserId === pId) return true;
     if (pUserId && cRefUserId === pUserId) return true;
     if (pCode && cRefUserId === pCode) return true;
     if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '') === pCodeNoPrefix) return true;
+    if (pPhone && cRefUserId.replace(/\D/g, '') === pPhone) return true;
   }
 
   // Admin alias matching check (handles REF-ADM001, REF-ADMIN, ADM001, ADMIN, etc.)
@@ -83,6 +86,8 @@ export function isDirectChildOf(
     childObj.sponsor,
     childObj.upline,
     childObj.uplineCode,
+    childObj.referralCodeInput,
+    childObj.referredByCode,
   ].filter(Boolean) as string[];
 
   for (const rawCode of childReferrerCodes) {
@@ -109,6 +114,7 @@ export function isDirectChildOf(
     // Exact referral code match
     if (pCode && cleanRaw === pCode) return true;
     if (pId && cleanRaw === pId) return true;
+    if (pUserId && cleanRaw === pUserId) return true;
 
     // Without prefix comparison (e.g. ASH772 vs REF-ASH772)
     if (pCodeNoPrefix && cleanNoPrefix && (pCodeNoPrefix === cleanNoPrefix || pCodeNoPrefix === cleanRaw || cleanNoPrefix === pCode)) {
@@ -142,7 +148,7 @@ export function isDirectChildOf(
   // 3. Check direct commissions log if provided
   if (commissionsList && commissionsList.length > 0) {
     const hasJoinComm = commissionsList.some(
-      (c) => c.userId === parent.id && c.sourceUserId === child.id && (c.level === 1 || c.gameId === 'signup_bonus')
+      (c) => c.userId === parent.id && c.sourceUserId === child.id && (c.level === 1 || c.gameId === 'signup_bonus' || c.ticketId === 'REG-DIRECT')
     );
     if (hasJoinComm) return true;
   }
@@ -172,6 +178,7 @@ export function findReferrerInList(
       if (!u || (excludeUserId && u.id === excludeUserId)) return false;
 
       const uId = (u.id || '').trim().toUpperCase();
+      const uUserId = ((u as any).user_id || '').trim().toUpperCase();
       const uCode = (u.referralCode || '').trim().toUpperCase();
       const uCodeNoPrefix = uCode.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
       const uPhone = (u.phone || '').replace(/\D/g, '');
@@ -181,6 +188,7 @@ export function findReferrerInList(
       // 1. Direct referralCode or user ID exact match
       if (uCode && (uCode === cleanRaw || uCodeNoPrefix === cleanNoPrefix)) return true;
       if (uId && uId === cleanRaw) return true;
+      if (uUserId && uUserId === cleanRaw) return true;
 
       // 2. Substring matches
       if (uCode && (cleanRaw.includes(uCode) || uCode.includes(cleanRaw))) return true;
@@ -209,4 +217,5 @@ export function findReferrerInList(
     }) || null
   );
 }
+
 
