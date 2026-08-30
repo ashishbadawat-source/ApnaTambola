@@ -620,7 +620,8 @@ export function App() {
     // Initial immediate sync
     pollServerSync();
 
-    const intervalId = setInterval(pollServerSync, 1500);
+    // ⚡ Continuous 1-Second Auto-Sync across all devices and tabs
+    const intervalId = setInterval(pollServerSync, 1000);
 
     const handleWindowFocus = () => {
       pollServerSync();

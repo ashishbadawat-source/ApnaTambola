@@ -633,6 +633,13 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                 <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-xs font-mono shadow-md animate-pulse">
                   ⚡ {directLiveUsers.length} DIRECT MEMBERS
                 </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span>⚡ Auto-Refreshing Live (1s)</span>
+                </span>
               </div>
               <p className="text-xs text-amber-200/80 mt-0.5">
                 सीधे आपके रेफरल लिंक से जुड़े खिलाड़ी (Database-Verified Level 1 Downline)
