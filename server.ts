@@ -281,17 +281,20 @@ async function startServer() {
       const email = body.email || (body.user && body.user.email);
       const password = body.password || (body.user && body.user.password);
       const rawReferralInput =
-        body.referrer_id ||
         body.referralCodeInput ||
+        body.referrer_id ||
         body.referredBy ||
-        body.referralCode ||
         body.referredByUserId ||
-        (body.user && (body.user.referrer_id || body.user.referredBy || body.user.referredByUserId)) ||
+        body.sponsorCode ||
+        body.sponsorId ||
+        body.referrerCode ||
+        body.uplineCode ||
+        (body.user && (body.user.referralCodeInput || body.user.referrer_id || body.user.referredBy || body.user.referredByUserId || (body.user as any).sponsorCode || (body.user as any).sponsorId)) ||
         '';
       const selectedAvatar = body.selectedAvatar || body.avatar || (body.user && body.user.avatar);
       const providedId = body.id || body.user_id || (body.user && (body.user.id || body.user.user_id));
       const providedRefCode = body.referralCode || (body.user && body.user.referralCode);
-      const providedReferredByUserId = body.referredByUserId || body.referrer_id || (body.user && (body.user.referredByUserId || body.user.referrer_id));
+      const providedReferredByUserId = body.referredByUserId || (body.user && body.user.referredByUserId);
 
       if (!name || !phone) {
         return res.status(400).json({ success: false, error: 'Name and mobile number are required.' });
@@ -318,7 +321,7 @@ async function startServer() {
         }
       }
 
-      // Prevent self-referral
+      // Prevent self-referral (only if the referral input matches this user's OWN ID or OWN newly generated code)
       const isSelfReferral =
         (providedId && (providedId === cleanRef || providedId === rawReferralInput)) ||
         (existingUserIdx >= 0 && (users[existingUserIdx].referralCode === cleanRef || users[existingUserIdx].id === cleanRef));
@@ -344,7 +347,7 @@ async function startServer() {
       // Preserve referral code and referrer ID even if referrer user was temporarily cold
       const finalReferrerId = referrer ? referrer.id : (providedReferredByUserId || (cleanRef ? cleanRef : null));
       const finalReferredBy = referrer ? (referrer.referralCode || referrer.id) : (cleanRef || rawReferralInput || body.referredBy || (body.user && body.user.referredBy) || '');
-      const finalReferredByUserId = referrer ? referrer.id : (providedReferredByUserId || '');
+      const finalReferredByUserId = referrer ? referrer.id : (providedReferredByUserId || (cleanRef ? cleanRef : ''));
 
       const nowIso = new Date().toISOString();
 

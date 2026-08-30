@@ -31,7 +31,7 @@ import {
   PhoneCall,
   MessageCircle,
 } from 'lucide-react';
-import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember } from '../types';
+import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
 
 interface UserDashboardViewProps {
@@ -41,6 +41,7 @@ interface UserDashboardViewProps {
   tickets: TambolaTicket[];
   winners: GameWinner[];
   referralMembers?: ReferralMember[];
+  commissions?: ReferralCommission[];
   onNavigate: (tab: string, gameId?: string) => void;
   onOpenDeposit: () => void;
   onOpenAuth?: (mode?: 'login' | 'register') => void;
@@ -53,6 +54,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   tickets,
   winners,
   referralMembers,
+  commissions = [],
   onNavigate,
   onOpenDeposit,
   onOpenAuth,
@@ -68,24 +70,27 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   const uplineUser = currentUser ? (
     allUsers.find((u) => {
       if (!currentUser || u.id === currentUser.id) return false;
-      return isDirectChildOf(currentUser, u);
+      return isDirectChildOf(currentUser, u, commissions);
     }) || null
   ) : null;
 
   // Calculate player stats
   const totalGamesPlayed = currentUser?.gamesPlayed || 0;
   const totalWinnings = currentUser?.totalWon || 0;
-  // Direct Live Users from canonical matcher & database fields
+  // Direct Live Users from canonical matcher & database fields (works across all devices)
   const directLiveUsers = currentUser
     ? allUsers.filter((u) => {
         if (!u || u.id === currentUser.id) return false;
         if (u.referrer_id && (u.referrer_id === currentUser.id || u.referrer_id === (currentUser as any).user_id || u.referrer_id === currentUser.referralCode)) {
           return true;
         }
-        if (u.referredByUserId && u.referredByUserId === currentUser.id) {
+        if (u.referredByUserId && (u.referredByUserId === currentUser.id || u.referredByUserId === currentUser.referralCode)) {
           return true;
         }
-        return isDirectChildOf(u, currentUser);
+        if (u.referredBy && (u.referredBy === currentUser.referralCode || u.referredBy === currentUser.id)) {
+          return true;
+        }
+        return isDirectChildOf(u, currentUser, commissions);
       })
     : [];
 

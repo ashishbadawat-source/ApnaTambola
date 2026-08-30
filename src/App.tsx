@@ -3272,6 +3272,7 @@ export function App() {
               tickets={tickets}
               winners={winners}
               referralMembers={computedReferralMembers}
+              commissions={commissions}
               onNavigate={handleNavigate}
               onOpenDeposit={() => handleNavigate('wallet')}
               onOpenAuth={handleOpenAuth}
