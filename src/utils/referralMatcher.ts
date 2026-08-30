@@ -44,6 +44,7 @@ export function isDirectChildOf(
   if (child.id === parent.id) return false;
 
   const pId = (parent.id || '').trim().toUpperCase();
+  const pUserId = ((parent as any).user_id || '').trim().toUpperCase();
   const pCode = (parent.referralCode || '').trim().toUpperCase();
   const pCodeNoPrefix = pCode.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
   const pPhone = (parent.phone || '').replace(/\D/g, '');
@@ -52,8 +53,9 @@ export function isDirectChildOf(
 
   const childObj = child as any;
 
-  // 1. Direct referredByUserId or sponsorId match (highest accuracy)
+  // 1. Direct referrer_id / referredByUserId or sponsorId match (highest accuracy & database-authoritative)
   const childReferrerUserIds = [
+    child.referrer_id,
     child.referredByUserId,
     childObj.sponsorId,
     childObj.referrerId,
@@ -64,6 +66,7 @@ export function isDirectChildOf(
   for (const cRefUserIdRaw of childReferrerUserIds) {
     const cRefUserId = String(cRefUserIdRaw).trim().toUpperCase();
     if (cRefUserId === pId) return true;
+    if (pUserId && cRefUserId === pUserId) return true;
     if (pCode && cRefUserId === pCode) return true;
     if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '') === pCodeNoPrefix) return true;
   }

@@ -27,8 +27,13 @@ export interface User {
   referralCode: string;
   referredBy?: string; // referrer's referralCode
   referredByUserId?: string; // referrer's User ID for direct linkage
+  referrer_id?: string | null; // database-backed direct referrer ID (e.g. AT10001 or usr_...)
+  user_id?: string; // database alias for ID
+  user_name?: string;
+  mobile?: string;
   avatar: string;
   createdAt: string;
+  created_at?: string;
   lastLoginAt?: string;
   bankDetails?: {
     accountName: string;

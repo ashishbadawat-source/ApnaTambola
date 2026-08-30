@@ -75,12 +75,21 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   // Calculate player stats
   const totalGamesPlayed = currentUser?.gamesPlayed || 0;
   const totalWinnings = currentUser?.totalWon || 0;
+  // Direct Live Users from canonical matcher & database fields
   const directLiveUsers = currentUser
-    ? allUsers.filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser))
+    ? allUsers.filter((u) => {
+        if (!u || u.id === currentUser.id) return false;
+        if (u.referrer_id && (u.referrer_id === currentUser.id || u.referrer_id === (currentUser as any).user_id || u.referrer_id === currentUser.referralCode)) {
+          return true;
+        }
+        if (u.referredByUserId && u.referredByUserId === currentUser.id) {
+          return true;
+        }
+        return isDirectChildOf(u, currentUser);
+      })
     : [];
-  const directReferralCount = referralMembers && referralMembers.length > 0
-    ? referralMembers.filter((m) => m.level === 1).length
-    : directLiveUsers.length;
+
+  const directReferralCount = directLiveUsers.length;
   const referralCount = referralMembers && referralMembers.length > 0
     ? referralMembers.length
     : directLiveUsers.length;
@@ -89,6 +98,40 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
     (currentUser?.depositBalance || 0) > 0 ||
     currentUser?.firstDepositBonusClaimed
   );
+
+  const [copiedRefLink, setCopiedRefLink] = useState(false);
+  const [directSearch, setDirectSearch] = useState('');
+
+  const referralCode = currentUser?.referralCode || currentUser?.id || 'AT10001';
+  const referralLink = typeof window !== 'undefined'
+    ? `${window.location.origin}/register?ref=${referralCode}`
+    : `https://apnatambola.in/register?ref=${referralCode}`;
+
+  const handleCopyLink = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(referralLink);
+      setCopiedRefLink(true);
+      setTimeout(() => setCopiedRefLink(false), 2500);
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = encodeURIComponent(
+      `🎉 Join Apna Tambola Live & Play Online Housie with me! Use my Referral Code *${referralCode}* to get ₹10 Bonus: ${referralLink}`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const filteredDirectUsers = directLiveUsers.filter((u) => {
+    if (!directSearch) return true;
+    const q = directSearch.toLowerCase();
+    return (
+      u.name?.toLowerCase().includes(q) ||
+      u.id?.toLowerCase().includes(q) ||
+      u.phone?.includes(q) ||
+      u.referralCode?.toLowerCase().includes(q)
+    );
+  });
 
   // 11 Distinct Dashboard Options with High-Contrast, Vibrant, Beautiful Color Themes
   const DASHBOARD_MODULES = [
@@ -564,6 +607,144 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             <span className="text-[10px] uppercase font-bold text-rose-300 block">👥 रेफरल टीम</span>
             <div className="text-lg font-black text-rose-300 font-mono mt-0.5">{referralCount} Members</div>
           </div>
+        </div>
+      </div>
+
+      {/* 👥 MY DIRECT REFERRALS (मेरे डायरेक्ट रेफरल्स) - Real-time Database Powered */}
+      <div className="rounded-3xl bg-gradient-to-br from-[#1a0b2e] via-[#120824] to-[#0a0414] border-2 border-purple-400 p-5 sm:p-6 shadow-2xl shadow-purple-950/60 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-purple-500/30">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-400/40 shadow-inner">
+              <Users className="w-6 h-6 text-purple-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-black text-white">
+                  MY DIRECT REFERRALS (मेरे डायरेक्ट रेफरल्स)
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-500 text-white font-black text-xs font-mono shadow">
+                  {directLiveUsers.length} Direct Users
+                </span>
+              </div>
+              <p className="text-xs text-purple-200/80 mt-0.5">
+                सीधे आपके रेफरल लिंक से जुड़े खिलाड़ी (Database-Verified Level 1 Downline)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={handleCopyLink}
+              className="px-3.5 py-2 rounded-xl bg-purple-900/60 hover:bg-purple-900 border border-purple-400/50 text-xs font-black text-purple-200 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>{copiedRefLink ? '✓ Copied Link' : 'Copy Link'}</span>
+            </button>
+            <button
+              onClick={handleShareWhatsApp}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp Share</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Quick Search & Count Filter */}
+        {directLiveUsers.length > 0 && (
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-300 font-bold">
+              कुल डायरेक्ट सक्रिय सदस्य: <strong className="text-amber-300 font-mono">{directLiveUsers.length} लोग</strong>
+            </div>
+            <input
+              type="text"
+              value={directSearch}
+              onChange={(e) => setDirectSearch(e.target.value)}
+              placeholder="Search by name, ID or mobile..."
+              className="bg-slate-950/80 border border-purple-400/30 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-400"
+            />
+          </div>
+        )}
+
+        {/* Direct Referrals List Table */}
+        {directLiveUsers.length === 0 ? (
+          <div className="p-6 rounded-2xl bg-purple-950/30 border border-dashed border-purple-400/40 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-purple-500/20 text-purple-300 mx-auto flex items-center justify-center border border-purple-400/40">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-white">अभी तक कोई डायरेक्ट रेफरल नहीं जुड़ा है</h4>
+              <p className="text-xs text-purple-200/80 max-w-md mx-auto mt-1">
+                अपना रेफरल लिंक <strong>{referralLink}</strong> दोस्तों के साथ शेयर करें। जैसे ही कोई नया खिलाड़ी आपके लिंक से रजिस्टर करेगा, उसका नाम और आईडी यहाँ तुरंत दिखाई देगा।
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                onClick={handleShareWhatsApp}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-300 hover:to-teal-300 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/30 flex items-center gap-2 cursor-pointer"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>व्हाट्सएप पर शेयर करें (Share on WhatsApp)</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-purple-500/40 bg-slate-950/90 shadow-inner">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-purple-950/60 text-purple-300 uppercase font-black text-[10px] tracking-wider border-b border-purple-500/30">
+                <tr>
+                  <th className="px-3.5 py-3">Player Name</th>
+                  <th className="px-3.5 py-3">User ID</th>
+                  <th className="px-3.5 py-3">Contact</th>
+                  <th className="px-3.5 py-3">Referral Code</th>
+                  <th className="px-3.5 py-3">Registration Date</th>
+                  <th className="px-3.5 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-900/30 text-slate-300">
+                {filteredDirectUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-purple-900/20 transition-colors">
+                    <td className="px-3.5 py-3 font-bold text-white flex items-center gap-2.5">
+                      <img
+                        src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
+                        alt={u.name}
+                        className="w-7 h-7 rounded-full object-cover border border-purple-400/40 shrink-0"
+                      />
+                      <span>{u.name}</span>
+                    </td>
+                    <td className="px-3.5 py-3 font-mono text-[11px] text-purple-300 font-bold select-all">
+                      {u.id}
+                    </td>
+                    <td className="px-3.5 py-3 font-mono text-[11px] text-slate-400">
+                      {u.phone ? `${u.phone.slice(0, 7)}XXXX` : 'N/A'}
+                    </td>
+                    <td className="px-3.5 py-3 font-mono font-black text-amber-300">
+                      {u.referralCode}
+                    </td>
+                    <td className="px-3.5 py-3 text-slate-400 text-[11px]">
+                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-GB') : 'Today'}
+                    </td>
+                    <td className="px-3.5 py-3">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                        u.isBlocked ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}>
+                        {u.isBlocked ? 'Blocked' : 'Active'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="pt-2 flex items-center justify-between text-xs font-bold text-purple-300">
+          <button
+            onClick={() => onNavigate('referral')}
+            className="hover:underline flex items-center gap-1 cursor-pointer text-amber-300"
+          >
+            <span>8-लेवल एफिलिएट पोर्टल & कमीशन ट्री खोलें &rarr;</span>
+          </button>
         </div>
       </div>
 

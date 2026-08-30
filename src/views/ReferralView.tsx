@@ -232,8 +232,11 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     const newMember: User = {
       id: newUserId,
+      user_id: newUserId,
       name: testMemberName.trim(),
+      user_name: testMemberName.trim(),
       phone: `+91 ${cleanPhone}`,
+      mobile: `+91 ${cleanPhone}`,
       email: `${testMemberName.trim().toLowerCase().replace(/\s+/g, '')}${Math.floor(10 + Math.random() * 90)}@gmail.com`,
       password: 'password123',
       role: 'user',
@@ -244,10 +247,12 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
       referralBalance: 0,
       bonusRewardBalance: 0,
       referralCode: `REF-${testMemberName.slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+      referrer_id: currentUser.id,
       referredBy: cleanRef,
       referredByUserId: currentUser.id,
       kycStatus: 'verified',
       createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       status: 'active',
       isBlocked: false,
     };
@@ -267,6 +272,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
           phone: newMember.phone,
           email: newMember.email,
           referralCode: newMember.referralCode,
+          referrer_id: currentUser.id,
           referredBy: cleanRef,
           referredByUserId: currentUser.id,
           referralCodeInput: cleanRef,

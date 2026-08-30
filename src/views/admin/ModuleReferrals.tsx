@@ -168,6 +168,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
 
     const updated: User = {
       ...currentTraceUser,
+      referrer_id: newSponsor.id,
       referredBy: newSponsor.referralCode || newSponsor.id,
       referredByUserId: newSponsor.id,
     };
@@ -185,6 +186,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
           id: updated.id,
           name: updated.name,
           phone: updated.phone,
+          referrer_id: newSponsor.id,
           referredBy: updated.referredBy,
           referredByUserId: updated.referredByUserId,
         }),

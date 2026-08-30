@@ -185,26 +185,116 @@ async function startServer() {
     res.json(users);
   });
 
-  app.post('/api/users/register', (req: Request, res: Response) => {
+  // Direct Referral Query API - Database Source of Truth
+  app.get(['/api/referrals/direct', '/api/users/:userId/referrals'], (req: Request, res: Response) => {
+    try {
+      const rawUserId = String(req.query.userId || req.query.id || req.query.referralCode || req.params.userId || '').trim();
+      if (!rawUserId) {
+        return res.status(400).json({ success: false, error: 'User ID or referral code required' });
+      }
+
+      // Find the user/referrer in database
+      const cleanRef = extractReferralCode(rawUserId);
+      const parentUser = users.find(
+        (u) =>
+          u.id === rawUserId ||
+          ((u as any).user_id && (u as any).user_id === rawUserId) ||
+          u.referralCode === rawUserId ||
+          u.referralCode === cleanRef ||
+          (u.phone && u.phone.replace(/\D/g, '') === rawUserId.replace(/\D/g, ''))
+      );
+
+      if (!parentUser) {
+        return res.json({
+          success: true,
+          count: 0,
+          directReferrals: [],
+          referrer: null,
+          message: 'Referrer not found in database',
+        });
+      }
+
+      // Query database for all direct children
+      const directUsers = users.filter((u) => {
+        if (!u || u.id === parentUser.id) return false;
+        // Direct database field check
+        if (u.referrer_id && (u.referrer_id === parentUser.id || u.referrer_id === (parentUser as any).user_id || u.referrer_id === parentUser.referralCode)) {
+          return true;
+        }
+        if (u.referredByUserId && u.referredByUserId === parentUser.id) {
+          return true;
+        }
+        return isDirectChildOf(u, parentUser, commissions);
+      });
+
+      res.json({
+        success: true,
+        count: directUsers.length,
+        directReferrals: directUsers,
+        referrer: {
+          id: parentUser.id,
+          name: parentUser.name,
+          referralCode: parentUser.referralCode,
+          phone: parentUser.phone,
+          avatar: parentUser.avatar,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Validate Referral Code API before registration
+  app.get('/api/referrals/validate', (req: Request, res: Response) => {
+    try {
+      const rawCode = String(req.query.code || req.query.ref || req.query.referral || '').trim();
+      if (!rawCode) {
+        return res.json({ valid: false, message: 'No referral code provided' });
+      }
+      const cleanCode = extractReferralCode(rawCode);
+      const referrer = findReferrerInList(cleanCode, users);
+      if (referrer) {
+        return res.json({
+          valid: true,
+          referrer: {
+            id: referrer.id,
+            user_id: (referrer as any).user_id || referrer.id,
+            name: referrer.name,
+            referralCode: referrer.referralCode,
+            phone: referrer.phone ? `${referrer.phone.slice(0, 7)}XXXX` : '',
+            avatar: referrer.avatar,
+          },
+        });
+      }
+      return res.json({ valid: false, message: 'Referral code does not match any existing user' });
+    } catch (e: any) {
+      res.status(500).json({ valid: false, error: e.message });
+    }
+  });
+
+  // Atomic Registration Endpoint (Database-Authoritative)
+  const handleUserRegistration = (req: Request, res: Response) => {
     try {
       const body = req.body || {};
-      const name = body.name || (body.user && body.user.name);
-      const phone = body.phone || (body.user && body.user.phone);
+      const name = body.name || body.user_name || (body.user && (body.user.name || body.user.user_name));
+      const phone = body.phone || body.mobile || (body.user && (body.user.phone || body.user.mobile));
       const email = body.email || (body.user && body.user.email);
       const password = body.password || (body.user && body.user.password);
       const rawReferralInput =
+        body.referrer_id ||
         body.referralCodeInput ||
         body.referredBy ||
         body.referralCode ||
-        (body.user && (body.user.referredBy || body.user.referredByUserId)) ||
+        body.referredByUserId ||
+        (body.user && (body.user.referrer_id || body.user.referredBy || body.user.referredByUserId)) ||
         '';
       const selectedAvatar = body.selectedAvatar || body.avatar || (body.user && body.user.avatar);
-      const providedId = body.id || (body.user && body.user.id);
+      const providedId = body.id || body.user_id || (body.user && (body.user.id || body.user.user_id));
       const providedRefCode = body.referralCode || (body.user && body.user.referralCode);
-      const providedReferredByUserId = body.referredByUserId || (body.user && body.user.referredByUserId);
+      const providedReferredByUserId = body.referredByUserId || body.referrer_id || (body.user && (body.user.referredByUserId || body.user.referrer_id));
 
       if (!name || !phone) {
-        return res.status(400).json({ success: false, error: 'Name and phone are required.' });
+        return res.status(400).json({ success: false, error: 'Name and mobile number are required.' });
       }
 
       const phoneDigits = String(phone).replace(/\D/g, '');
@@ -212,18 +302,26 @@ async function startServer() {
         (u) => (u.phone && u.phone.replace(/\D/g, '').endsWith(phoneDigits)) || (providedId && u.id === providedId)
       );
 
-      // Resolve referrer using bulletproof matcher
+      // STEP 1: Database validation of Referrer
       const cleanRef = extractReferralCode(rawReferralInput);
       let referrer: User | null = null;
 
-      if (providedReferredByUserId) {
-        referrer = users.find((u) => u.id === providedReferredByUserId) || null;
+      // Prevent self-referral
+      const isSelfReferral =
+        (providedId && (providedId === cleanRef || providedId === rawReferralInput)) ||
+        (existingUserIdx >= 0 && (users[existingUserIdx].referralCode === cleanRef || users[existingUserIdx].id === cleanRef));
+
+      if (!isSelfReferral) {
+        if (providedReferredByUserId) {
+          referrer = users.find((u) => u.id === providedReferredByUserId || (u as any).user_id === providedReferredByUserId) || null;
+        }
+
+        if (!referrer && cleanRef) {
+          referrer = findReferrerInList(cleanRef, users, providedId);
+        }
       }
 
-      if (!referrer && cleanRef) {
-        referrer = findReferrerInList(cleanRef, users, providedId);
-      }
-
+      // STEP 2 & 3: Create / Update user with atomic database referral linkage
       const finalId = providedId || (existingUserIdx >= 0 ? users[existingUserIdx].id : `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`);
       const resolvedReferralCode =
         providedRefCode ||
@@ -231,19 +329,21 @@ async function startServer() {
           ? users[existingUserIdx].referralCode
           : `REF-${String(name).replace(/[^a-zA-Z]/g, '').slice(0, 3).toUpperCase() || 'PLY'}${Math.floor(100 + Math.random() * 900)}`);
 
-      const finalReferredBy = referrer
-        ? (referrer.referralCode || referrer.id || cleanRef)
-        : (cleanRef || (body.user && body.user.referredBy) || '');
+      // Critical: If no valid referrer, referrer_id is explicitly null (never assign random user)
+      const finalReferrerId = referrer ? referrer.id : null;
+      const finalReferredBy = referrer ? (referrer.referralCode || referrer.id) : '';
+      const finalReferredByUserId = referrer ? referrer.id : '';
 
-      const finalReferredByUserId = referrer
-        ? referrer.id
-        : (providedReferredByUserId || (body.user && body.user.referredByUserId) || '');
+      const nowIso = new Date().toISOString();
 
       const newUser: User = {
         id: finalId,
+        user_id: finalId,
         name: String(name).trim(),
+        user_name: String(name).trim(),
         email: email ? String(email).trim() : `${String(name).toLowerCase().replace(/[^a-z0-9]/g, '')}${phoneDigits.slice(-4)}@tambolalive.com`,
         phone: `+91 ${phoneDigits}`,
+        mobile: `+91 ${phoneDigits}`,
         password: password || '123456',
         role: 'user',
         status: 'active',
@@ -256,11 +356,13 @@ async function startServer() {
         firstDepositBonusClaimed: existingUserIdx >= 0 ? (users[existingUserIdx].firstDepositBonusClaimed ?? false) : false,
         hasDeposited: existingUserIdx >= 0 ? (users[existingUserIdx].hasDeposited ?? false) : false,
         referralCode: resolvedReferralCode,
+        referrer_id: finalReferrerId,
         referredBy: finalReferredBy,
         referredByUserId: finalReferredByUserId,
         kycStatus: 'verified',
         avatar: selectedAvatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-        createdAt: existingUserIdx >= 0 ? users[existingUserIdx].createdAt : (body.user?.createdAt || new Date().toISOString()),
+        createdAt: existingUserIdx >= 0 ? users[existingUserIdx].createdAt : (body.user?.createdAt || nowIso),
+        created_at: existingUserIdx >= 0 ? users[existingUserIdx].createdAt : (body.user?.createdAt || nowIso),
         bankDetails: {
           accountName: String(name).trim(),
           accountNumber: 'XXXXXX' + Math.floor(1000 + Math.random() * 9000),
@@ -276,11 +378,12 @@ async function startServer() {
         users.unshift(newUser);
       }
 
-      // Award referrer bonus & commission record
+      // STEP 4: Award referrer bonus & commission record atomically
       let joinComm: ReferralCommission | null = null;
       if (referrer) {
         referrer.walletBalance = (referrer.walletBalance || 0) + 10;
         referrer.referralBalance = (referrer.referralBalance || 0) + 10;
+        referrer.referralCount = (referrer.referralCount || 0) + 1;
 
         const existingJoinComm = commissions.find(
           (c) => c.userId === referrer!.id && c.sourceUserId === newUser.id && c.gameId === 'signup_bonus'
@@ -301,27 +404,43 @@ async function startServer() {
             baseAmount: 10,
             commissionAmount: 10,
             transactionId: `TXN-REF-${Date.now()}`,
-            timestamp: new Date().toISOString(),
+            timestamp: nowIso,
             status: 'approved',
           };
           commissions.unshift(joinComm);
         }
       }
 
+      // STEP 5: Commit to durable persistent disk storage
       saveStateToDisk();
+
+      console.log(`[Referral Registration] Registered user ${newUser.name} (${newUser.id}), Referrer ID: ${newUser.referrer_id || 'NONE (Direct)'}`);
 
       res.json({
         success: true,
         user: newUser,
-        referrer,
+        referrer: referrer
+          ? {
+              id: referrer.id,
+              name: referrer.name,
+              referralCode: referrer.referralCode,
+              phone: referrer.phone,
+              walletBalance: referrer.walletBalance,
+              referralBalance: referrer.referralBalance,
+            }
+          : null,
         commission: joinComm,
         totalUsers: users.length,
-        message: 'User registered successfully!',
+        message: 'User registered successfully with database referral linkage!',
       });
     } catch (err: any) {
+      console.error('[Referral Registration Error]', err);
       res.status(500).json({ success: false, error: err.message || 'Registration failed' });
     }
-  });
+  };
+
+  app.post('/api/users/register', handleUserRegistration);
+  app.post('/api/auth/register', handleUserRegistration);
 
   app.post('/api/users/update-balances', (req: Request, res: Response) => {
     try {
