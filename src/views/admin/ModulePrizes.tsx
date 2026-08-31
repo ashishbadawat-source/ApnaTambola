@@ -48,6 +48,46 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
   // Notice
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Dynamic 70-30 Simulator State
+  const [calcTickets, setCalcTickets] = useState(100);
+  const [calcPrice, setCalcPrice] = useState(50);
+  const simCollection = calcTickets * calcPrice;
+  const simPrizePool = Math.round(simCollection * 0.70);
+  const simAdminMargin = Math.round(simCollection * 0.30);
+
+  const handleApply7030Preset = () => {
+    // Generate standard 70% prize breakdown:
+    // 1. Early 5 = 2.5% of collection (₹25 on ₹1,000)
+    // 2. Star/Corners = 2.5% of collection
+    // 3. Top Line = 2.5% of collection
+    // 4. Middle Line = 2.5% of collection
+    // 5. Bottom Line = 2.5% of collection
+    // 6. 1st Full House = 40% of collection
+    // 7. 2nd Full House = 17.5% of collection
+    // Total = 70% of collection | 30% Admin
+    const e5 = Math.max(10, Math.round(simCollection * 0.025));
+    const star = Math.max(10, Math.round(simCollection * 0.025));
+    const tl = Math.max(10, Math.round(simCollection * 0.025));
+    const ml = Math.max(10, Math.round(simCollection * 0.025));
+    const bl = Math.max(10, Math.round(simCollection * 0.025));
+    const fh1 = Math.max(50, Math.round(simCollection * 0.40));
+    const fh2 = Math.max(25, Math.round(simCollection * 0.175));
+
+    const newSet: Omit<GamePrize, 'id' | 'claimedWinners'>[] = [
+      { code: 'early5', name: '1. जल्दी 5 (Early 5)', amount: e5, maxWinners: 1, description: 'First ticket to complete any 5 numbers (2.5% of collection)' },
+      { code: 'corners', name: '2. स्टार / 4 कोने (Star/Corners)', amount: star, maxWinners: 1, description: '4 corner numbers + center star (2.5% of collection)' },
+      { code: 'top_line', name: '3. पहली लाइन (Top Line)', amount: tl, maxWinners: 1, description: 'All 5 numbers of top row (2.5% of collection)' },
+      { code: 'mid_line', name: '4. दूसरी लाइन (Middle Line)', amount: ml, maxWinners: 1, description: 'All 5 numbers of middle row (2.5% of collection)' },
+      { code: 'bot_line', name: '5. तीसरी लाइन (Bottom Line)', amount: bl, maxWinners: 1, description: 'All 5 numbers of bottom row (2.5% of collection)' },
+      { code: 'full_house', name: '6. पहला फुलहाउस (1st Full House)', amount: fh1, maxWinners: 1, description: 'First player to complete all 15 numbers (40% of collection)' },
+      { code: 'second_full_house', name: '7. दूसरा फुलहाउस (2nd Full House)', amount: fh2, maxWinners: 1, description: 'Second player to complete all 15 numbers (17.5% of collection)' },
+    ];
+
+    setPrizesList(newSet);
+    setNotice(`✅ 70% प्राइज पूल (₹${simPrizePool.toLocaleString('en-IN')}) और 30% एडमिन मार्जिन (₹${simAdminMargin.toLocaleString('en-IN')}) का मास्टर प्राइज सेट लोड कर दिया गया है!`);
+    setTimeout(() => setNotice(null), 5000);
+  };
+
   const totalPrizePool = prizesList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   const handleUpdatePrizeAmount = (index: number, newAmount: number) => {
@@ -144,6 +184,111 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
           <span>{notice}</span>
         </div>
       )}
+
+      {/* 🌟 70% Prize Pool vs 30% Admin Margin Live Calculator & Preset Widget */}
+      <div className="p-5 rounded-3xl bg-gradient-to-r from-[#180a29] via-[#0e162d] to-[#0d2224] border-2 border-yellow-400/80 shadow-2xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-yellow-500/30 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-500 text-slate-950 font-black flex items-center justify-center shadow-lg shadow-amber-500/30 text-base">
+              %
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <span>70% प्राइज पूल & 30% एडमिन शेयर फॉर्मूला (Admin 30% / Players 70%)</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black uppercase">
+                  Active Rule
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300">
+                कुल टिकट बिक्री का 70% हिस्सा सभी विजेताओं के ईनाम में ऑटो-कैलकुलेट होकर बंटता है और 30% हिस्सा एडमिन के पास रहता है।
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleApply7030Preset}
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/40 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider shrink-0 transition-transform active:scale-95"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Apply 70%-30% Master Formula</span>
+          </button>
+        </div>
+
+        {/* Live Simulator Form */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
+            <label className="text-[11px] text-slate-400 font-bold uppercase block">1. Total Tickets Sold</label>
+            <input
+              type="number"
+              value={calcTickets}
+              onChange={(e) => setCalcTickets(Math.max(1, Number(e.target.value)))}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white font-black font-mono focus:border-amber-400 focus:outline-none"
+            />
+            <span className="text-[10px] text-slate-500">Player ticket volume</span>
+          </div>
+
+          <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
+            <label className="text-[11px] text-slate-400 font-bold uppercase block">2. Ticket Price (₹)</label>
+            <input
+              type="number"
+              value={calcPrice}
+              onChange={(e) => setCalcPrice(Math.max(5, Number(e.target.value)))}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-amber-300 font-black font-mono focus:border-amber-400 focus:outline-none"
+            />
+            <span className="text-[10px] text-slate-500">Per ticket entry fee</span>
+          </div>
+
+          <div className="p-3 bg-gradient-to-b from-purple-950/60 to-slate-950 rounded-2xl border border-purple-500/40 space-y-1">
+            <label className="text-[11px] text-purple-300 font-bold uppercase block">Total Sales Collection</label>
+            <div className="text-xl font-black text-white font-mono">₹{simCollection.toLocaleString('en-IN')}</div>
+            <span className="text-[10px] text-purple-300/80 font-bold">100% Gross Intake</span>
+          </div>
+
+          <div className="p-3 bg-gradient-to-b from-emerald-950/60 to-slate-950 rounded-2xl border border-emerald-500/40 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-emerald-300 font-bold uppercase">70% Players Prize</span>
+              <span className="text-[11px] text-amber-400 font-bold uppercase">30% Admin</span>
+            </div>
+            <div className="flex items-baseline justify-between font-mono">
+              <span className="text-lg font-black text-emerald-400">₹{simPrizePool.toLocaleString('en-IN')}</span>
+              <span className="text-sm font-black text-amber-300">₹{simAdminMargin.toLocaleString('en-IN')}</span>
+            </div>
+            <span className="text-[10px] text-slate-400 block">Distributed across 7 prize tiers</span>
+          </div>
+        </div>
+
+        {/* Formula breakdown info bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
+          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="text-[10px] text-slate-400">Early 5 (2.5%)</div>
+            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
+          </div>
+          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="text-[10px] text-slate-400">Star/4 Corners (2.5%)</div>
+            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
+          </div>
+          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="text-[10px] text-slate-400">Top Line (2.5%)</div>
+            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
+          </div>
+          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="text-[10px] text-slate-400">Mid Line (2.5%)</div>
+            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
+          </div>
+          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
+            <div className="text-[10px] text-slate-400">Bottom Line (2.5%)</div>
+            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
+          </div>
+          <div className="p-2 rounded-xl bg-yellow-950/60 border border-yellow-500/40">
+            <div className="text-[10px] text-yellow-300 font-bold">1st Full House (40%)</div>
+            <div className="text-sm font-black text-yellow-400">₹{Math.max(50, Math.round(simCollection * 0.40))}</div>
+          </div>
+          <div className="p-2 rounded-xl bg-amber-950/60 border border-amber-500/40">
+            <div className="text-[10px] text-amber-300 font-bold">2nd Full House (17.5%)</div>
+            <div className="text-xs font-black text-amber-400">₹{Math.max(25, Math.round(simCollection * 0.175))}</div>
+          </div>
+        </div>
+      </div>
 
       {/* Prize Pool Summary Card */}
       <div className="p-5 rounded-3xl bg-gradient-to-r from-[#1b1238] via-[#111938] to-[#250d24] border-2 border-amber-400/40 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

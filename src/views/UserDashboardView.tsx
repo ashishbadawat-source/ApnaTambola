@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
+import { ApnaTambolaLiveArena } from '../components/ApnaTambolaLiveArena';
 
 interface UserDashboardViewProps {
   currentUser?: User | null;
@@ -343,6 +344,16 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
 
   return (
     <div className="space-y-8 pb-16">
+      {/* 🌟 APNA TAMBOLA LIVE ARENA (Dedicated Arcade Tablet Layout from Image) */}
+      <ApnaTambolaLiveArena
+        currentUser={currentUser}
+        games={games}
+        tickets={tickets}
+        winners={winners}
+        onNavigate={onNavigate}
+        onOpenDeposit={onOpenDeposit}
+      />
+
       {/* 👑 1. Top Player VIP Header Bar (Royal Purple & Gold) */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#241138] via-[#141b38] to-[#0c1f24] border-2 border-amber-400/60 p-6 sm:p-8 shadow-2xl shadow-purple-950/40">
         <div className="absolute top-0 right-0 w-96 h-96 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
