@@ -14,7 +14,7 @@ import {
   Lock,
   XCircle,
 } from 'lucide-react';
-import { TambolaGame, User, TambolaTicket } from '../types';
+import { TambolaGame, User, TambolaTicket, SiteSettings } from '../types';
 import { generateTambolaTicketMatrix, generateTicketId } from '../utils/tambolaTicket';
 import { TambolaTicketCard } from '../components/TambolaTicketCard';
 
@@ -22,6 +22,7 @@ interface BuyTicketViewProps {
   games: TambolaGame[];
   selectedGameId?: string;
   currentUser: User;
+  siteSettings?: SiteSettings;
   onBuyTickets: (gameId: string, quantity: number) => Promise<boolean>;
   onOpenDeposit: () => void;
   onNavigate: (tab: string, gameId?: string) => void;
@@ -31,6 +32,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   games,
   selectedGameId,
   currentUser,
+  siteSettings,
   onBuyTickets,
   onOpenDeposit,
   onNavigate,
@@ -52,8 +54,9 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   // User cannot buy tickets until funded by admin (depositBalance)
   const canAfford = currentUser.depositBalance >= totalCost;
 
+  const isGlobalBookingOpen = siteSettings?.globalTicketBookingEnabled !== false;
   const isGameActive = selectedGame?.isGameEnabled !== false;
-  const isBookingAllowed = selectedGame?.isBookingOpen !== false;
+  const isBookingAllowed = isGlobalBookingOpen && selectedGame?.isBookingOpen !== false;
   const canPurchaseNow = isGameActive && isBookingAllowed && canAfford;
 
   const handleRegeneratePreview = () => {
@@ -62,12 +65,16 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
 
   const handlePurchase = async () => {
     if (!selectedGame) return;
+    if (!isGlobalBookingOpen) {
+      alert('मास्टर टिकट बुकिंग एडमिन द्वारा अस्थायी रूप से बंद (OFF) कर दी गई है। कृपया थोड़ी देर बाद प्रयास करें।');
+      return;
+    }
     if (!isGameActive) {
       alert('यह गेम एडमिन द्वारा बंद (OFF) कर दिया गया है।');
       return;
     }
     if (!isBookingAllowed) {
-      alert('इस गेम की टिकट बुकिंग एडमिन द्वारा बंद कर दी गई है।');
+      alert('इस गेम की टिकट बुकिंग एडमिन द्वारा बंद (CLOSED) कर दी गई है।');
       return;
     }
     if (!canAfford) {

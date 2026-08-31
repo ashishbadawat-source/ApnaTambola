@@ -3315,6 +3315,7 @@ export function App() {
               games={games}
               selectedGameId={selectedGameId}
               currentUser={currentUser}
+              siteSettings={siteSettings}
               onBuyTickets={handleBuyTickets}
               onOpenDeposit={() => handleNavigate('wallet')}
               onNavigate={handleNavigate}

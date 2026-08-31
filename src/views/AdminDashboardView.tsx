@@ -249,7 +249,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             tickets={tickets}
             withdrawals={withdrawals}
             commissions={commissions}
+            transactions={transactions}
             activityLogs={activityLogs}
+            siteSettings={siteSettings}
+            onUpdateGame={onUpdateGame}
+            onUpdateSettings={onUpdateSettings}
+            onCallNext={onCallNext}
             onNavigateTab={(tab) => handleSetActiveTab(tab)}
           />
         )}

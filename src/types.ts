@@ -370,6 +370,10 @@ export interface SiteSettings {
   // Global Default Ticket Color Theme set by Admin
   defaultTicketTheme?: TicketColorThemeId;
 
+  // Master Ticket Booking Switch (Admin Ticket ON / OFF)
+  globalTicketBookingEnabled?: boolean; // Default true: All ticket sales ON / चालू, false: All ticket sales OFF / बंद
+  ticketPrizePoolPercentage?: number; // Default 70% (70% to players, 30% admin margin)
+
   // Master Admin Credentials
   adminUsername?: string;
   adminPassword?: string;

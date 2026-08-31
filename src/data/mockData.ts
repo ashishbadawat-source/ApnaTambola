@@ -832,6 +832,8 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   adminAccountHolder: 'Tambola Live Entertainment Pvt Ltd',
   adminUpiNote: 'Pay using Google Pay, PhonePe, Paytm, CRED or any UPI app. Enter the 12-digit UTR number after payment.',
   voiceLanguage: 'both',
+  globalTicketBookingEnabled: true,
+  ticketPrizePoolPercentage: 70,
   p2pTransferFeePercentage: 5,
   defaultTicketTheme: 'multi',
   adminUsername: 'admin@tambolalive.com',
