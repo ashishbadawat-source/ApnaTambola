@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   DEFAULT_USER,
   ADMIN_USER,
@@ -178,6 +179,55 @@ async function startServer() {
   // API Routes
   app.get('/api/health', (req: Request, res: Response) => {
     res.json({ status: 'ok', serverTime: new Date().toISOString() });
+  });
+
+  // Supabase Status & Connection Diagnostic API
+  const SUPABASE_PROJECT_ID = 'ztdfzpyxurdpljzphhgz';
+  const DEFAULT_SUPABASE_URL = `https://${SUPABASE_PROJECT_ID}.supabase.co`;
+
+  function normalizeUrl(rawUrl?: string): string {
+    if (!rawUrl || typeof rawUrl !== 'string') return DEFAULT_SUPABASE_URL;
+    let url = rawUrl.trim();
+    if (!url || url === '""' || url === "''") return DEFAULT_SUPABASE_URL;
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      if (url.includes('.')) {
+        url = `https://${url}`;
+      } else {
+        url = `https://${url}.supabase.co`;
+      }
+    }
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.origin;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_SUPABASE_URL;
+  }
+
+  const SUPABASE_URL = normalizeUrl(process.env.SUPABASE_URL);
+  const SUPABASE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '').trim();
+  let serverSupabase: SupabaseClient | null = null;
+
+  if (SUPABASE_KEY && SUPABASE_KEY.length > 10 && SUPABASE_URL.startsWith('http')) {
+    try {
+      serverSupabase = createSupabaseClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+      console.warn('[Supabase Server] Client init notice:', e);
+    }
+  }
+
+  app.get('/api/supabase/status', (req: Request, res: Response) => {
+    res.json({
+      success: true,
+      projectId: SUPABASE_PROJECT_ID,
+      region: 'ap-southeast-2 (Oceania Sydney)',
+      url: SUPABASE_URL,
+      configured: Boolean(SUPABASE_KEY),
+      hasClient: Boolean(serverSupabase),
+    });
   });
 
   // 1b. Users API - Cross-device sync, Registration & Referral linking
