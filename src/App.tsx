@@ -72,7 +72,7 @@ import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
 import { playWinningFanfare, playNumberCallSound } from './utils/audio';
 import { calculateTambolaDynamicPrizes, calculateSplitWinning } from './utils/prizePoolCalculator';
 import { db } from './lib/firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, query, where } from 'firebase/firestore';
 
 export function App() {
   // Navigation State
@@ -1124,63 +1124,98 @@ export function App() {
     } catch (e) {}
   };
 
-  const handleRegisterUser = (newUser: User) => {
-    // 1. Comprehensive case-insensitive upline identification
+  const handleRegisterUser = async (newUser: User) => {
+    // 1. Comprehensive case-insensitive upline identification from inputs & URL params
     const rawRefCode = (
-      newUser.referredBy ||
+      newUser.referrer_id ||
       newUser.referredByUserId ||
-      localStorage.getItem('apna_tambola_pending_referral') ||
-      ''
+      newUser.referredBy ||
+      (typeof window !== 'undefined' ? localStorage.getItem('apna_tambola_pending_referral') || '' : '')
     ).trim();
 
-    const upperRefCode = rawRefCode.toUpperCase();
-    const cleanRefNoPrefix = upperRefCode.replace(/^REF-?/, '');
-    const cleanDigits = rawRefCode.replace(/\D/g, '');
+    const cleanRef = extractReferralCode(rawRefCode);
+    const cleanNoPrefix = cleanRef.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
+    const digitsOnly = cleanRef.replace(/\D/g, '');
 
-    // Search across all users in state & initial list
     let matchedUpline: User | null = null;
 
-    if (newUser.referredByUserId) {
-      const explicitUid = newUser.referredByUserId.trim().toUpperCase();
-      matchedUpline = users.find((u) => u.id && u.id.trim().toUpperCase() === explicitUid) || null;
+    // 2a. Direct user ID lookup in loaded memory state
+    if (newUser.referredByUserId || newUser.referrer_id) {
+      const explicitUid = (newUser.referredByUserId || newUser.referrer_id || '').trim().toLowerCase();
+      matchedUpline = users.find((u) => u.id && (u.id.toLowerCase() === explicitUid || (u as any).user_id === explicitUid)) || null;
     }
 
-    if (!matchedUpline && upperRefCode) {
-      matchedUpline =
-        users.find((u) => {
-          if (!u || u.id === newUser.id) return false;
-          const uId = (u.id || '').trim().toUpperCase();
-          const uCode = (u.referralCode || '').trim().toUpperCase();
-          const uCodeNoPrefix = uCode.replace(/^REF-?/, '');
-          const uPhone = (u.phone || '').replace(/\D/g, '');
-          const uEmail = (u.email || '').trim().toLowerCase();
-          const uName = (u.name || '').trim().toUpperCase();
+    // 2b. Direct Firestore query validation across all connected devices
+    if (!matchedUpline && cleanRef && cleanRef.length >= 2) {
+      try {
+        // A. Search by exact ID in Firestore
+        const docById = await getDoc(doc(db, 'users', cleanRef.toLowerCase())).catch(() => null);
+        if (docById && docById.exists()) {
+          matchedUpline = { ...(docById.data() as User), id: docById.id };
+        } else {
+          const docByIdExact = await getDoc(doc(db, 'users', cleanRef)).catch(() => null);
+          if (docByIdExact && docByIdExact.exists()) {
+            matchedUpline = { ...(docByIdExact.data() as User), id: docByIdExact.id };
+          }
+        }
 
-          // Exact matching
-          if (uCode && (uCode === upperRefCode || uCodeNoPrefix === cleanRefNoPrefix)) return true;
-          if (uId && uId === upperRefCode) return true;
+        // B. Search by referralCode in Firestore
+        if (!matchedUpline) {
+          const qCode = query(collection(db, 'users'), where('referralCode', '==', cleanRef));
+          const snapCode = await getDocs(qCode).catch(() => null);
+          if (snapCode && !snapCode.empty) {
+            const uDoc = snapCode.docs[0];
+            matchedUpline = { ...(uDoc.data() as User), id: uDoc.id };
+          }
+        }
 
-          // Substring / without prefix
-          if (uCode && (upperRefCode.includes(uCode) || uCode.includes(upperRefCode))) return true;
-          if (cleanRefNoPrefix && uCodeNoPrefix && (cleanRefNoPrefix === uCodeNoPrefix || uCode.includes(cleanRefNoPrefix) || upperRefCode.includes(uCodeNoPrefix))) return true;
-          if (uId && (upperRefCode.includes(uId) || uId.includes(upperRefCode))) return true;
+        // C. Search by REF- prefix variation in Firestore
+        if (!matchedUpline && !cleanRef.startsWith('REF-')) {
+          const qPref = query(collection(db, 'users'), where('referralCode', '==', `REF-${cleanRef}`));
+          const snapPref = await getDocs(qPref).catch(() => null);
+          if (snapPref && !snapPref.empty) {
+            const uDoc = snapPref.docs[0];
+            matchedUpline = { ...(uDoc.data() as User), id: uDoc.id };
+          }
+        }
 
-          // Phone number matching (exact or last digits)
-          if (cleanDigits.length >= 6 && uPhone && (uPhone === cleanDigits || uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))) return true;
+        // D. Search by cleaned code without prefix
+        if (!matchedUpline && cleanNoPrefix && cleanNoPrefix !== cleanRef) {
+          const qClean = query(collection(db, 'users'), where('referralCode', '==', cleanNoPrefix));
+          const snapClean = await getDocs(qClean).catch(() => null);
+          if (snapClean && !snapClean.empty) {
+            const uDoc = snapClean.docs[0];
+            matchedUpline = { ...(uDoc.data() as User), id: uDoc.id };
+          }
+        }
 
-          // Email match
-          if (uEmail && rawRefCode.toLowerCase() === uEmail) return true;
-
-          // Name match
-          if (uName && (upperRefCode === uName || cleanRefNoPrefix === uName)) return true;
-
-          return false;
-        }) || null;
+        // E. Proactive scan across all Firestore users for case-insensitivity or phone matching
+        if (!matchedUpline) {
+          const allUsersSnap = await getDocs(collection(db, 'users')).catch(() => null);
+          if (allUsersSnap && !allUsersSnap.empty) {
+            const fsUsers: User[] = [];
+            allUsersSnap.forEach((d) => fsUsers.push({ ...(d.data() as User), id: d.id }));
+            matchedUpline = findReferrerInList(cleanRef, fsUsers, newUser.id);
+          }
+        }
+      } catch (err) {
+        console.warn('Firestore upline validation notice:', err);
+      }
     }
+
+    // 2c. Fallback to local memory / mock users list
+    if (!matchedUpline && cleanRef) {
+      matchedUpline = findReferrerInList(cleanRef, users, newUser.id);
+    }
+
+    // 3. Establish authoritative foreign key linking
+    const finalReferrerId = matchedUpline
+      ? matchedUpline.id
+      : (newUser.referrer_id || (cleanRef ? cleanRef : null));
 
     const finalReferredByCode = matchedUpline
-      ? (matchedUpline.referralCode || matchedUpline.id || upperRefCode)
-      : (upperRefCode || newUser.referredBy || '');
+      ? (matchedUpline.referralCode || matchedUpline.id)
+      : (cleanRef || newUser.referredBy || '');
 
     const finalReferredByUserId = matchedUpline
       ? matchedUpline.id
@@ -1188,14 +1223,23 @@ export function App() {
 
     const completeUser: User = {
       ...newUser,
-      referredBy: finalReferredByCode,
+      referrer_id: finalReferrerId, // Foreign key linking to sponsor's doc ID
       referredByUserId: finalReferredByUserId,
+      referredBy: finalReferredByCode,
       status: newUser.status || 'active',
       isBlocked: false,
       createdAt: newUser.createdAt || new Date().toISOString(),
     };
 
-    // Save to server backend via REST API immediately
+    // 4. Save to Firestore users collection with merge
+    try {
+      const sanitizedUser = JSON.parse(JSON.stringify(completeUser));
+      await setDoc(doc(db, 'users', completeUser.id), sanitizedUser, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore user save notice:', e);
+    }
+
+    // 5. Save to server backend via REST API immediately
     try {
       fetch('/api/users/register', {
         method: 'POST',
@@ -1208,22 +1252,17 @@ export function App() {
           email: completeUser.email,
           password: completeUser.password,
           referralCode: completeUser.referralCode,
+          referrer_id: completeUser.referrer_id,
           referredBy: completeUser.referredBy,
           referredByUserId: completeUser.referredByUserId,
           referralCodeInput: finalReferredByCode,
+          referrerUser: matchedUpline,
           selectedAvatar: completeUser.avatar,
         }),
       }).catch(() => {});
     } catch (e) {}
 
-    // Save to Firestore with merge
-    try {
-      setDoc(doc(db, 'users', completeUser.id), JSON.parse(JSON.stringify(completeUser)), { merge: true }).catch(() => {});
-    } catch (e) {
-      console.warn('Firestore user save notice:', e);
-    }
-
-    // Add new registered user to state immediately at top (triggers computedReferralMembers immediately)
+    // 6. Update registered user in local state immediately
     setUsers((prev) => {
       const filtered = prev.filter((u) => u.id !== completeUser.id && (u.phone ? u.phone.replace(/\D/g, '') !== completeUser.phone.replace(/\D/g, '') : true));
       const updated = [completeUser, ...filtered];
@@ -1233,7 +1272,7 @@ export function App() {
       return updated;
     });
 
-    // If upline exists, credit bonus commission and immediately propagate tree
+    // 7. If upline exists, credit bonus commission and immediately propagate tree
     if (matchedUpline) {
       const upline = matchedUpline;
       const joinComm: ReferralCommission = {
@@ -1264,6 +1303,19 @@ export function App() {
         }).catch(() => {});
       } catch (e) {}
 
+      // Update upline balance & referral count in Firestore
+      try {
+        setDoc(
+          doc(db, 'users', upline.id),
+          {
+            referralBalance: (upline.referralBalance || 0) + 10,
+            walletBalance: (upline.walletBalance || 0) + 10,
+            referralCount: (upline.referralCount || 0) + 1,
+          },
+          { merge: true }
+        ).catch(() => {});
+      } catch (e) {}
+
       // Update upline balance in local users state
       setUsers((prev) => {
         const updated = prev.map((u) =>
@@ -1272,6 +1324,7 @@ export function App() {
                 ...u,
                 referralBalance: (u.referralBalance || 0) + 10,
                 walletBalance: (u.walletBalance || 0) + 10,
+                referralCount: (u.referralCount || 0) + 1,
               }
             : u
         );
@@ -1280,18 +1333,6 @@ export function App() {
         } catch (e) {}
         return updated;
       });
-
-      // Update upline balance in Firestore
-      try {
-        setDoc(
-          doc(db, 'users', upline.id),
-          {
-            referralBalance: (upline.referralBalance || 0) + 10,
-            walletBalance: (upline.walletBalance || 0) + 10,
-          },
-          { merge: true }
-        ).catch(() => {});
-      } catch (e) {}
 
       const notif: UserNotificationItem = {
         id: `un_ref_${Date.now()}`,
@@ -1312,12 +1353,18 @@ export function App() {
             ...prev,
             referralBalance: (prev.referralBalance || 0) + 10,
             walletBalance: (prev.walletBalance || 0) + 10,
+            referralCount: (prev.referralCount || 0) + 1,
           };
         });
       }
     }
 
-    // Broadcast registration event across tabs for instant multi-window sync
+    // 8. Clean up pending referral code from localStorage
+    try {
+      localStorage.removeItem('apna_tambola_pending_referral');
+    } catch (e) {}
+
+    // 9. Broadcast registration event across tabs for instant multi-window sync
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         const bc = new BroadcastChannel('apna_tambola_sync');

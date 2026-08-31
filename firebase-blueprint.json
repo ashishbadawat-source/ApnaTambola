@@ -17,6 +17,8 @@
         "kycStatus": { "type": "string", "enum": ["verified", "pending", "rejected", "unverified"] },
         "referralCode": { "type": "string", "maxLength": 50 },
         "referredBy": { "type": "string", "maxLength": 50 },
+        "referredByUserId": { "type": "string", "maxLength": 128 },
+        "referrer_id": { "type": "string", "maxLength": 128 },
         "avatar": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "string", "maxLength": 50 }
       },
