@@ -299,7 +299,13 @@ export function App() {
           const firestoreUsers: User[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as User;
-            firestoreUsers.push({ ...data, id: docSnap.id });
+            const refId = data.referrer_id ?? (data as any).referredByUserId ?? null;
+            firestoreUsers.push({
+              ...data,
+              id: docSnap.id,
+              referrer_id: refId,
+              referredByUserId: data.referredByUserId || (typeof refId === 'string' ? refId : ''),
+            });
           });
 
           setUsers((prev) => {
@@ -1208,8 +1214,8 @@ export function App() {
       matchedUpline = findReferrerInList(cleanRef, users, newUser.id);
     }
 
-    // 3. Establish authoritative foreign key linking
-    const finalReferrerId = matchedUpline
+    // 3. Establish authoritative database foreign key linking
+    const finalReferrerId: string | null = matchedUpline
       ? matchedUpline.id
       : (newUser.referrer_id || (cleanRef ? cleanRef : null));
 
@@ -1223,7 +1229,7 @@ export function App() {
 
     const completeUser: User = {
       ...newUser,
-      referrer_id: finalReferrerId, // Foreign key linking to sponsor's doc ID
+      referrer_id: finalReferrerId, // Database Foreign Key referencing sponsor's user document ID
       referredByUserId: finalReferredByUserId,
       referredBy: finalReferredByCode,
       status: newUser.status || 'active',
@@ -1231,10 +1237,17 @@ export function App() {
       createdAt: newUser.createdAt || new Date().toISOString(),
     };
 
-    // 4. Save to Firestore users collection with merge
+    // 4. Explicitly write referrer_id into the Firestore 'users' collection as a database foreign key
     try {
-      const sanitizedUser = JSON.parse(JSON.stringify(completeUser));
-      await setDoc(doc(db, 'users', completeUser.id), sanitizedUser, { merge: true }).catch(() => {});
+      const firestoreUserPayload: Record<string, any> = {
+        ...completeUser,
+        referrer_id: finalReferrerId, // Explicit reference field in Firestore document
+        referredByUserId: finalReferredByUserId,
+        referredBy: finalReferredByCode,
+      };
+      const sanitizedUser = JSON.parse(JSON.stringify(firestoreUserPayload));
+      await setDoc(doc(db, 'users', completeUser.id), sanitizedUser, { merge: true });
+      console.log(`[Firestore DB] Saved user ${completeUser.id} with foreign key referrer_id="${finalReferrerId}"`);
     } catch (e) {
       console.warn('Firestore user save notice:', e);
     }
