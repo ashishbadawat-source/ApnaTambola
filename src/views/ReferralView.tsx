@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { User, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
+import { ReferralTreeView } from '../components/ReferralTreeView';
 
 interface ReferralViewProps {
   currentUser: User;
@@ -35,14 +36,6 @@ interface ReferralViewProps {
   isSyncing?: boolean;
   onRegisterUser?: (newUser: User) => void;
   onOpenAuth?: (mode?: 'login' | 'register') => void;
-}
-
-interface TreeNode {
-  user: User;
-  level: number;
-  ticketsBought: number;
-  commissionEarned: number;
-  children: TreeNode[];
 }
 
 export const ReferralView: React.FC<ReferralViewProps> = ({
@@ -59,78 +52,11 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | 'all'>('all');
   const [viewMode, setViewMode] = useState<'tree' | 'table'>('tree');
-  const [treeSearch, setTreeSearch] = useState('');
-  const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
   const [showTestReferralModal, setShowTestReferralModal] = useState(false);
   const [testMemberName, setTestMemberName] = useState('Rahul Verma');
   const [testMemberPhone, setTestMemberPhone] = useState(`98${Math.floor(10000000 + Math.random() * 90000000)}`);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationSuccess, setSimulationSuccess] = useState<string | null>(null);
-
-  // Build Full Recursive Downline Tree
-  const downlineTree = useMemo(() => {
-    if (!currentUser) return null;
-
-    const buildSubtree = (parentNode: User, currentDepth: number, visited: Set<string>): TreeNode[] => {
-      if (currentDepth > 8) return [];
-      const directChildren = allUsers.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode, commissions));
-      
-      return directChildren.map((childUser) => {
-        const nextVisited = new Set(visited);
-        nextVisited.add(childUser.id);
-        
-        const memberMeta = referralMembers.find((m) => m.id === childUser.id);
-        const userCommissions = commissions
-          .filter((c) => c.sourceUserId === childUser.id && c.status === 'approved')
-          .reduce((sum, c) => sum + c.commissionAmount, 0);
-
-        return {
-          user: childUser,
-          level: currentDepth,
-          ticketsBought: memberMeta ? memberMeta.ticketsBought : 0,
-          commissionEarned: userCommissions || (memberMeta ? memberMeta.commissionEarned : 0),
-          children: buildSubtree(childUser, currentDepth + 1, nextVisited),
-        };
-      });
-    };
-
-    const rootVisited = new Set<string>([currentUser.id]);
-    const rootChildren = buildSubtree(currentUser, 1, rootVisited);
-
-    const rootTreeNode: TreeNode = {
-      user: currentUser,
-      level: 0,
-      ticketsBought: 0,
-      commissionEarned: commissions.filter((c) => c.status === 'approved').reduce((sum, c) => sum + c.commissionAmount, 0),
-      children: rootChildren,
-    };
-
-    return rootTreeNode;
-  }, [currentUser, allUsers, referralMembers, commissions]);
-
-  // Toggle Collapse on a Node
-  const toggleCollapse = (nodeId: string) => {
-    setCollapsedNodes((prev) => ({
-      ...prev,
-      [nodeId]: !prev[nodeId],
-    }));
-  };
-
-  // Expand all / Collapse all
-  const handleExpandAll = () => setCollapsedNodes({});
-  const handleCollapseAll = () => {
-    const allCollapsed: Record<string, boolean> = {};
-    if (downlineTree) {
-      const traverse = (node: TreeNode) => {
-        if (node.children.length > 0) {
-          allCollapsed[node.user.id] = true;
-          node.children.forEach(traverse);
-        }
-      };
-      traverse(downlineTree);
-    }
-    setCollapsedNodes(allCollapsed);
-  };
 
   // Upline sponsor lookup
   const uplineUser = currentUser ? (
@@ -991,148 +917,19 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
         </div>
 
         {viewMode === 'tree' ? (
-          /* 🌲 VISUAL DOWNLINE TREE VIEW */
-          <div className="space-y-4">
-            {/* Level 1 Direct Highlight & Flash Banner */}
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-slate-950 border-2 border-amber-400/80 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 relative overflow-hidden">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-amber-400 text-slate-950 shadow-md animate-pulse shrink-0">
-                  <Sparkles className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-black text-amber-300 text-sm sm:text-base">
-                      ⚡ लेवल 1 डायरेक्ट सदस्य (Direct Members Level 1)
-                    </h4>
-                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-xs">
-                      {downlineTree?.children.length || 0} खिलाड़ी जुड़े हैं
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    ये वे खिलाड़ी हैं जो सीधे आपके रेफरल कोड <strong className="text-amber-400 font-mono select-all">{currentUser.referralCode}</strong> से पंजीकृत हैं।
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
-                <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black flex items-center gap-1.5 animate-pulse">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>2.0% डायरेक्ट कमीशन सक्रिय</span>
-                </span>
-              </div>
-            </div>
-
-            {/* Tree Controls Toolbar */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-2xl bg-slate-950/80 border border-slate-800/80">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={treeSearch}
-                  onChange={(e) => setTreeSearch(e.target.value)}
-                  placeholder="ट्री में नाम, ID या मोबाइल नंबर खोजें..."
-                  className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700/60 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleExpandAll}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/60 text-xs font-bold transition-colors cursor-pointer"
-                >
-                  सब खोलें (Expand All)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCollapseAll}
-                  className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/60 text-xs font-bold transition-colors cursor-pointer"
-                >
-                  सब समेटें (Collapse All)
-                </button>
-              </div>
-            </div>
-
-            {/* Tree Root Container */}
-            <div className="p-3 sm:p-5 rounded-2xl bg-[#090d18] border border-slate-800/80 space-y-4 overflow-x-auto">
-              {/* Root User Node (You) */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-purple-950/40 to-slate-950 border-2 border-amber-400/60 shadow-lg space-y-2 max-w-2xl">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 font-black text-sm flex items-center justify-center border-2 border-white shadow">
-                      {currentUser.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-white text-sm sm:text-base">{currentUser.name}</span>
-                        <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
-                          👑 YOU (ROOT)
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-400 font-mono block select-all">ID: {currentUser.id}</span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">रेफरल कोड</span>
-                    <span className="text-sm font-mono font-black text-amber-400 select-all">{currentUser.referralCode}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-amber-400/20 text-xs">
-                  <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-400/50">
-                    <span className="text-[10px] text-amber-300 font-bold block">Direct (Level 1)</span>
-                    <strong className="text-amber-300 font-black text-sm">{downlineTree?.children.length || 0} Users ⚡</strong>
-                  </div>
-                  <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Total Team</span>
-                    <strong className="text-purple-300 font-black text-sm">{activeReferralMembers.length} Members</strong>
-                  </div>
-                  <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Earned Comm</span>
-                    <strong className="text-emerald-400 font-black text-sm">₹{totalEarnings.toFixed(2)}</strong>
-                  </div>
-                  <div className="p-2 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Max Depth</span>
-                    <strong className="text-cyan-300 font-black text-sm">8 Levels</strong>
-                  </div>
-                </div>
-              </div>
-
-              {/* Children Branches */}
-              {downlineTree?.children && downlineTree.children.length > 0 ? (
-                <div className="pl-3 sm:pl-6 border-l-2 border-amber-400/60 space-y-3 pt-2">
-                  {downlineTree.children.map((childNode) => (
-                    <DownlineTreeNode
-                      key={childNode.user.id}
-                      node={childNode}
-                      collapsedNodes={collapsedNodes}
-                      onToggle={toggleCollapse}
-                      searchQuery={treeSearch}
-                      highlightLevel1={true}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="p-6 rounded-2xl bg-slate-950/60 border border-dashed border-slate-800 text-center space-y-3">
-                  <Users className="w-10 h-10 text-amber-400/60 mx-auto" />
-                  <div>
-                    <h4 className="font-bold text-white text-sm">अभी आपकी डाउनलाइन में कोई सदस्य नहीं है</h4>
-                    <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
-                      अपना रेफरल लिंक <strong className="text-amber-400 font-mono">{referralLink}</strong> दोस्तों के साथ शेयर करें। जब वे जुड़ेंगे, तो वे यहाँ ट्री में सीधे दिखेंगे!
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleShareWhatsApp}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-lg"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span>व्हाट्सएप पर शेयर करें</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+          /* 🌲 VISUAL DOWNLINE TREE VIEW (LEVEL 1 TO 5 HIERARCHY WITH COLLAPSIBLE NODES) */
+          <ReferralTreeView
+            currentUser={currentUser}
+            allUsers={allUsers}
+            referralMembers={referralMembers}
+            commissions={commissions}
+            onOpenDeposit={onOpenDeposit}
+            onSimulateTestMember={() => {
+              setTestMemberPhone(`98${Math.floor(10000000 + Math.random() * 90000000)}`);
+              setShowTestReferralModal(true);
+            }}
+            onShareWhatsApp={handleShareWhatsApp}
+          />
         ) : (
           /* 📋 TRADITIONAL TABLE VIEW */
           <div className="space-y-4">
@@ -1266,179 +1063,3 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   );
 };
 
-/* 🌲 Downline Tree Node Component */
-interface DownlineTreeNodeProps {
-  node: TreeNode;
-  collapsedNodes: Record<string, boolean>;
-  onToggle: (id: string) => void;
-  searchQuery?: string;
-  highlightLevel1?: boolean;
-}
-
-const DownlineTreeNode: React.FC<DownlineTreeNodeProps> = ({
-  node,
-  collapsedNodes,
-  onToggle,
-  searchQuery = '',
-  highlightLevel1 = true,
-}) => {
-  const isCollapsed = Boolean(collapsedNodes[node.user.id]);
-  const hasChildren = node.children && node.children.length > 0;
-  const isLevel1 = node.level === 1;
-
-  const isMatch = useMemo(() => {
-    if (!searchQuery.trim()) return false;
-    const q = searchQuery.toLowerCase();
-    const qDigits = searchQuery.replace(/\D/g, '');
-    return (
-      node.user.name.toLowerCase().includes(q) ||
-      node.user.id.toLowerCase().includes(q) ||
-      (node.user.referralCode && node.user.referralCode.toLowerCase().includes(q)) ||
-      (node.user.phone && (node.user.phone.includes(q) || (qDigits && node.user.phone.replace(/\D/g, '').includes(qDigits))))
-    );
-  }, [node.user, searchQuery]);
-
-  const levelColorMap: Record<number, { bg: string; text: string; border: string; glow: string }> = {
-    1: { 
-      bg: 'bg-gradient-to-r from-amber-500/25 via-yellow-500/15 to-slate-900', 
-      text: 'text-amber-300', 
-      border: 'border-amber-400',
-      glow: 'shadow-[0_0_20px_rgba(251,191,36,0.3)] ring-2 ring-amber-400/80'
-    },
-    2: { bg: 'bg-purple-500/15', text: 'text-purple-300', border: 'border-purple-400/50', glow: '' },
-    3: { bg: 'bg-indigo-500/15', text: 'text-indigo-300', border: 'border-indigo-400/50', glow: '' },
-    4: { bg: 'bg-blue-500/15', text: 'text-blue-300', border: 'border-blue-400/50', glow: '' },
-    5: { bg: 'bg-teal-500/15', text: 'text-teal-300', border: 'border-teal-400/50', glow: '' },
-    6: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-400/50', glow: '' },
-    7: { bg: 'bg-cyan-500/15', text: 'text-cyan-300', border: 'border-cyan-400/50', glow: '' },
-    8: { bg: 'bg-rose-500/15', text: 'text-rose-300', border: 'border-rose-400/50', glow: '' },
-  };
-
-  const levelStyle = levelColorMap[node.level] || { bg: 'bg-slate-800', text: 'text-slate-300', border: 'border-slate-700', glow: '' };
-
-  return (
-    <div className="space-y-2 relative">
-      {/* Visual node row with Level 1 Golden Pulse & Flash */}
-      <div
-        className={`p-3 sm:p-4 rounded-2xl border transition-all duration-300 ${
-          isMatch
-            ? 'ring-4 ring-amber-400 bg-amber-950/60 border-amber-300 shadow-2xl'
-            : isLevel1 && highlightLevel1
-            ? `${levelStyle.bg} ${levelStyle.border} ${levelStyle.glow} hover:bg-slate-900/90`
-            : `${levelStyle.bg} ${levelStyle.border} hover:bg-slate-900/80`
-        } flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative overflow-hidden`}
-      >
-        {/* Flash Accent Light Bar on Level 1 Directs */}
-        {isLevel1 && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse pointer-events-none" />
-        )}
-
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          {/* Avatar / Initial */}
-          <div className="relative shrink-0">
-            {node.user.avatar ? (
-              <img
-                src={node.user.avatar}
-                alt={node.user.name}
-                className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover border-2 ${isLevel1 ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]' : levelStyle.border}`}
-              />
-            ) : (
-              <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full ${levelStyle.bg} ${levelStyle.text} font-black text-sm sm:text-base flex items-center justify-center border-2 ${isLevel1 ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]' : levelStyle.border}`}>
-                {node.user.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <span className={`absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full font-black text-[9px] ${isLevel1 ? 'bg-amber-400 text-slate-950 ring-1 ring-white shadow' : `bg-slate-950 ${levelStyle.text} border ${levelStyle.border}`}`}>
-              L{node.level}
-            </span>
-          </div>
-
-          {/* User Name & Details */}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-black text-white text-sm sm:text-base tracking-wide flex items-center gap-1.5">
-                <span>{node.user.name}</span>
-                {isLevel1 && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black text-[10px] shadow-md animate-pulse">
-                    <span>⚡</span>
-                    <span>डायरेक्ट (DIRECT L1)</span>
-                  </span>
-                )}
-              </span>
-              {!isLevel1 && (
-                <span className={`px-2 py-0.5 rounded-full font-black text-[9px] ${levelStyle.bg} ${levelStyle.text} border ${levelStyle.border}`}>
-                  Level {node.level} टीम
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2.5 text-[11px] text-slate-300 flex-wrap mt-1">
-              <span className="font-mono bg-purple-950/80 px-2 py-0.5 rounded border border-purple-800/50 text-purple-300 font-bold select-all">
-                ID: {node.user.id}
-              </span>
-              {node.user.phone && (
-                <span className="font-mono text-slate-200 font-bold">
-                  📱 {node.user.phone}
-                </span>
-              )}
-              {node.user.referralCode && (
-                <span className="font-mono text-emerald-400 font-black bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-800/50 select-all">
-                  Code: {node.user.referralCode}
-                </span>
-              )}
-              {node.user.createdAt && (
-                <span className="text-[10px] text-slate-400">
-                  📅 {new Date(node.user.createdAt).toLocaleDateString('en-GB')}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right side stats & toggle */}
-        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
-          <div className="flex items-center gap-3 sm:gap-4 text-right">
-            <div className="px-2.5 py-1 rounded-xl bg-slate-950/80 border border-slate-800">
-              <span className="text-[9px] uppercase text-slate-400 font-bold block">टिकट खरीदे</span>
-              <span className="text-xs font-black text-slate-100">{node.ticketsBought} Cards</span>
-            </div>
-            <div className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-400/40">
-              <span className="text-[9px] uppercase text-amber-300/80 font-bold block">कमीशन इनकम</span>
-              <span className="text-xs sm:text-sm font-black text-amber-400">+₹{node.commissionEarned.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {hasChildren ? (
-            <button
-              type="button"
-              onClick={() => onToggle(node.user.id)}
-              className="px-3 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-400/40 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-sm"
-            >
-              <GitBranch className="w-3.5 h-3.5 text-purple-400" />
-              <span>{node.children.length} डाउनलाइन</span>
-              {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-          ) : (
-            <span className="px-2.5 py-1.5 rounded-xl bg-slate-950/80 text-slate-500 text-[10px] font-bold border border-slate-800/80">
-              0 डाउनलाइन
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Children Nodes (Recursive branch) */}
-      {hasChildren && !isCollapsed && (
-        <div className="pl-3 sm:pl-6 border-l-2 border-purple-500/40 space-y-2 pt-1">
-          {node.children.map((childNode) => (
-            <DownlineTreeNode
-              key={childNode.user.id}
-              node={childNode}
-              collapsedNodes={collapsedNodes}
-              onToggle={onToggle}
-              searchQuery={searchQuery}
-              highlightLevel1={highlightLevel1}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
