@@ -30,24 +30,80 @@ declare global {
   }
 }
 
-// Safely initialize $_Tawk fallback stubs to prevent third-party i18next script exceptions
+// Safely initialize $_Tawk fallback callable function stubs to prevent third-party i18next script exceptions
+const createI18nCallableStub = () => {
+  const stub: any = function (key: string) {
+    return typeof key === 'string' ? key : '';
+  };
+  stub.t = function (key: string) {
+    return typeof key === 'string' ? key : '';
+  };
+  stub.init = function (_opts?: any, callback?: any) {
+    if (typeof callback === 'function') {
+      try {
+        callback();
+      } catch (e) {
+        // ignore
+      }
+    }
+    return stub;
+  };
+  stub.use = function () {
+    return stub;
+  };
+  stub.changeLanguage = function (_lng?: string, callback?: any) {
+    if (typeof callback === 'function') {
+      try {
+        callback();
+      } catch (e) {
+        // ignore
+      }
+    }
+    return Promise.resolve();
+  };
+  stub.loadNamespaces = function (_ns?: any, callback?: any) {
+    if (typeof callback === 'function') {
+      try {
+        callback();
+      } catch (e) {
+        // ignore
+      }
+    }
+    return Promise.resolve();
+  };
+  stub.exists = function () {
+    return true;
+  };
+  stub.getFixedT = function () {
+    return stub;
+  };
+  stub.hasResourceBundle = function () {
+    return true;
+  };
+  stub.getResourceBundle = function () {
+    return {};
+  };
+  stub.isInitialized = true;
+  stub.language = 'en';
+  stub.languages = ['en'];
+  stub.options = {};
+  return stub;
+};
+
 if (typeof window !== 'undefined') {
   try {
     window.$_Tawk = window.$_Tawk || {};
     if (typeof window.$_Tawk.i18next !== 'function') {
-      window.$_Tawk.i18next = {
-        t: (k: string) => k,
-        init: () => {},
-        use: () => window.$_Tawk?.i18next,
-        changeLanguage: () => {},
-      };
+      window.$_Tawk.i18next = createI18nCallableStub();
     }
     // Stub tawk logger to suppress internal sandbox noise
-    window.$_Tawk.logger = {
-      log: () => {},
-      warn: () => {},
-      error: () => {},
-    };
+    if (!window.$_Tawk.logger) {
+      window.$_Tawk.logger = {
+        log: () => {},
+        warn: () => {},
+        error: () => {},
+      };
+    }
   } catch (e) {
     // Ignore sandbox errors
   }
@@ -64,17 +120,15 @@ export const initTawkScript = (siteId = TAWK_SITE_ID) => {
     // Ensure fallback exists before script execution
     window.$_Tawk = window.$_Tawk || {};
     if (typeof window.$_Tawk.i18next !== 'function') {
-      window.$_Tawk.i18next = {
-        t: (k: string) => k,
-        init: () => {},
-        use: () => window.$_Tawk?.i18next,
+      window.$_Tawk.i18next = createI18nCallableStub();
+    }
+    if (!window.$_Tawk.logger) {
+      window.$_Tawk.logger = {
+        log: () => {},
+        warn: () => {},
+        error: () => {},
       };
     }
-    window.$_Tawk.logger = {
-      log: () => {},
-      warn: () => {},
-      error: () => {},
-    };
 
     const script = document.createElement('script');
     script.id = 'tawk-script-tag';
