@@ -2467,11 +2467,11 @@ export function App() {
     // Search recipient in registered users
     const foundUser = users.find(
       (u) =>
-        u.id.toLowerCase() === clean ||
-        u.email.toLowerCase() === clean ||
-        u.phone.replace(/[\s+-]/g, '') === cleanPhone ||
+        (u.id && u.id.toLowerCase() === clean) ||
+        (u.email && u.email.toLowerCase() === clean) ||
+        (u.phone && u.phone.replace(/[\s+-]/g, '') === cleanPhone) ||
         (u.referralCode && u.referralCode.toLowerCase() === clean) ||
-        u.name.toLowerCase() === clean
+        (u.name && u.name.toLowerCase() === clean)
     );
 
     if (foundUser && foundUser.id === currentUser.id) {

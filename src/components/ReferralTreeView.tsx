@@ -560,12 +560,12 @@ const VisualTreeNodeItem: React.FC<VisualTreeNodeItemProps> = ({
 
   // Match check for highlighting
   const isMatch = useMemo(() => {
-    if (!searchQuery.trim()) return false;
+    if (!searchQuery.trim() || !node.user) return false;
     const q = searchQuery.toLowerCase();
     const qDigits = searchQuery.replace(/\D/g, '');
     return (
-      node.user.name.toLowerCase().includes(q) ||
-      node.user.id.toLowerCase().includes(q) ||
+      (node.user.name && node.user.name.toLowerCase().includes(q)) ||
+      (node.user.id && node.user.id.toLowerCase().includes(q)) ||
       (node.user.referralCode && node.user.referralCode.toLowerCase().includes(q)) ||
       (node.user.phone && (node.user.phone.includes(q) || (qDigits && node.user.phone.replace(/\D/g, '').includes(qDigits))))
     );

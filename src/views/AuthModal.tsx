@@ -364,12 +364,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Helper to find user by login identifier (mobile number, email, or username)
   const findUserByIdentifier = (identifier: string): User | undefined => {
+    if (!identifier) return undefined;
     const raw = identifier.trim().toLowerCase();
     const phoneDigits = raw.replace(/\D/g, '').slice(-10);
 
     return allUsers.find((u) => {
+      if (!u) return false;
       // Match phone
-      if (phoneDigits.length === 10) {
+      if (phoneDigits.length === 10 && u.phone) {
         const uPhoneDigits = u.phone.replace(/\D/g, '').slice(-10);
         if (uPhoneDigits === phoneDigits) return true;
       }
@@ -377,7 +379,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (u.email && u.email.toLowerCase() === raw) return true;
       // Match username or id
       if (u.username && u.username.toLowerCase() === raw) return true;
-      if (u.id.toLowerCase() === raw) return true;
+      if (u.id && u.id.toLowerCase() === raw) return true;
       return false;
     });
   };

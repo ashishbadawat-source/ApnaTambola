@@ -11,10 +11,13 @@ export const WinnersView: React.FC<WinnersViewProps> = ({ winners }) => {
   const [prizeFilter, setPrizeFilter] = useState<string>('all');
 
   const filteredWinners = winners.filter((w) => {
+    if (!w) return false;
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      w.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      w.gameTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      w.ticketId.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      (w.userName && w.userName.toLowerCase().includes(q)) ||
+      (w.gameTitle && w.gameTitle.toLowerCase().includes(q)) ||
+      (w.ticketId && w.ticketId.toLowerCase().includes(q));
     const matchesPrize = prizeFilter === 'all' || w.prizeCode === prizeFilter;
     return matchesSearch && matchesPrize;
   });

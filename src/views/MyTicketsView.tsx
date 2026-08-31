@@ -40,7 +40,7 @@ export const MyTicketsView: React.FC<MyTicketsViewProps> = ({ tickets, games, on
     const game = gameMap.get(t.gameId);
     const tId = (t.ticketId || t.id || '').toLowerCase();
     const gTitle = (t.gameTitle || game?.title || '').toLowerCase();
-    const q = searchTerm.toLowerCase().trim();
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch = !q || tId.includes(q) || gTitle.includes(q);
 
     if (!matchesSearch) return false;

@@ -72,29 +72,31 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   const pendingDepositsCount = deposits.filter((d) => d.status === 'pending').length;
 
   const filteredDeposits = deposits.filter((d) => {
+    if (!d) return false;
     if (depositStatusFilter !== 'all' && d.status !== depositStatusFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        d.id.toLowerCase().includes(q) ||
-        d.userName.toLowerCase().includes(q) ||
+        (d.id && d.id.toLowerCase().includes(q)) ||
+        (d.userName && d.userName.toLowerCase().includes(q)) ||
         (d.userPhone && d.userPhone.toLowerCase().includes(q)) ||
         (d.userEmail && d.userEmail.toLowerCase().includes(q)) ||
         (d.utrNumber && d.utrNumber.toLowerCase().includes(q)) ||
-        d.userId.toLowerCase().includes(q)
+        (d.userId && d.userId.toLowerCase().includes(q))
       );
     }
     return true;
   });
 
   const filteredTransactions = transactions.filter((tx) => {
+    if (!tx) return false;
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
     if (statusFilter !== 'all' && tx.status !== statusFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        tx.id.toLowerCase().includes(q) ||
-        tx.description.toLowerCase().includes(q) ||
+        (tx.id && tx.id.toLowerCase().includes(q)) ||
+        (tx.description && tx.description.toLowerCase().includes(q)) ||
         (tx.referenceId && tx.referenceId.toLowerCase().includes(q)) ||
         (tx.utrNumber && tx.utrNumber.toLowerCase().includes(q))
       );

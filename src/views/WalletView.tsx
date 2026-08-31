@@ -90,14 +90,14 @@ export const WalletView: React.FC<WalletViewProps> = ({
   const p2pTotalDeduction = transferAmount + p2pFeeAmount; // e.g. 100 + 5 = 105
   const hasP2PBalance = currentUser.walletBalance >= p2pTotalDeduction;
 
-  const availableUsers = users.filter((u) => u.id !== currentUser.id);
+  const availableUsers = users.filter((u) => u && u.id !== currentUser.id);
   const matchedRecipient = availableUsers.find(
     (u) =>
-      u.id.toLowerCase() === transferRecipient.trim().toLowerCase() ||
-      u.email.toLowerCase() === transferRecipient.trim().toLowerCase() ||
-      u.phone.replace(/[\s+-]/g, '') === transferRecipient.trim().replace(/[\s+-]/g, '') ||
+      (u.id && u.id.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
+      (u.email && u.email.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
+      (u.phone && u.phone.replace(/[\s+-]/g, '') === transferRecipient.trim().replace(/[\s+-]/g, '')) ||
       (u.referralCode && u.referralCode.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
-      u.name.toLowerCase() === transferRecipient.trim().toLowerCase()
+      (u.name && u.name.toLowerCase() === transferRecipient.trim().toLowerCase())
   );
 
   // Admin Configs (with robust defaults)
@@ -240,11 +240,12 @@ export const WalletView: React.FC<WalletViewProps> = ({
   };
 
   const filteredTxns = transactions.filter((t) => {
+    if (!t) return false;
     if (txnFilter !== 'all' && t.type !== txnFilter) return false;
     if (txnSearch) {
       const q = txnSearch.toLowerCase();
       return (
-        t.description.toLowerCase().includes(q) ||
+        (t.description && t.description.toLowerCase().includes(q)) ||
         (t.referenceId && t.referenceId.toLowerCase().includes(q)) ||
         (t.paymentMethod && t.paymentMethod.toLowerCase().includes(q))
       );

@@ -153,16 +153,16 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const hasSufficientBalance = currentUser.walletBalance >= calculatedTotalDeduction;
 
   // Filter other users for quick select
-  const availableUsers = users.filter((u) => u.id !== currentUser.id);
+  const availableUsers = users.filter((u) => u && u.id !== currentUser.id);
 
   // Verified recipient match in real-time
   const matchedRecipient = availableUsers.find(
     (u) =>
-      u.id.toLowerCase() === transferRecipient.trim().toLowerCase() ||
-      u.email.toLowerCase() === transferRecipient.trim().toLowerCase() ||
-      u.phone.replace(/[\s+-]/g, '') === transferRecipient.trim().replace(/[\s+-]/g, '') ||
+      (u.id && u.id.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
+      (u.email && u.email.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
+      (u.phone && u.phone.replace(/[\s+-]/g, '') === transferRecipient.trim().replace(/[\s+-]/g, '')) ||
       (u.referralCode && u.referralCode.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
-      u.name.toLowerCase() === transferRecipient.trim().toLowerCase()
+      (u.name && u.name.toLowerCase() === transferRecipient.trim().toLowerCase())
   );
 
   // Handle Photo Upload from local device (Camera / Gallery / Files)

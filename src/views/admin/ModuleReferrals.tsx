@@ -239,14 +239,15 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
   };
 
   const filteredCommissions = commList.filter((c) => {
+    if (!c) return false;
     if (statusFilter !== 'all' && c.status !== statusFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        c.userName.toLowerCase().includes(q) ||
-        c.sourceUserName.toLowerCase().includes(q) ||
-        c.transactionId.toLowerCase().includes(q) ||
-        c.gameTitle.toLowerCase().includes(q)
+        (c.userName && c.userName.toLowerCase().includes(q)) ||
+        (c.sourceUserName && c.sourceUserName.toLowerCase().includes(q)) ||
+        (c.transactionId && c.transactionId.toLowerCase().includes(q)) ||
+        (c.gameTitle && c.gameTitle.toLowerCase().includes(q))
       );
     }
     return true;

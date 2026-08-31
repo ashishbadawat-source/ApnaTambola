@@ -51,6 +51,7 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
   const totalApprovedAmount = approvedList.reduce((sum, w) => sum + w.amount, 0);
 
   const filteredWithdrawals = withdrawals.filter((w) => {
+    if (!w) return false;
     if (filterTab === 'pending' && w.status !== 'pending') return false;
     if (filterTab === 'approved' && w.status !== 'approved') return false;
     if (filterTab === 'rejected' && w.status !== 'rejected') return false;
@@ -58,11 +59,11 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
-        w.userName.toLowerCase().includes(q) ||
-        w.userPhone.toLowerCase().includes(q) ||
+        (w.userName && w.userName.toLowerCase().includes(q)) ||
+        (w.userPhone && w.userPhone.toLowerCase().includes(q)) ||
         (w.upiId && w.upiId.toLowerCase().includes(q)) ||
         (w.accountNumber && w.accountNumber.toLowerCase().includes(q)) ||
-        w.id.toLowerCase().includes(q)
+        (w.id && w.id.toLowerCase().includes(q))
       );
     }
     return true;

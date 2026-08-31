@@ -9,14 +9,30 @@ if (typeof window !== 'undefined') {
   // Filter console.error / console.warn for known benign third party widget loggers
   const origError = console.error;
   console.error = (...args: any[]) => {
-    const msg = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a) || '')).join(' ');
-    if (
-      msg.toLowerCase().includes('tawk') ||
-      msg.toLowerCase().includes('i18next') ||
-      msg.toLowerCase().includes('logger')
-    ) {
-      // Suppress noisy third party telemetry logs in sandbox
-      return;
+    try {
+      const msg = args
+        .map((a) => {
+          if (typeof a === 'string') return a;
+          if (a?.message) return String(a.message);
+          try {
+            return JSON.stringify(a);
+          } catch {
+            return String(a);
+          }
+        })
+        .join(' ')
+        .toLowerCase();
+
+      if (
+        msg.includes('tawk') ||
+        msg.includes('i18next') ||
+        msg.includes('logger')
+      ) {
+        // Suppress noisy third party telemetry logs in sandbox
+        return;
+      }
+    } catch {
+      // Ignore filter error and pass through
     }
     origError.apply(console, args);
   };

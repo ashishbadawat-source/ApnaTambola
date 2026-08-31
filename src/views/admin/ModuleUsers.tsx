@@ -154,7 +154,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
         return (b.walletBalance || 0) - (a.walletBalance || 0);
       }
       if (sortBy === 'name_asc') {
-        return a.name.localeCompare(b.name);
+        return (a.name || '').localeCompare(b.name || '');
       }
       return 0;
     });

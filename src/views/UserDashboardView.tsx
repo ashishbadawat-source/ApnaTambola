@@ -129,13 +129,14 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   };
 
   const filteredDirectUsers = directLiveUsers.filter((u) => {
+    if (!u) return false;
     if (!directSearch) return true;
     const q = directSearch.toLowerCase();
     return (
-      u.name?.toLowerCase().includes(q) ||
-      u.id?.toLowerCase().includes(q) ||
-      u.phone?.includes(q) ||
-      u.referralCode?.toLowerCase().includes(q)
+      (u.name && u.name.toLowerCase().includes(q)) ||
+      (u.id && u.id.toLowerCase().includes(q)) ||
+      (u.phone && u.phone.includes(q)) ||
+      (u.referralCode && u.referralCode.toLowerCase().includes(q))
     );
   });
 
@@ -227,7 +228,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
       textColor: 'text-cyan-300',
       headerBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40',
       badgeBg: 'bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-950 font-black shadow-md',
-      badgeText: `₹${currentUser.walletBalance.toLocaleString('en-IN')} कुल बैलेंस`,
+      badgeText: `₹${(currentUser?.walletBalance || 0).toLocaleString('en-IN')} कुल बैलेंस`,
       iconBg: 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/30',
       actionText: 'डिपॉजिट / निकासी (Wallet)',
       accentPill: 'bg-cyan-950/80 border border-cyan-400/40 text-cyan-200',
