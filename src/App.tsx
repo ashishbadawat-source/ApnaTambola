@@ -249,7 +249,12 @@ export function App() {
 
       if (refCode && refCode.trim()) {
         const cleanRef = refCode.trim().toUpperCase();
-        localStorage.setItem('apna_tambola_pending_referral', cleanRef);
+        console.log(`[REFERRAL] URL referral code detected: ${cleanRef}`);
+        try {
+          localStorage.setItem('apna_tambola_pending_referral', cleanRef);
+          localStorage.setItem('pendingReferralCode', cleanRef);
+          sessionStorage.setItem('pendingReferralCode', cleanRef);
+        } catch (e) {}
         // Prompt register modal
         setShowAuthModal(true);
         setAuthModalMode('register');
@@ -1131,17 +1136,20 @@ export function App() {
   };
 
   const handleRegisterUser = async (newUser: User) => {
+    console.log(`[REGISTRATION] User registration started for: ${newUser.name} (${newUser.phone || newUser.id})`);
     // 1. Comprehensive case-insensitive upline identification from inputs & URL params
     const rawRefCode = (
       newUser.referrer_id ||
       newUser.referredByUserId ||
       newUser.referredBy ||
-      (typeof window !== 'undefined' ? localStorage.getItem('apna_tambola_pending_referral') || '' : '')
+      (typeof window !== 'undefined' ? localStorage.getItem('pendingReferralCode') || localStorage.getItem('apna_tambola_pending_referral') || '' : '')
     ).trim();
 
     const cleanRef = extractReferralCode(rawRefCode);
     const cleanNoPrefix = cleanRef.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
     const digitsOnly = cleanRef.replace(/\D/g, '');
+
+    console.log(`[REFERRAL] Sponsor lookup started for code: "${cleanRef || rawRefCode}"`);
 
     let matchedUpline: User | null = null;
 
@@ -1219,6 +1227,14 @@ export function App() {
       ? matchedUpline.id
       : (newUser.referrer_id || (cleanRef ? cleanRef : null));
 
+    if (matchedUpline) {
+      console.log(`[REFERRAL] Sponsor found: ${matchedUpline.id} (${matchedUpline.name || matchedUpline.referralCode})`);
+    } else if (finalReferrerId) {
+      console.log(`[REFERRAL] Sponsor ID assigned: ${finalReferrerId}`);
+    } else {
+      console.log(`[REFERRAL] No sponsor matched; registering as direct master user`);
+    }
+
     const finalReferredByCode = matchedUpline
       ? (matchedUpline.referralCode || matchedUpline.id)
       : (cleanRef || newUser.referredBy || '');
@@ -1226,6 +1242,8 @@ export function App() {
     const finalReferredByUserId = matchedUpline
       ? matchedUpline.id
       : (newUser.referredByUserId || '');
+
+    console.log(`[REFERRAL] Saving referred_by: ${finalReferrerId || 'none'}`);
 
     const completeUser: User = {
       ...newUser,
@@ -1247,7 +1265,8 @@ export function App() {
       };
       const sanitizedUser = JSON.parse(JSON.stringify(firestoreUserPayload));
       await setDoc(doc(db, 'users', completeUser.id), sanitizedUser, { merge: true });
-      console.log(`[Firestore DB] Saved user ${completeUser.id} with foreign key referrer_id="${finalReferrerId}"`);
+      console.log(`[DATABASE] Profile created successfully in Firestore. Document ID: ${completeUser.id} with foreign key referrer_id="${finalReferrerId}"`);
+      console.log(`[REFERRAL] Direct referral relationship verified: ${finalReferrerId} -> ${completeUser.id}`);
     } catch (e) {
       console.warn('Firestore user save notice:', e);
     }
@@ -1372,9 +1391,11 @@ export function App() {
       }
     }
 
-    // 8. Clean up pending referral code from localStorage
+    // 8. Clean up pending referral code from localStorage and sessionStorage
     try {
       localStorage.removeItem('apna_tambola_pending_referral');
+      localStorage.removeItem('pendingReferralCode');
+      sessionStorage.removeItem('pendingReferralCode');
     } catch (e) {}
 
     // 9. Broadcast registration event across tabs for instant multi-window sync
