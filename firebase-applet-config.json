@@ -1,12 +1,12 @@
 {
-  "projectId": "apnat-81739",
-  "appId": "1:914819261608:web:622d66088438eedecece9d",
-  "apiKey": "AIzaSyAlYp3ohs6m50k4f2a4vzH6sbZWfDet7pU",
-  "authDomain": "apnat-81739.firebaseapp.com",
+  "projectId": "modified-primer-m6pck",
+  "appId": "1:146077157091:web:e22ec8bc63dd25b763a7d6",
+  "apiKey": "AIzaSyBFCNR3HYhftAtEpbWmamnEmh-kM9PlXw0",
+  "authDomain": "modified-primer-m6pck.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-tambolalive-bedbd97f-999b-4cc1-9263-58d2e616026c",
-  "storageBucket": "apnat-81739.firebasestorage.app",
-  "messagingSenderId": "914819261608",
-  "measurementId": "G-4E36RD87XE",
-  "oAuthClientId": "",
+  "storageBucket": "modified-primer-m6pck.firebasestorage.app",
+  "messagingSenderId": "146077157091",
+  "measurementId": "",
+  "oAuthClientId": "146077157091-59gvo629ruq33l8siberuutf34i4lq00.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
