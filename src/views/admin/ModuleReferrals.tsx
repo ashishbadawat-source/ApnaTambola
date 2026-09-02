@@ -33,6 +33,7 @@ import { ReferralCommission, User } from '../../types';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { isDirectChildOf, findReferrerInList } from '../../utils/referralMatcher';
+import { ReferralGrowthChart } from '../../components/admin/ReferralGrowthChart';
 
 interface ModuleReferralsProps {
   users: User[];
@@ -286,6 +287,14 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 📈 REAL-TIME REFERRAL GROWTH & CAMPAIGN ANALYTICS CHART (Last 30 Days) */}
+      <ReferralGrowthChart
+        users={users}
+        commissions={commissions}
+        title="Referral Growth & Campaign Spike Analytics"
+        description="Daily growth of new referral sign-ups over the last 30 days to identify winning viral referral campaigns."
+      />
 
       {/* 🔍 LIVE REFERRAL TRACE & SPONSOR DIAGNOSTICS TOOL */}
       <div className="rounded-3xl bg-gradient-to-br from-[#1b122e] via-slate-900 to-[#0c1424] border-2 border-purple-500/50 p-5 sm:p-6 space-y-5 shadow-2xl">

@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { User, TambolaGame, TambolaTicket, WalletTransaction, ReferralCommission, WithdrawalRequest } from '../../types';
+import { ReferralGrowthChart } from '../../components/admin/ReferralGrowthChart';
 
 interface ModuleReportsProps {
   users: User[];
@@ -248,25 +249,34 @@ export const ModuleReports: React.FC<ModuleReportsProps> = ({
         </div>
       )}
 
-      {/* Tab 3: MLM Referral Payouts */}
+      {/* Tab 3: MLM Referral Payouts & Growth Analysis */}
       {activeReportTab === 'referrals' && (
-        <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-black text-white">8-Tier Commission Payout Breakdown</h3>
-            <span className="text-xs text-amber-400 font-bold">Commission on Ticket Plays Only</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 text-center">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((lvl) => {
-              const lvlComms = commissions.filter((c) => c.level === lvl);
-              const sum = lvlComms.reduce((s, c) => s + c.commissionAmount, 0);
-              return (
-                <div key={lvl} className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                  <div className="text-[10px] text-slate-400 uppercase font-black">Level {lvl}</div>
-                  <div className="text-lg font-black text-emerald-400">₹{sum.toFixed(2)}</div>
-                  <div className="text-[10px] text-slate-500">{lvlComms.length} payouts</div>
-                </div>
-              );
-            })}
+        <div className="space-y-5">
+          <ReferralGrowthChart
+            users={users}
+            commissions={commissions}
+            title="30-Day Referral Acquisition & Viral Spike Trends"
+            description="Assess 30-day viral user acquisition curves, peak registration bursts, and high-performing sponsor campaigns."
+          />
+
+          <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-white">8-Tier Commission Payout Breakdown</h3>
+              <span className="text-xs text-amber-400 font-bold">Commission on Ticket Plays Only</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 text-center">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((lvl) => {
+                const lvlComms = commissions.filter((c) => c.level === lvl);
+                const sum = lvlComms.reduce((s, c) => s + c.commissionAmount, 0);
+                return (
+                  <div key={lvl} className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
+                    <div className="text-[10px] text-slate-400 uppercase font-black">Level {lvl}</div>
+                    <div className="text-lg font-black text-emerald-400">₹{sum.toFixed(2)}</div>
+                    <div className="text-[10px] text-slate-500">{lvlComms.length} payouts</div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

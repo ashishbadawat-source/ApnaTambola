@@ -53,6 +53,7 @@ import {
   ADMIN_COMMISSION_RATE,
   PRIZE_POOL_RATE,
 } from '../../utils/prizePoolCalculator';
+import { ReferralGrowthChart } from '../../components/admin/ReferralGrowthChart';
 
 interface ModuleDashboardProps {
   stats: AdminStats;
@@ -569,6 +570,18 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
                 <span>Prizes Breakdown</span>
               </button>
             </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* 📈 30-DAY REFERRAL SIGN-UPS & CAMPAIGN GROWTH LINE CHART */}
+          {/* ========================================================================= */}
+          <div className="lg:col-span-12">
+            <ReferralGrowthChart
+              users={users}
+              commissions={commissions}
+              title="30-Day Referral Sign-ups & Campaign Spike Analytics"
+              description="Identify successful promotional campaigns, track viral growth rates, and compare referral vs direct player acquisition."
+            />
           </div>
 
           {/* ========================================================================= */}
