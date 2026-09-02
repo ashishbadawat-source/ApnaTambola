@@ -285,20 +285,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>यूज़र पैनल</span>
               </button>
 
-              {currentUser.role === 'admin' && (
-                <button
-                  id="header-admin-mode-btn"
-                  onClick={() => handleAdminToggle(true)}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                    inAdminMode
-                      ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-500/25 scale-102'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>एडमिन पैनल</span>
-                </button>
-              )}
+              <button
+                id="header-admin-mode-btn"
+                onClick={() => handleAdminToggle(true)}
+                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  inAdminMode
+                    ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-500/25 scale-102'
+                    : 'text-red-400 hover:text-white hover:bg-red-950/60'
+                }`}
+                title="व्यवस्थापक (एडमिन) कंट्रोल पैनल खोलें"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                <span>👑 एडमिन पैनल</span>
+              </button>
 
               <button
                 id="header-all-options-btn"
@@ -337,6 +336,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="px-3 py-1.5 rounded-xl text-xs font-bold text-amber-300 hover:text-amber-200 transition-all cursor-pointer"
               >
                 रेफरल 7.8%
+              </button>
+              <button
+                onClick={() => {
+                  if (onOpenAdminLogin) onOpenAdminLogin();
+                  else handleTabChange('admin');
+                }}
+                className="px-3 py-1.5 rounded-xl text-xs font-black bg-red-950/70 hover:bg-red-900 border border-red-500/50 text-red-300 hover:text-white transition-all cursor-pointer flex items-center gap-1"
+                title="एडमिन पोर्टल खोलें"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                <span>👑 एडमिन</span>
               </button>
             </div>
           )}
@@ -526,15 +536,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </button>
                       )}
 
-                      {currentUser.role === 'admin' && (
-                        <button
-                          onClick={() => handleTabChange('admin')}
-                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-300 hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-red-400" />
-                          <span>एडमिन कंट्रोल पैनल</span>
-                        </button>
-                      )}
+                      {/* Admin Control Panel Button in User Dropdown */}
+                      <button
+                        onClick={() => {
+                          setUserDropdownOpen(false);
+                          handleAdminToggle(true);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-300 hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer border border-red-500/20 bg-red-950/20 my-0.5"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-red-400" />
+                        <span>👑 व्यवस्थापक (एडमिन) पोर्टल</span>
+                      </button>
 
                       {/* Direct Logout Button */}
                       <button
@@ -770,6 +782,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               );
             })}
           </div>
+
+          {/* Quick Dedicated Mobile Admin Portal Button */}
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              handleAdminToggle(true);
+            }}
+            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60 border border-red-500/40 cursor-pointer"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            <span>👑 व्यवस्थापक (एडमिन) पोर्टल खोलें</span>
+          </button>
         </div>
       )}
 

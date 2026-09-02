@@ -268,11 +268,11 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
               <h2 className="text-sm sm:text-base md:text-lg font-black text-white flex items-center gap-2 flex-wrap">
                 <span>All Options &amp; Dedicated Pages (सभी विकल्प)</span>
                 <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] sm:text-[10px] font-black uppercase">
-                  {isAdminView ? '24 Pages' : '12 Pages'}
+                  24 Dedicated Pages
                 </span>
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-400 truncate">
-                {isAdminView ? '12 User Portal Modules + 12 Full Admin Control Panels' : '12 Complete User Dashboard Modules & Game Features'}
+                12 User Portal Modules + 12 Full Master Admin Control Panels
               </p>
             </div>
           </div>
@@ -342,56 +342,54 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
             </div>
           </div>
 
-          {/* Section 2: Admin Options (Only shown when admin is logged in) */}
-          {isAdminView && (
-            <div className="space-y-3 sm:space-y-4 pt-3 border-t border-slate-800">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
-                  <h3 className="text-xs sm:text-sm font-black text-slate-100 uppercase tracking-wider">
-                    Admin Master Control Panels (12 Modules)
-                  </h3>
-                </div>
-                <span className="text-[10px] sm:text-xs text-red-400 font-bold">Admin Only</span>
+          {/* Section 2: Admin Options */}
+          <div className="space-y-3 sm:space-y-4 pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
+                <h3 className="text-xs sm:text-sm font-black text-slate-100 uppercase tracking-wider">
+                  Admin Master Control Panels (12 Modules)
+                </h3>
               </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-                {ADMIN_MODULES.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleAdminClick(item.id)}
-                      className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-red-500/50 hover:bg-slate-800/80 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-2 group hover:scale-[1.01]"
-                    >
-                      <div className="flex items-center justify-between w-full">
-                        <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 group-hover:scale-105 transition-transform">
-                          <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                        </div>
-                        <span className="text-xs font-mono font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20">
-                          MOD #{item.num}
-                        </span>
-                      </div>
-
-                      <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-black text-white group-hover:text-red-300 transition-colors truncate">
-                          {item.name}
-                        </h4>
-                        <p className="text-[11px] sm:text-xs text-slate-400 mt-1 leading-relaxed line-clamp-2">
-                          {item.desc}
-                        </p>
-                      </div>
-
-                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] sm:text-[11px] font-bold text-red-400">
-                        <span>Launch Panel</span>
-                        <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <span className="text-[10px] sm:text-xs text-red-400 font-bold">Admin Master Suite</span>
             </div>
-          )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+              {ADMIN_MODULES.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleAdminClick(item.id)}
+                    className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-red-500/50 hover:bg-slate-800/80 text-left transition-all duration-200 cursor-pointer flex flex-col justify-between space-y-2 group hover:scale-[1.01]"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 group-hover:scale-105 transition-transform">
+                        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                      </div>
+                      <span className="text-xs font-mono font-black text-red-400 bg-red-500/10 px-2 py-0.5 rounded-md border border-red-500/20">
+                        MOD #{item.num}
+                      </span>
+                    </div>
+
+                    <div className="min-w-0">
+                      <h4 className="text-xs sm:text-sm font-black text-white group-hover:text-red-300 transition-colors truncate">
+                        {item.name}
+                      </h4>
+                      <p className="text-[11px] sm:text-xs text-slate-400 mt-1 leading-relaxed line-clamp-2">
+                        {item.desc}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] sm:text-[11px] font-bold text-red-400">
+                      <span>Launch Panel</span>
+                      <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>

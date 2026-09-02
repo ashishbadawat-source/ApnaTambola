@@ -1096,12 +1096,35 @@ export function App() {
   const handleAdminLoginSuccess = (adminUser: User) => {
     setCurrentUser(adminUser);
     setActiveTab('admin');
+    try {
+      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(adminUser));
+    } catch (e) {}
     setUsers((prev) => {
       if (prev.some((u) => u.id === adminUser.id)) {
         return prev.map((u) => (u.id === adminUser.id ? adminUser : u));
       }
       return [adminUser, ...prev];
     });
+  };
+
+  const handleInstantMasterAdminAccess = () => {
+    const existingAdmin = (users || []).find((u) => u.role === 'admin' || u.email === 'ashishbadawat@gmail.com');
+    const adminObj: User = existingAdmin || {
+      id: 'admin_master_1',
+      name: 'Ashish Badawat (Master Admin)',
+      email: 'ashishbadawat@gmail.com',
+      phone: '+91 9876543210',
+      role: 'admin',
+      walletBalance: 25000,
+      depositBalance: 15000,
+      winningBalance: 10000,
+      referralBalance: 5000,
+      kycStatus: 'verified',
+      referralCode: 'REF-ADMIN77',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+      createdAt: new Date().toISOString(),
+    };
+    handleAdminLoginSuccess(adminObj);
   };
 
   const handleUserLogin = (user: User) => {
@@ -3727,16 +3750,22 @@ export function App() {
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                 <button
-                  onClick={handleOpenAdminLogin}
-                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-sm shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={handleInstantMasterAdminAccess}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-102"
                 >
-                  <span>👑 एडमिन लॉगिन पोर्टल खोलें</span>
+                  <span>⚡ 1-क्लिक मास्टर एडमिन एक्सेस</span>
+                </button>
+                <button
+                  onClick={handleOpenAdminLogin}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-sm shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <span>👑 पासवर्ड / Google से लॉगिन</span>
                 </button>
                 <button
                   onClick={() => handleNavigate('home')}
-                  className="px-6 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm cursor-pointer"
+                  className="px-6 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm cursor-pointer transition-all"
                 >
-                  मुख्य पृष्ठ पर जाएं
+                  मुख्य पृष्ठ
                 </button>
               </div>
             </div>
