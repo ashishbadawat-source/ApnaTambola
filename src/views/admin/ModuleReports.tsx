@@ -112,25 +112,25 @@ export const ModuleReports: React.FC<ModuleReportsProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-amber-400/30 shadow-lg">
           <div className="text-[10px] text-amber-400 uppercase font-black">Gross Ticket Collections</div>
-          <div className="text-2xl font-black text-white mt-1">₹{totalTicketRevenue.toLocaleString('en-IN')}</div>
-          <div className="text-[10px] text-emerald-400 mt-0.5">{tickets.length} tickets sold</div>
+          <div className="text-2xl font-black text-white mt-1">₹{(totalTicketRevenue || 0).toLocaleString('en-IN')}</div>
+          <div className="text-[10px] text-emerald-400 mt-0.5">{(tickets || []).length} tickets sold</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
           <div className="text-[10px] text-purple-400 uppercase font-black">Prize Payouts</div>
-          <div className="text-2xl font-black text-purple-300 mt-1">₹{totalPrizePaid.toLocaleString('en-IN')}</div>
+          <div className="text-2xl font-black text-purple-300 mt-1">₹{(totalPrizePaid || 0).toLocaleString('en-IN')}</div>
           <div className="text-[10px] text-slate-400 mt-0.5">Distributed to winners</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
           <div className="text-[10px] text-emerald-400 uppercase font-black">Referral Commission Paid</div>
-          <div className="text-2xl font-black text-emerald-300 mt-1">₹{totalReferralPaid.toFixed(2)}</div>
+          <div className="text-2xl font-black text-emerald-300 mt-1">₹{(totalReferralPaid || 0).toFixed(2)}</div>
           <div className="text-[10px] text-slate-400 mt-0.5">8-Tier MLM distribution (Tickets only)</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-emerald-500/40 shadow-lg">
           <div className="text-[10px] text-emerald-400 uppercase font-black">Net Platform Margin</div>
-          <div className="text-2xl font-black text-emerald-300 mt-1">₹{netPlatformProfit.toLocaleString('en-IN')}</div>
+          <div className="text-2xl font-black text-emerald-300 mt-1">₹{(netPlatformProfit || 0).toLocaleString('en-IN')}</div>
           <div className="text-[10px] text-amber-300 mt-0.5 font-black">{profitMarginPercent}% Retention Rate</div>
         </div>
       </div>
@@ -182,10 +182,10 @@ export const ModuleReports: React.FC<ModuleReportsProps> = ({
                   return (
                     <tr key={g.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="px-4 py-3 font-bold text-white">{g.title}</td>
-                      <td className="px-4 py-3 font-mono">₹{g.ticketPrice}</td>
-                      <td className="px-4 py-3 font-bold text-emerald-400">{gameTickets.length} / {g.totalTickets}</td>
-                      <td className="px-4 py-3 font-black text-amber-300">₹{gross.toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-3 font-mono">₹{g.prizePool.toLocaleString('en-IN')}</td>
+                      <td className="px-4 py-3 font-mono">₹{g.ticketPrice || 0}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-400">{(gameTickets || []).length} / {g.totalTickets || 100}</td>
+                      <td className="px-4 py-3 font-black text-amber-300">₹{(gross || 0).toLocaleString('en-IN')}</td>
+                      <td className="px-4 py-3 font-mono">₹{(g.prizePool || 0).toLocaleString('en-IN')}</td>
                       <td className="px-4 py-3 text-right">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
@@ -289,19 +289,19 @@ export const ModuleReports: React.FC<ModuleReportsProps> = ({
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
               <div className="text-xs text-slate-400">Total User Inflow (Deposits)</div>
               <div className="text-xl font-black text-emerald-400">
-                ₹{transactions.filter((t) => t.type === 'deposit').reduce((s, t) => s + t.amount, 0).toLocaleString('en-IN')}
+                ₹{((transactions || []).filter((t) => t?.type === 'deposit').reduce((s, t) => s + (t?.amount || 0), 0)).toLocaleString('en-IN')}
               </div>
             </div>
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
               <div className="text-xs text-slate-400">Total Outflow (Withdrawals)</div>
               <div className="text-xl font-black text-amber-400">
-                ₹{withdrawals.filter((w) => w.status === 'approved').reduce((s, w) => s + w.amount, 0).toLocaleString('en-IN')}
+                ₹{((withdrawals || []).filter((w) => w?.status === 'approved').reduce((s, w) => s + (w?.amount || 0), 0)).toLocaleString('en-IN')}
               </div>
             </div>
             <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
               <div className="text-xs text-slate-400">Pending Outflow Demands</div>
               <div className="text-xl font-black text-red-400">
-                ₹{withdrawals.filter((w) => w.status === 'pending').reduce((s, w) => s + w.amount, 0).toLocaleString('en-IN')}
+                ₹{((withdrawals || []).filter((w) => w?.status === 'pending').reduce((s, w) => s + (w?.amount || 0), 0)).toLocaleString('en-IN')}
               </div>
             </div>
           </div>

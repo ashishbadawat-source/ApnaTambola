@@ -467,11 +467,11 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                 <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-center">
                   <div>
                     <div className="text-[10px] text-slate-400 uppercase font-bold">Prize Pool (70%)</div>
-                    <div className="text-sm font-black text-amber-400">₹{game.prizePool.toLocaleString('en-IN')}</div>
+                    <div className="text-sm font-black text-amber-400">₹{(game.prizePool || 0).toLocaleString('en-IN')}</div>
                   </div>
                   <div>
                     <div className="text-[10px] text-slate-400 uppercase font-bold">Ticket Rate</div>
-                    <div className="text-sm font-black text-white">₹{game.ticketPrice}</div>
+                    <div className="text-sm font-black text-white">₹{game.ticketPrice || 0}</div>
                   </div>
                   <div>
                     <div className="text-[10px] text-slate-400 uppercase font-bold">Sold / Min 100</div>
@@ -743,7 +743,7 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-300 font-bold flex items-center gap-1.5">
                     <Trophy className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Prize Breakdown (Total Pool: ₹{computedPrizePool.toLocaleString('en-IN')})</span>
+                    <span>Prize Breakdown (Total Pool: ₹{(computedPrizePool || 0).toLocaleString('en-IN')})</span>
                   </span>
                 </div>
 

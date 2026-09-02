@@ -218,25 +218,25 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-amber-400/30 shadow-lg">
           <div className="text-[11px] text-amber-400 uppercase font-black">Total Platform Balances</div>
-          <div className="text-2xl font-black text-white mt-1">₹{totalPlatformLiabilities.toLocaleString('en-IN')}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">Across {users.length} player accounts</div>
+          <div className="text-2xl font-black text-white mt-1">₹{(totalPlatformLiabilities || 0).toLocaleString('en-IN')}</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Across {(users || []).length} player accounts</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
           <div className="text-[11px] text-blue-400 uppercase font-black">Player Deposits</div>
-          <div className="text-2xl font-black text-blue-300 mt-1">₹{totalUserDeposits.toLocaleString('en-IN')}</div>
+          <div className="text-2xl font-black text-blue-300 mt-1">₹{(totalUserDeposits || 0).toLocaleString('en-IN')}</div>
           <div className="text-[10px] text-slate-400 mt-0.5">Ready for ticket purchases</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
           <div className="text-[11px] text-pink-400 uppercase font-black">Pending UTR Verifications</div>
-          <div className="text-2xl font-black text-amber-300 mt-1">{pendingDepositsCount}</div>
+          <div className="text-2xl font-black text-amber-300 mt-1">{pendingDepositsCount || 0}</div>
           <div className="text-[10px] text-amber-400/80 mt-0.5">Needs Admin OK/Verification</div>
         </div>
 
         <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900 to-[#101528] border border-slate-800 shadow-lg">
           <div className="text-[11px] text-emerald-400 uppercase font-black">Player Winnings</div>
-          <div className="text-2xl font-black text-emerald-300 mt-1">₹{totalUserWinnings.toLocaleString('en-IN')}</div>
+          <div className="text-2xl font-black text-emerald-300 mt-1">₹{(totalUserWinnings || 0).toLocaleString('en-IN')}</div>
           <div className="text-[10px] text-emerald-400 mt-0.5">Eligible for withdrawal</div>
         </div>
       </div>
@@ -318,7 +318,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
 
                         {/* Amount */}
                         <td className="px-4 py-3.5">
-                          <div className="text-sm font-black text-emerald-400">₹{dep.amount.toLocaleString('en-IN')}</div>
+                          <div className="text-sm font-black text-emerald-400">₹{(dep.amount || 0).toLocaleString('en-IN')}</div>
                           <div className="text-[10px] text-slate-400">Ticket Wallet Fund</div>
                         </td>
 
@@ -556,7 +556,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-slate-300">
-                        ₹{tx.balanceAfter.toLocaleString('en-IN')}
+                        ₹{(tx.balanceAfter || 0).toLocaleString('en-IN')}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -799,7 +799,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
               <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
                 <span className="text-[10px] text-slate-400 block font-bold">Deposit Amount:</span>
                 <span className="text-sm font-black text-emerald-400 font-mono">
-                  ₹{previewDeposit.amount.toLocaleString('en-IN')}
+                  ₹{(previewDeposit.amount || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">

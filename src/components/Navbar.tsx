@@ -444,7 +444,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="text-left">
                     <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none">Wallet</span>
                     <span className="text-xs sm:text-sm font-black text-amber-300 group-hover:text-amber-200">
-                      ₹{currentUser.walletBalance.toLocaleString('en-IN')}
+                      ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
                     </span>
                   </div>
                   <button

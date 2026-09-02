@@ -208,25 +208,25 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div className="p-2.5 rounded-xl bg-slate-950/80 border border-amber-400/40 text-center">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">कुल वॉलेट</span>
                 <span className="text-sm font-black text-amber-300 font-mono">
-                  ₹{currentUser.walletBalance.toLocaleString('en-IN')}
+                  ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-950/80 border border-blue-400/40 text-center">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">टिकट बैलेंस</span>
                 <span className="text-sm font-black text-blue-300 font-mono">
-                  ₹{currentUser.depositBalance.toLocaleString('en-IN')}
+                  ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-950/80 border border-emerald-400/40 text-center">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">विथड्रॉल बैलेंस</span>
                 <span className="text-sm font-black text-emerald-300 font-mono">
-                  ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+                  ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-2.5 rounded-xl bg-slate-950/80 border border-purple-400/40 text-center">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">रेफरल कमाई</span>
                 <span className="text-sm font-black text-purple-300 font-mono">
-                  ₹{currentUser.referralBalance.toLocaleString('en-IN')}
+                  ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
@@ -387,7 +387,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-slate-900/80 border border-amber-400/40 text-center">
                 <span className="text-[10px] uppercase font-bold text-amber-300 block">कुल प्राइज पूल</span>
                 <span className="text-base sm:text-lg font-black text-amber-200">
-                  ₹{totalPrizePool.toLocaleString('en-IN')}
+                  ₹{(totalPrizePool || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-slate-900/80 border border-purple-400/40 text-center">
@@ -425,7 +425,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div>
                   <h3 className="text-xl sm:text-2xl font-black text-white">{liveGame.title}</h3>
                   <p className="text-xs text-amber-200/90 font-medium mt-0.5">
-                    ग्रैंड बंपर प्राइज पूल: <strong className="text-amber-400 text-sm">₹{liveGame.prizePool.toLocaleString('en-IN')}</strong>
+                    ग्रैंड बंपर प्राइज पूल: <strong className="text-amber-400 text-sm">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</strong>
                   </p>
                 </div>
 
@@ -906,7 +906,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/20 via-purple-600/20 to-emerald-500/20 border border-amber-400/40 text-center space-y-1">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">अनुमानित मासिक पैसिव कमाई</span>
             <div className="text-2xl sm:text-3xl font-black text-amber-300">
-              ₹{totalMonthlyEarnings.toLocaleString('en-IN')}
+              ₹{(totalMonthlyEarnings || 0).toLocaleString('en-IN')}
             </div>
             <span className="text-[10px] text-emerald-400 font-bold block">✓ सीधे बैंक / UPI में निकासी योग्य</span>
           </div>
@@ -1148,7 +1148,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div>
                   <span className="text-[10px] uppercase text-slate-500 block font-bold">प्राइज पूल</span>
                   <span className="font-black text-amber-400 text-base">
-                    ₹{game.prizePool.toLocaleString('en-IN')}
+                    ₹{(game?.prizePool || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div>
@@ -1219,7 +1219,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
               <div className="text-right">
                 <span className="text-sm font-black text-emerald-400 block font-mono">
-                  +₹{win.prizeAmount.toLocaleString('en-IN')}
+                  +₹{(win?.prizeAmount || 0).toLocaleString('en-IN')}
                 </span>
                 <span className="text-[9px] text-slate-500">{win.timestamp || 'Just now'}</span>
               </div>

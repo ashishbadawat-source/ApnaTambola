@@ -1540,7 +1540,7 @@ export function App() {
           const winNotif: UserNotificationItem = {
             id: `un_win_${Date.now()}_${win.prizeCode}`,
             category: 'winning',
-            title: `🏆 बधाई! आप ₹${win.splitPrizeAmount.toLocaleString('en-IN')} जीत गए!`,
+            title: `🏆 बधाई! आप ₹${(win?.splitPrizeAmount || 0).toLocaleString('en-IN')} जीत गए!`,
             message: `सिस्टम ने आपके टिकट #${win.ticketNumber} (${win.ticketId}) पर ${win.prizeName} ऑटो-ट्रैक कर लिया है। राशि आपके विथड्रॉल वॉलेट में जमा कर दी गई है।`,
             timestamp: 'Just now',
             read: false,
@@ -2113,7 +2113,7 @@ export function App() {
     const winNotif: UserNotificationItem = {
       id: `un_${Date.now()}`,
       category: 'winning',
-      title: `🏆 Congratulations! You Won ₹${splitAmount.toLocaleString('en-IN')}!`,
+      title: `🏆 Congratulations! You Won ₹${(splitAmount || 0).toLocaleString('en-IN')}!`,
       message: isSplit
         ? `Your claim for ${prize.name} was verified! Prize of ₹${prize.amount} was split equally (${totalWinnersForPrize} winners = ₹${splitAmount} each). ₹${splitAmount} added to your wallet.`
         : `Your claim for ${prize.name} in ${liveGame.title} was verified! ₹${splitAmount} added to your winning balance.`,
@@ -2586,7 +2586,7 @@ export function App() {
     if (currentUser.walletBalance < totalDeduction) {
       return {
         success: false,
-        message: `अपर्याप्त वॉलेट बैलेंस! ₹${amount} भेजने के लिए 5% ट्रांसफर शुल्क (₹${feeAmount}) सहित कुल ₹${totalDeduction} की आवश्यकता है। आपका बैलेंस: ₹${currentUser.walletBalance.toLocaleString('en-IN')}`,
+        message: `अपर्याप्त वॉलेट बैलेंस! ₹${amount} भेजने के लिए 5% ट्रांसफर शुल्क (₹${feeAmount}) सहित कुल ₹${totalDeduction} की आवश्यकता है। आपका बैलेंस: ₹${(currentUser?.walletBalance || 0).toLocaleString('en-IN')}`,
       };
     }
 
@@ -2692,7 +2692,7 @@ export function App() {
     const p2pNotif: UserNotificationItem = {
       id: `un_${Date.now()}`,
       category: 'wallet_credit',
-      title: `💸 P2P Transfer Successful: ₹${amount.toLocaleString('en-IN')} Sent`,
+      title: `💸 P2P Transfer Successful: ₹${(amount || 0).toLocaleString('en-IN')} Sent`,
       message: `₹${amount} transferred to ${recipientName}. Total ₹${totalDeduction} deducted (incl. 5% fee ₹${feeAmount}). Ref: ${refCode}`,
       timestamp: 'Just now',
       read: false,
@@ -2729,7 +2729,7 @@ export function App() {
     if (amount > currentUser.winningBalance) {
       return {
         success: false,
-        message: `अपर्याप्त विथड्रॉल बैलेंस! आपके पास केवल ₹${currentUser.winningBalance.toLocaleString('en-IN')} उपलब्ध है।`,
+        message: `अपर्याप्त विथड्रॉल बैलेंस! आपके पास केवल ₹${(currentUser?.winningBalance || 0).toLocaleString('en-IN')} उपलब्ध है।`,
       };
     }
 
@@ -2763,7 +2763,7 @@ export function App() {
     const convNotif: UserNotificationItem = {
       id: `un_conv_${Date.now()}`,
       category: 'wallet_credit',
-      title: `🔄 वॉलेट ट्रांसफर सफल: ₹${amount.toLocaleString('en-IN')}`,
+      title: `🔄 वॉलेट ट्रांसफर सफल: ₹${(amount || 0).toLocaleString('en-IN')}`,
       message: `₹${amount} आपके विथड्रॉल वॉलेट से टिकट वॉलेट में ट्रांसफर हो गए हैं। अब आप सीधे नए टिकट खरीद सकते हैं!`,
       timestamp: 'Just now',
       read: false,

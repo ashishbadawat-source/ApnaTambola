@@ -122,7 +122,7 @@ export const LiveWinnerFlashTicker: React.FC<LiveWinnerFlashTickerProps> = ({
                       : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                   }`}
                 >
-                  ₹{activeFlash.prizeAmount.toLocaleString('en-IN')}
+                  ₹{(activeFlash?.prizeAmount || 0).toLocaleString('en-IN')}
                 </span>
 
                 <span className="text-[11px] opacity-80">

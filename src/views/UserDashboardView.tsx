@@ -805,7 +805,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                 <span className="text-xs text-amber-300 font-bold">{liveGame.title}</span>
               </div>
               <h3 className="text-lg font-black text-white mt-1">
-                प्राइज पूल: <span className="text-amber-300 font-mono">₹{liveGame.prizePool.toLocaleString('en-IN')}</span> • करंट ड्रा: बॉल #{liveGame.calledNumbers.length} / 90
+                प्राइज पूल: <span className="text-amber-300 font-mono">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</span> • करंट ड्रा: बॉल #{(liveGame?.calledNumbers || []).length} / 90
               </h3>
             </div>
           </div>

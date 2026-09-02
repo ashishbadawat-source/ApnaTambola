@@ -113,7 +113,7 @@ export const WinnerCelebrationModal: React.FC<WinnerCelebrationModalProps> = ({
             🏆 WINNING PRIZE AMOUNT 🏆
           </span>
           <div className="text-3xl sm:text-4xl font-black text-amber-300 text-glow-gold">
-            ₹{winnerData.prizeAmount.toLocaleString('en-IN')}
+            ₹{(winnerData?.prizeAmount || 0).toLocaleString('en-IN')}
           </div>
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
             <CheckCircle2 className="w-3.5 h-3.5" />

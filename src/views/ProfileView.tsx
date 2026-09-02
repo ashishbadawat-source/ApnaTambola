@@ -432,25 +432,25 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Wallet</span>
                 <span className="text-base sm:text-lg font-black text-amber-400">
-                  ₹{currentUser.walletBalance.toLocaleString('en-IN')}
+                  ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Winnings</span>
                 <span className="text-base sm:text-lg font-black text-emerald-400">
-                  ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+                  ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Tickets Played</span>
                 <span className="text-base sm:text-lg font-black text-purple-400">
-                  {currentUser.gamesPlayed || 42}
+                  {currentUser?.gamesPlayed || 42}
                 </span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Won</span>
                 <span className="text-base sm:text-lg font-black text-amber-300">
-                  ₹{(currentUser.totalWinnings || 18500).toLocaleString('en-IN')}
+                  ₹{(currentUser?.totalWinnings || 18500).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
@@ -789,7 +789,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <span>Live 5% Fee Calculation Summary</span>
                 </span>
                 <span className="text-[11px] font-bold text-slate-400">
-                  Wallet Balance: <strong className="text-white">₹{currentUser.walletBalance.toLocaleString('en-IN')}</strong>
+                  Wallet Balance: <strong className="text-white">₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}</strong>
                 </span>
               </div>
 
@@ -830,9 +830,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     Remaining Balance (बचेगा)
                   </span>
                   <span className={`text-lg sm:text-xl font-black ${
-                    currentUser.walletBalance - calculatedTotalDeduction < 0 ? 'text-red-400' : 'text-slate-200'
+                    (currentUser?.walletBalance || 0) - calculatedTotalDeduction < 0 ? 'text-red-400' : 'text-slate-200'
                   }`}>
-                    ₹{Math.max(0, currentUser.walletBalance - calculatedTotalDeduction).toLocaleString('en-IN')}
+                    ₹{Math.max(0, (currentUser?.walletBalance || 0) - calculatedTotalDeduction).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>

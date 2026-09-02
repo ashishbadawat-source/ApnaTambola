@@ -238,8 +238,8 @@ export const WalletView: React.FC<WalletViewProps> = ({
     setWithdrawError(null);
     setWithdrawSuccess(null);
 
-    if (withdrawAmount > currentUser.winningBalance) {
-      setWithdrawError(`आप केवल अपनी विनिंग बैलेंस (₹${currentUser.winningBalance.toLocaleString('en-IN')}) से निकासी कर सकते हैं।`);
+    if (withdrawAmount > (currentUser?.winningBalance || 0)) {
+      setWithdrawError(`आप केवल अपनी विनिंग बैलेंस (₹${(currentUser?.winningBalance || 0).toLocaleString('en-IN')}) से निकासी कर सकते हैं।`);
       return;
     }
     if (withdrawAmount < minWithdrawLimit) {
@@ -278,8 +278,8 @@ export const WalletView: React.FC<WalletViewProps> = ({
       setConvertError('कृपया मान्य राशि दर्ज करें (Enter a valid amount)');
       return;
     }
-    if (convertAmount > currentUser.winningBalance) {
-      setConvertError(`आपकी विथड्रॉल बैलेंस (₹${currentUser.winningBalance.toLocaleString('en-IN')}) से अधिक राशि ट्रांसफर नहीं हो सकती।`);
+    if (convertAmount > (currentUser?.winningBalance || 0)) {
+      setConvertError(`आपकी विथड्रॉल बैलेंस (₹${(currentUser?.winningBalance || 0).toLocaleString('en-IN')}) से अधिक राशि ट्रांसफर नहीं हो सकती।`);
       return;
     }
 
@@ -369,7 +369,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             </span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-purple-300 drop-shadow">
-            ₹{currentUser.depositBalance.toLocaleString('en-IN')}
+            ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
           </div>
           <p className="text-[10px] text-purple-200/90 font-medium leading-tight">
             एडमिन रिचार्ज + ₹10 1st डिपॉजिट बोनस — <strong>केवल टिकट खरीदने हेतु</strong>
@@ -390,7 +390,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             </span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-emerald-400 drop-shadow">
-            ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+            ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
           </div>
           <p className="text-[10px] text-emerald-200/90 font-medium leading-tight">
             जीता हुआ ईनाम — <strong>100% बैंक/UPI निकासी</strong>
@@ -442,7 +442,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             <WalletIcon className="w-4 h-4 text-amber-400" />
           </span>
           <div className="text-2xl sm:text-3xl font-black text-amber-400 text-glow-gold">
-            ₹{currentUser.walletBalance.toLocaleString('en-IN')}
+            ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
           </div>
           <p className="text-[10px] text-slate-300">डिपोजिट + विनिंग + रेफरल का योग</p>
           <div className="pt-1 flex items-center gap-1 text-[10px] text-slate-400 border-t border-amber-500/20">
@@ -457,7 +457,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             <Gift className="w-4 h-4 text-indigo-400" />
           </span>
           <div className="text-2xl sm:text-3xl font-black text-indigo-300">
-            ₹{currentUser.referralBalance.toLocaleString('en-IN')}
+            ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
           </div>
           <p className="text-[10px] text-indigo-300 font-medium">Earned from 8-tier network</p>
           <div className="pt-1 flex items-center gap-1 text-[10px] text-slate-400 border-t border-indigo-500/20">
@@ -1005,7 +1005,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             <div>
               <span className="text-xs text-slate-400 block font-bold">Withdrawable Winning Cash</span>
               <span className="text-2xl font-black text-emerald-400">
-                ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+                ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
               </span>
             </div>
             <div className="text-right">
@@ -1336,7 +1336,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                 स्रोत: विथड्रॉल वॉलेट (Winning Balance)
               </span>
               <div className="text-2xl font-black text-emerald-300">
-                ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+                ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
               </div>
               <span className="text-[10px] text-slate-400 block">यहाँ से राशि डेबिट होगी</span>
             </div>
@@ -1346,7 +1346,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                 गंतव्य: टिकट वॉलेट (Ticket Wallet)
               </span>
               <div className="text-2xl font-black text-purple-300">
-                ₹{currentUser.depositBalance.toLocaleString('en-IN')}
+                ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
               </div>
               <span className="text-[10px] text-slate-400 block">यहाँ राशि क्रेडिट होगी (टिकट खरीदने हेतु)</span>
             </div>
@@ -1628,7 +1628,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                   <span>5% Fee Calculation Summary (₹100 ट्रांसफर पर ₹105 कटेंगे)</span>
                 </span>
                 <span className="text-[10px] font-bold text-slate-400">
-                  Balance: <strong className="text-white">₹{currentUser.walletBalance.toLocaleString('en-IN')}</strong>
+                  Balance: <strong className="text-white">₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}</strong>
                 </span>
               </div>
 
@@ -1811,7 +1811,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               <p className="text-xs text-slate-400">All prizes claimed and credited to your winning cashout balance</p>
             </div>
             <span className="text-xs bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full font-bold border border-amber-500/30">
-              Total Won: ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+              Total Won: ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
             </span>
           </div>
 
@@ -1845,7 +1845,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               <p className="text-xs text-slate-400">Passive revenue earned from your 5-tier network ticket purchases</p>
             </div>
             <span className="text-xs bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-full font-bold border border-indigo-500/30">
-              Commission Earned: ₹{currentUser.referralBalance.toLocaleString('en-IN')}
+              Commission Earned: ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
             </span>
           </div>
 
