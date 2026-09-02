@@ -22,21 +22,25 @@ interface GamesLobbyViewProps {
   onNavigate: (tab: string, gameId?: string) => void;
 }
 
-export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigate }) => {
+export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games = [], onNavigate }) => {
   const [filter, setFilter] = useState<'all' | 'live' | 'upcoming' | 'completed'>('all');
   const [stakeFilter, setStakeFilter] = useState<'all' | 'micro' | 'regular' | 'bumper'>('all');
 
-  const filteredGames = games.filter((g) => {
+  const safeGames = Array.isArray(games) ? games : [];
+
+  const filteredGames = safeGames.filter((g) => {
+    if (!g) return false;
     if (filter !== 'all' && g.status !== filter) return false;
-    if (stakeFilter === 'micro' && g.ticketPrice > 20) return false;
-    if (stakeFilter === 'regular' && (g.ticketPrice < 25 || g.ticketPrice > 100)) return false;
-    if (stakeFilter === 'bumper' && g.ticketPrice <= 100) return false;
+    const price = g.ticketPrice || 0;
+    if (stakeFilter === 'micro' && price > 20) return false;
+    if (stakeFilter === 'regular' && (price < 25 || price > 100)) return false;
+    if (stakeFilter === 'bumper' && price <= 100) return false;
     return true;
   });
 
-  const totalLivePool = games
-    .filter((g) => g.status !== 'completed')
-    .reduce((acc, g) => acc + g.prizePool, 0);
+  const totalLivePool = safeGames
+    .filter((g) => g && g.status !== 'completed')
+    .reduce((acc, g) => acc + (Number(g.prizePool) || 0), 0);
 
   return (
     <div className="space-y-8 pb-16">
@@ -69,9 +73,9 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigat
           <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border-2 border-amber-400/50 text-center space-y-1 shadow-2xl self-stretch sm:self-auto">
             <span className="text-[10px] uppercase font-bold text-amber-400/80 tracking-wider">Total Active Prize Pool</span>
             <div className="text-2xl sm:text-3xl font-black text-amber-300 font-mono text-glow-gold">
-              ₹{totalLivePool.toLocaleString('en-IN')}
+              ₹{(totalLivePool || 0).toLocaleString('en-IN')}
             </div>
-            <span className="text-[11px] text-slate-400 block font-medium">Over {games.length} Live &amp; Scheduled Matches</span>
+            <span className="text-[11px] text-slate-400 block font-medium">Over {safeGames.length} Live &amp; Scheduled Matches</span>
           </div>
         </div>
       </div>
@@ -117,10 +121,13 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigat
       {/* 🎮 3. Games Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredGames.map((game) => {
+          if (!game) return null;
           const isGameActive = game.isActive !== false && game.isGameEnabled !== false && game.status !== 'cancelled';
           const isBookingOpen = game.bookingOpen !== false && game.isBookingOpen !== false && isGameActive;
           const isLive = game.status === 'live' && isGameActive;
           const isCompleted = game.status === 'completed';
+          const calledNums = game.calledNumbers || [];
+          const prizesList = game.prizes || [];
 
           return (
             <div
@@ -153,7 +160,7 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigat
                     </span>
                   ) : isLive ? (
                     <span className="flex items-center gap-1.5 bg-red-500/20 border border-red-500/50 text-red-300 font-black px-2.5 py-0.5 rounded-full text-[10px] uppercase">
-                      Ball #{game.calledNumbers.length} / 90
+                      Ball #{calledNums.length} / 90
                     </span>
                   ) : isCompleted ? (
                     <span className="bg-slate-800 text-slate-400 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
@@ -165,17 +172,17 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigat
                     </span>
                   )}
                   <span className="font-mono text-xs text-amber-300 font-bold">
-                    {game.gameCode}
+                    {game.gameCode || 'TL-LIVE'}
                   </span>
                 </div>
 
                 <div>
                   <h3 className="text-lg font-black text-white">
-                    {game.title}
+                    {game.title || 'Tambola Match'}
                   </h3>
                   <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5 font-medium">
                     <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Starts: {game.startTime} ({game.date})</span>
+                    <span>Starts: {game.startTime || '09:00 PM'} ({game.date || 'Today'})</span>
                   </p>
                 </div>
 
@@ -184,13 +191,13 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigat
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Prize Pool</span>
                     <span className="text-lg font-black text-amber-300 font-mono">
-                      ₹{game.prizePool.toLocaleString('en-IN')}
+                      ₹{(game.prizePool || 0).toLocaleString('en-IN')}
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] uppercase font-bold text-slate-400 block">Ticket Rate</span>
                     <span className="text-lg font-black text-emerald-400 font-mono">
-                      ₹{game.ticketPrice}
+                      ₹{game.ticketPrice || 0}
                     </span>
                   </div>
                 </div>
@@ -200,18 +207,18 @@ export const GamesLobbyView: React.FC<GamesLobbyViewProps> = ({ games, onNavigat
                   <div className="flex justify-between">
                     <span className="text-slate-400">1st Full House:</span>
                     <strong className="text-amber-300 font-mono">
-                      ₹{game.prizes.find((p) => p.code === 'full_house')?.amount || 3500}
+                      ₹{prizesList.find((p) => p.code === 'full_house')?.amount || 3500}
                     </strong>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Early 5:</span>
                     <strong className="text-lime-300 font-mono">
-                      ₹{game.prizes.find((p) => p.code === 'early_five')?.amount || 500}
+                      ₹{prizesList.find((p) => p.code === 'early_five' || p.code === 'early5')?.amount || 500}
                     </strong>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Registered Players:</span>
-                    <span className="text-white font-bold">{game.registeredPlayers} / {game.maxPlayers}</span>
+                    <span className="text-white font-bold">{game.registeredPlayers || 0} / {game.maxPlayers || 500}</span>
                   </div>
                 </div>
               </div>

@@ -161,17 +161,24 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     }
   };
 
-  const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
-  const pendingDepositsCount = deposits.filter((d) => d.status === 'pending').length;
-  const liveGamesCount = games.filter((g) => g.status === 'live').length;
-  const activeOffersCount = offers.filter((o) => o.isActive).length;
+  const safeGames = Array.isArray(games) ? games : [];
+  const safeUsers = Array.isArray(users) ? users : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+  const safeWithdrawals = Array.isArray(withdrawals) ? withdrawals : [];
+  const safeDeposits = Array.isArray(deposits) ? deposits : [];
+  const safeOffers = Array.isArray(offers) ? offers : [];
+
+  const pendingWithdrawalsCount = safeWithdrawals.filter((w) => w && w.status === 'pending').length;
+  const pendingDepositsCount = safeDeposits.filter((d) => d && d.status === 'pending').length;
+  const liveGamesCount = safeGames.filter((g) => g && g.status === 'live').length;
+  const activeOffersCount = safeOffers.filter((o) => o && o.isActive).length;
 
   const NAV_ITEMS = [
     { id: 'dashboard', label: '1. Dashboard', icon: LayoutDashboard, badge: null },
-    { id: 'users', label: '2. User Management', icon: Users, badge: `${users.length}` },
+    { id: 'users', label: '2. User Management', icon: Users, badge: `${safeUsers.length}` },
     { id: 'games', label: '3. Game Management', icon: Gamepad2, badge: liveGamesCount > 0 ? `${liveGamesCount} LIVE` : null, badgeColor: 'bg-red-500 text-white' },
     { id: 'live_control', label: '4. Live Game Control', icon: Radio, badge: 'RNG', badgeColor: 'bg-amber-400 text-slate-950' },
-    { id: 'tickets', label: '5. Ticket Management', icon: Ticket, badge: `${tickets.length}` },
+    { id: 'tickets', label: '5. Ticket Management', icon: Ticket, badge: `${safeTickets.length}` },
     { id: 'prizes', label: '6. Prize Management', icon: Trophy, badge: null },
     { id: 'referrals', label: '7. 5-Level Referral', icon: Share2, badge: 'MLM' },
     { id: 'referral_growth', label: '8. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },

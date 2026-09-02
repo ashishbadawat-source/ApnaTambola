@@ -28,7 +28,7 @@ import {
   ToggleLeft,
   ToggleRight,
 } from 'lucide-react';
-import { TambolaGame, GamePrize, TicketColorThemeId } from '../../types';
+import { TambolaGame, GamePrize, TicketColorThemeId, PrizeCode } from '../../types';
 import { TICKET_COLOR_PALETTES, COLOR_KEYS } from '../../utils/ticketColors';
 
 interface ModuleGamesProps {
@@ -54,7 +54,7 @@ const DEFAULT_PRIZE_SET: Omit<GamePrize, 'id' | 'claimedWinners'>[] = [
 ];
 
 export const ModuleGames: React.FC<ModuleGamesProps> = ({
-  games,
+  games = [],
   onCreateGame,
   onUpdateGame,
   onDeleteGame,
@@ -66,6 +66,8 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
   const [filterTab, setFilterTab] = useState<'all' | 'live' | 'upcoming' | 'completed' | 'disabled'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingGame, setEditingGame] = useState<TambolaGame | null>(null);
+
+  const safeGames = Array.isArray(games) ? games : [];
 
   // Form State
   const [title, setTitle] = useState('Mega Bumper Housie Night');
@@ -82,8 +84,9 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
 
   const computedPrizePool = prizes.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  const filteredGames = games.filter((g) => {
-    if (filterTab === 'disabled') return g.isGameEnabled === false;
+  const filteredGames = safeGames.filter((g) => {
+    if (!g) return false;
+    if (filterTab === 'disabled') return g.isGameEnabled === false || g.isActive === false;
     if (filterTab === 'live') return g.status === 'live';
     if (filterTab === 'upcoming') return g.status === 'upcoming';
     if (filterTab === 'completed') return g.status === 'completed';
@@ -104,28 +107,32 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
   };
 
   const handleOpenEdit = (game: TambolaGame) => {
+    if (!game) return;
     setEditingGame(game);
-    setTitle(game.title);
-    setDate(game.date);
-    setStartTime(game.startTime);
-    setTicketPrice(game.ticketPrice);
+    setTitle(game.title || 'Tambola Match');
+    setDate(game.date || 'Today');
+    setStartTime(game.startTime || '09:00 PM');
+    setTicketPrice(game.ticketPrice || 50);
     setTicketColorTheme(game.ticketColorTheme || 'multi');
-    setIsGameEnabled(game.isGameEnabled !== false);
-    setIsBookingOpen(game.isBookingOpen !== false);
-    if (game.prizes) {
+    setIsGameEnabled(game.isGameEnabled !== false && game.isActive !== false);
+    setIsBookingOpen(game.isBookingOpen !== false && game.bookingOpen !== false);
+    if (game.prizes && Array.isArray(game.prizes) && game.prizes.length > 0) {
       setPrizes(game.prizes.map((p) => ({
-        code: p.code,
-        name: p.name,
-        amount: p.amount,
-        maxWinners: p.maxWinners,
-        description: p.description,
+        code: (p.code as PrizeCode) || 'early5',
+        name: p.name || 'Prize',
+        amount: p.amount || 0,
+        maxWinners: p.maxWinners || 1,
+        description: p.description || '',
       })));
+    } else {
+      setPrizes(DEFAULT_PRIZE_SET);
     }
     setShowCreateModal(true);
   };
 
   const handleToggleGameMaster = async (game: TambolaGame, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!game) return;
     const newStatus = !(game.isActive !== false && game.isGameEnabled !== false && game.status !== 'cancelled');
     if (onUpdateGame) {
       await onUpdateGame(game.id, {
@@ -142,6 +149,7 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
 
   const handleToggleBooking = async (game: TambolaGame, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    if (!game) return;
     const newBooking = !(game.bookingOpen !== false && game.isBookingOpen !== false);
     if (onUpdateGame) {
       await onUpdateGame(game.id, {
@@ -157,7 +165,8 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
 
   const handleBatchToggleAll = async (enable: boolean) => {
     if (onUpdateGame) {
-      for (const g of games) {
+      for (const g of safeGames) {
+        if (!g) continue;
         await onUpdateGame(g.id, {
           isActive: enable,
           isGameEnabled: enable,
@@ -167,7 +176,7 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
         });
       }
       setActionNotice(
-        `सभी गेम (${games.length}) को एडमिन द्वारा एक साथ ${enable ? 'चालू (ON)' : 'बंद (OFF)'} कर दिया गया है!`
+        `सभी गेम (${safeGames.length}) को एडमिन द्वारा एक साथ ${enable ? 'चालू (ON)' : 'बंद (OFF)'} कर दिया गया है!`
       );
       setTimeout(() => setActionNotice(null), 4000);
     }
@@ -287,11 +296,11 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
         {[
-          { id: 'all', label: `All Games (${games.length})` },
-          { id: 'live', label: `Live (${games.filter((g) => g.status === 'live').length})` },
-          { id: 'upcoming', label: `Upcoming (${games.filter((g) => g.status === 'upcoming').length})` },
-          { id: 'completed', label: `Completed (${games.filter((g) => g.status === 'completed').length})` },
-          { id: 'disabled', label: `🔴 Disabled / बंद (${games.filter((g) => g.isGameEnabled === false).length})` },
+          { id: 'all', label: `All Games (${safeGames.length})` },
+          { id: 'live', label: `Live (${safeGames.filter((g) => g && g.status === 'live').length})` },
+          { id: 'upcoming', label: `Upcoming (${safeGames.filter((g) => g && g.status === 'upcoming').length})` },
+          { id: 'completed', label: `Completed (${safeGames.filter((g) => g && g.status === 'completed').length})` },
+          { id: 'disabled', label: `🔴 Disabled / बंद (${safeGames.filter((g) => g && (g.isGameEnabled === false || g.isActive === false)).length})` },
         ].map((tab) => (
           <button
             key={tab.id}
