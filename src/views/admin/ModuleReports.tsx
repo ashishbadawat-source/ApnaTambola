@@ -196,7 +196,7 @@ export const ModuleReports: React.FC<ModuleReportsProps> = ({
                               : 'bg-slate-800 text-slate-400'
                           }`}
                         >
-                          {g.status.toUpperCase()}
+                          {(g.status || 'upcoming').toUpperCase()}
                         </span>
                       </td>
                     </tr>

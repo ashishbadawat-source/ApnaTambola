@@ -1004,7 +1004,7 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
                 </div>
               </div>
               <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-400/30 self-start sm:self-auto">
-                Current: {defaultTicketTheme.toUpperCase()}
+                Current: {(defaultTicketTheme || 'classic_gold').toUpperCase()}
               </span>
             </div>
 

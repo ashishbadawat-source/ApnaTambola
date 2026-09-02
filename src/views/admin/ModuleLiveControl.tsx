@@ -166,7 +166,7 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
           >
             {games.map((g) => (
               <option key={g.id} value={g.id}>
-                {g.title} ({g.status.toUpperCase()})
+                {g.title} ({(g.status || 'upcoming').toUpperCase()})
               </option>
             ))}
           </select>

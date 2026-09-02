@@ -89,7 +89,7 @@ export const TemplateSelectorModal: React.FC<TemplateSelectorModalProps> = ({
                       <span>{template.nameHi}</span>
                     </h3>
                     <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${template.badgeColor}`}>
-                      {template.id.toUpperCase()}
+                      {(template.id || '').toUpperCase()}
                     </span>
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">

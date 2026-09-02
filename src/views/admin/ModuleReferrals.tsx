@@ -535,7 +535,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
                           <tr key={downlineUser.id} className="hover:bg-slate-900/40">
                             <td className="px-3 py-2.5 font-bold text-white flex items-center gap-2">
                               <div className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-300 font-black text-[10px] flex items-center justify-center border border-purple-400/30">
-                                {downlineUser.name.charAt(0).toUpperCase()}
+                                {(downlineUser.name || 'U').charAt(0).toUpperCase()}
                               </div>
                               <span>{downlineUser.name}</span>
                             </td>
@@ -870,7 +870,7 @@ export const ModuleReferrals: React.FC<ModuleReferralsProps> = ({
                           : 'bg-red-500/20 text-red-300 border border-red-500/40'
                       }`}
                     >
-                      {comm.status.toUpperCase()}
+                      {(comm.status || 'pending').toUpperCase()}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -940,7 +940,7 @@ const AdminDownlineTreeNodeView: React.FC<AdminDownlineTreeNodeViewProps> = ({
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="relative shrink-0">
             <div className={`w-8 h-8 rounded-full ${levelStyle.bg} ${levelStyle.text} font-black text-xs flex items-center justify-center border ${levelStyle.border}`}>
-              {node.user.name.charAt(0).toUpperCase()}
+              {(node.user.name || 'U').charAt(0).toUpperCase()}
             </div>
             <span className={`absolute -bottom-1 -right-1 px-1 py-0.2 rounded-full font-black text-[8px] bg-slate-950 ${levelStyle.text} border ${levelStyle.border}`}>
               L{node.level}

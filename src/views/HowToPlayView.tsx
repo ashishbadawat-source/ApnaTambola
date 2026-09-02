@@ -264,7 +264,7 @@ export const HowToPlayView: React.FC<HowToPlayViewProps> = ({ onNavigate }) => {
                     <span className="px-2.5 py-0.5 rounded-full bg-lime-500/20 text-lime-300 text-[11px] font-black border border-lime-500/30">
                       {current.badge}
                     </span>
-                    <span className="text-[11px] text-slate-400 font-mono">CODE: {current.id.toUpperCase()}</span>
+                    <span className="text-[11px] text-slate-400 font-mono">CODE: {(current?.id || '').toUpperCase()}</span>
                   </div>
                   <h3 className="text-base font-black text-white">{current.name}</h3>
                   <p className="text-xs text-slate-300 leading-relaxed">

@@ -652,7 +652,7 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
                             : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
                         }`}
                       >
-                        {game.status.toUpperCase()}
+                        {(game.status || 'upcoming').toUpperCase()}
                       </span>
                     </div>
 

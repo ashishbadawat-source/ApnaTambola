@@ -1890,7 +1890,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <input
                 type="text"
                 value={referralCodeInput}
-                onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
+                onChange={(e) => setReferralCodeInput(e.target.value ? e.target.value.toUpperCase() : '')}
                 placeholder={t.refPlaceholder}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950/90 border border-slate-700 text-xs font-mono font-black text-amber-300 placeholder-slate-500 focus:outline-none focus:border-emerald-400 uppercase tracking-wider"
               />

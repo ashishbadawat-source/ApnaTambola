@@ -132,8 +132,8 @@ export const PrintTicketModal: React.FC<PrintTicketModalProps> = ({ ticket, onCl
           {/* Security & Verification Footer */}
           <div className="flex items-center justify-between text-[11px] text-slate-300 border-t border-slate-800 pt-2 font-mono">
             <span>PRICE: ₹{ticket.price} PAID</span>
-            <span>THEME: {theme.badgeLabel.toUpperCase()}</span>
-            <span>AUTH CODE: {ticket.ticketId.replace('TKT-', 'SEC-')}</span>
+            <span>THEME: {(theme?.badgeLabel || 'CLASSIC').toUpperCase()}</span>
+            <span>AUTH CODE: {(ticket.ticketId || ticket.id || '').replace('TKT-', 'SEC-')}</span>
             <span>RNG VERIFIED</span>
           </div>
         </div>

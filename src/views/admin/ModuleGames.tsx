@@ -345,7 +345,7 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                       }`}
                     >
                       {isLive && isEnabled && <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />}
-                      {!isEnabled ? '🔴 बंद (OFF)' : game.status.toUpperCase()}
+                      {!isEnabled ? '🔴 बंद (OFF)' : (game.status || 'upcoming').toUpperCase()}
                     </span>
 
                     {/* Booking Status Badge */}

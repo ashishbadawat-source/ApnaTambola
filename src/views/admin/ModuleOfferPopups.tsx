@@ -116,7 +116,7 @@ export const ModuleOfferPopups: React.FC<ModuleOfferPopupsProps> = ({
       description: description.trim(),
       imageUrl: imageUrl.trim() || undefined,
       badgeText: badgeText.trim() || undefined,
-      promoCode: promoCode.trim().toUpperCase() || undefined,
+      promoCode: promoCode ? promoCode.trim().toUpperCase() : undefined,
       discountOrBonusText: discountOrBonusText.trim() || undefined,
       actionText: actionText.trim() || 'Claim Now',
       actionTab: actionTab || 'wallet',
@@ -469,7 +469,7 @@ export const ModuleOfferPopups: React.FC<ModuleOfferPopupsProps> = ({
                   <input
                     type="text"
                     value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                    onChange={(e) => setPromoCode(e.target.value ? e.target.value.toUpperCase() : '')}
                     placeholder="e.g. TAMBOLA100"
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-amber-300 font-mono font-bold uppercase focus:outline-none focus:border-pink-400"
                   />

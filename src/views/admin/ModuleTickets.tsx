@@ -85,7 +85,9 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     try {
       if (onAdminGenerateTickets) {
         await onAdminGenerateTickets(batchGameId, batchCount, batchColor);
-        setGenSuccess(`Successfully generated ${batchCount} tickets with ${batchColor.toUpperCase()} theme!`);
+        setGenSuccess(
+          `Successfully generated ${batchCount} tickets with ${(batchColor || 'multi').toUpperCase()} theme!`
+        );
         setTimeout(() => setGenSuccess(null), 4000);
       }
     } finally {
@@ -282,7 +284,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
             >
               {games.map((g) => (
                 <option key={g.id} value={g.id}>
-                  {g.title} ({g.isGameEnabled === false ? '🔴 बंद / OFF' : g.status.toUpperCase()})
+                  {g.title} ({g.isGameEnabled === false ? '🔴 बंद / OFF' : (g.status || 'upcoming').toUpperCase()})
                 </option>
               ))}
             </select>

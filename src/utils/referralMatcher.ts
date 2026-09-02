@@ -29,7 +29,7 @@ export function extractReferralCode(input: string | null | undefined): string {
   // Remove leading / trailing quotes, slashes, or hashes
   str = str.replace(/^[/\\#?&]+/, '').replace(/['"]/g, '').trim();
 
-  return str.toUpperCase();
+  return (str || '').toUpperCase();
 }
 
 /**

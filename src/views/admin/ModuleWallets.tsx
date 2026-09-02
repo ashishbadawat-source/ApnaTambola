@@ -568,7 +568,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                               : 'bg-red-500/20 text-red-300 border border-red-500/40'
                           }`}
                         >
-                          {tx.status.toUpperCase()}
+                          {(tx.status || 'completed').toUpperCase()}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono text-[10px] text-slate-400">

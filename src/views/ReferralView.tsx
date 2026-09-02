@@ -154,7 +154,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
     const newUserId = `usr_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
     const cleanPhone = testMemberPhone.replace(/\D/g, '') || `98${Math.floor(10000000 + Math.random() * 90000000)}`;
-    const cleanRef = currentUser.referralCode || `REF-${currentUser.id.slice(0, 6).toUpperCase()}`;
+    const cleanRef = currentUser.referralCode || `REF-${(currentUser.id || '').slice(0, 6).toUpperCase()}`;
 
     const newMember: User = {
       id: newUserId,
@@ -172,7 +172,7 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
       winningBalance: 10,
       referralBalance: 0,
       bonusRewardBalance: 0,
-      referralCode: `REF-${testMemberName.slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+      referralCode: `REF-${(testMemberName || 'TST').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
       referrer_id: currentUser.id,
       referredBy: cleanRef,
       referredByUserId: currentUser.id,

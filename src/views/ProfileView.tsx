@@ -1029,7 +1029,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 type="text"
                 placeholder="e.g. HDFC0001234"
                 value={ifsc}
-                onChange={(e) => setIfsc(e.target.value.toUpperCase())}
+                onChange={(e) => setIfsc(e.target.value ? e.target.value.toUpperCase() : '')}
                 className="w-full sm:w-1/2 px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400 uppercase font-mono font-medium"
                 required
               />
@@ -1088,7 +1088,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 type="text"
                 placeholder="ABCDE1234F"
                 value={panNumber}
-                onChange={(e) => setPanNumber(e.target.value.toUpperCase())}
+                onChange={(e) => setPanNumber(e.target.value ? e.target.value.toUpperCase() : '')}
                 className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400 font-mono uppercase font-medium"
                 required
               />

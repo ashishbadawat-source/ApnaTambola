@@ -262,8 +262,8 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
       winningBalance: newUserBonus,
       referralBalance: 0,
       bonusRewardBalance: 0,
-      referralCode: `REF-${newUserName.slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
-      referredBy: newUserReferredBy.trim() ? newUserReferredBy.trim().toUpperCase() : undefined,
+      referralCode: `REF-${(newUserName || 'USR').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+      referredBy: newUserReferredBy?.trim() ? newUserReferredBy.trim().toUpperCase() : undefined,
       kycStatus: 'verified',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
       createdAt: new Date().toISOString(),
@@ -808,7 +808,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 <input
                   type="text"
                   value={newUserReferredBy}
-                  onChange={(e) => setNewUserReferredBy(e.target.value.toUpperCase())}
+                  onChange={(e) => setNewUserReferredBy(e.target.value ? e.target.value.toUpperCase() : '')}
                   placeholder="उदा. REF-ASH772"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-amber-300 font-mono uppercase focus:outline-none focus:border-amber-400"
                 />
