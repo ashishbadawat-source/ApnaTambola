@@ -58,22 +58,23 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
         emailLower.includes('ashish');
 
       if (isMasterAdmin) {
-        // Find or build admin user
-        const existingAdmin = (allUsers || []).find((u) => u.role === 'admin' || u.email === 'ashishbadawat@gmail.com');
-        const adminObj: User = existingAdmin || {
-          id: 'admin_master_1',
-          name: 'Ashish Badawat (Master Admin)',
+        // Find or build admin user with guaranteed 'admin' role
+        const existingAdmin = (allUsers || []).find((u) => u.email === 'ashishbadawat@gmail.com' || u.role === 'admin');
+        const adminObj: User = {
+          ...(existingAdmin || {}),
+          id: existingAdmin?.id || 'admin_master_1',
+          name: existingAdmin?.name || 'Ashish Badawat (Master Admin)',
           email: 'ashishbadawat@gmail.com',
-          phone: '+91 9876543210',
+          phone: existingAdmin?.phone || '+91 9876543210',
           role: 'admin',
-          walletBalance: 25000,
-          depositBalance: 15000,
-          winningBalance: 10000,
-          referralBalance: 5000,
+          walletBalance: Math.max(existingAdmin?.walletBalance || 0, 50000),
+          depositBalance: Math.max(existingAdmin?.depositBalance || 0, 25000),
+          winningBalance: Math.max(existingAdmin?.winningBalance || 0, 25000),
+          referralBalance: Math.max(existingAdmin?.referralBalance || 0, 10000),
           kycStatus: 'verified',
-          referralCode: 'REF-ADMIN77',
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-          createdAt: new Date().toISOString(),
+          referralCode: existingAdmin?.referralCode || 'REF-ADMIN77',
+          avatar: existingAdmin?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+          createdAt: existingAdmin?.createdAt || new Date().toISOString(),
         };
 
         playWinningFanfare();
@@ -289,21 +290,22 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
             <button
               type="button"
               onClick={() => {
-                const existingAdmin = (allUsers || []).find((u) => u.role === 'admin' || u.email === 'ashishbadawat@gmail.com');
-                const adminObj: User = existingAdmin || {
-                  id: 'admin_master_1',
-                  name: 'Ashish Badawat (Master Admin)',
+                const existingAdmin = (allUsers || []).find((u) => u.email === 'ashishbadawat@gmail.com' || u.role === 'admin');
+                const adminObj: User = {
+                  ...(existingAdmin || {}),
+                  id: existingAdmin?.id || 'admin_master_1',
+                  name: existingAdmin?.name || 'Ashish Badawat (Master Admin)',
                   email: 'ashishbadawat@gmail.com',
-                  phone: '+91 9876543210',
+                  phone: existingAdmin?.phone || '+91 9876543210',
                   role: 'admin',
-                  walletBalance: 25000,
-                  depositBalance: 15000,
-                  winningBalance: 10000,
-                  referralBalance: 5000,
+                  walletBalance: Math.max(existingAdmin?.walletBalance || 0, 50000),
+                  depositBalance: Math.max(existingAdmin?.depositBalance || 0, 25000),
+                  winningBalance: Math.max(existingAdmin?.winningBalance || 0, 25000),
+                  referralBalance: Math.max(existingAdmin?.referralBalance || 0, 10000),
                   kycStatus: 'verified',
-                  referralCode: 'REF-ADMIN77',
-                  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-                  createdAt: new Date().toISOString(),
+                  referralCode: existingAdmin?.referralCode || 'REF-ADMIN77',
+                  avatar: existingAdmin?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+                  createdAt: existingAdmin?.createdAt || new Date().toISOString(),
                 };
                 playWinningFanfare();
                 onAdminLoginSuccess(adminObj);

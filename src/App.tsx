@@ -110,7 +110,11 @@ export function App() {
     try {
       const saved = localStorage.getItem('apna_tambola_auth_user');
       if (saved) {
-        return JSON.parse(saved);
+        const user = JSON.parse(saved);
+        if (user && (user.email === 'ashishbadawat@gmail.com' || user.id === 'admin_master_1')) {
+          user.role = 'admin';
+        }
+        return user;
       }
     } catch (e) {
       console.error('Error loading active user session:', e);
@@ -333,9 +337,19 @@ export function App() {
           setCurrentUser((prevUser) => {
             if (!prevUser) return null;
             const updated = firestoreUsers.find(
-              (u) => u.id === prevUser.id || (prevUser.phone && u.phone === prevUser.phone)
+              (u) => u.id === prevUser.id || (prevUser.phone && u.phone === prevUser.phone) || (prevUser.email && u.email === prevUser.email)
             );
-            return updated ? { ...prevUser, ...updated } : prevUser;
+            if (!updated) return prevUser;
+            const isMasterAdmin =
+              prevUser.role === 'admin' ||
+              prevUser.email === 'ashishbadawat@gmail.com' ||
+              prevUser.email?.includes('admin') ||
+              prevUser.id === 'admin_master_1';
+            return {
+              ...prevUser,
+              ...updated,
+              role: isMasterAdmin ? 'admin' : (updated.role || prevUser.role || 'user'),
+            };
           });
         },
         (error) => {
@@ -1094,35 +1108,43 @@ export function App() {
   };
 
   const handleAdminLoginSuccess = (adminUser: User) => {
-    setCurrentUser(adminUser);
+    const verifiedAdminUser: User = {
+      ...adminUser,
+      role: 'admin',
+    };
+    setCurrentUser(verifiedAdminUser);
     setActiveTab('admin');
     try {
-      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(adminUser));
+      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(verifiedAdminUser));
+    } catch (e) {}
+    try {
+      setDoc(doc(db, 'users', verifiedAdminUser.id), verifiedAdminUser, { merge: true }).catch(() => {});
     } catch (e) {}
     setUsers((prev) => {
-      if (prev.some((u) => u.id === adminUser.id)) {
-        return prev.map((u) => (u.id === adminUser.id ? adminUser : u));
+      if (prev.some((u) => u.id === verifiedAdminUser.id)) {
+        return prev.map((u) => (u.id === verifiedAdminUser.id ? verifiedAdminUser : u));
       }
-      return [adminUser, ...prev];
+      return [verifiedAdminUser, ...prev];
     });
   };
 
   const handleInstantMasterAdminAccess = () => {
-    const existingAdmin = (users || []).find((u) => u.role === 'admin' || u.email === 'ashishbadawat@gmail.com');
-    const adminObj: User = existingAdmin || {
-      id: 'admin_master_1',
-      name: 'Ashish Badawat (Master Admin)',
+    const existingAdmin = (users || []).find((u) => u.email === 'ashishbadawat@gmail.com' || u.role === 'admin');
+    const adminObj: User = {
+      ...(existingAdmin || {}),
+      id: existingAdmin?.id || 'admin_master_1',
+      name: existingAdmin?.name || 'Ashish Badawat (Master Admin)',
       email: 'ashishbadawat@gmail.com',
-      phone: '+91 9876543210',
+      phone: existingAdmin?.phone || '+91 9876543210',
       role: 'admin',
-      walletBalance: 25000,
-      depositBalance: 15000,
-      winningBalance: 10000,
-      referralBalance: 5000,
+      walletBalance: Math.max(existingAdmin?.walletBalance || 0, 50000),
+      depositBalance: Math.max(existingAdmin?.depositBalance || 0, 25000),
+      winningBalance: Math.max(existingAdmin?.winningBalance || 0, 25000),
+      referralBalance: Math.max(existingAdmin?.referralBalance || 0, 10000),
       kycStatus: 'verified',
-      referralCode: 'REF-ADMIN77',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
-      createdAt: new Date().toISOString(),
+      referralCode: existingAdmin?.referralCode || 'REF-ADMIN77',
+      avatar: existingAdmin?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+      createdAt: existingAdmin?.createdAt || new Date().toISOString(),
     };
     handleAdminLoginSuccess(adminObj);
   };
@@ -1632,7 +1654,15 @@ export function App() {
 
   // Navigation Helper
   const handleNavigate = (tab: string, gameId?: string) => {
-    setActiveTab(tab);
+    const resolvedTab = tab === 'user' ? 'dashboard' : tab;
+    if (resolvedTab === 'admin') {
+      if (currentUser && (currentUser.email === 'ashishbadawat@gmail.com' || currentUser.id === 'admin_master_1')) {
+        if (currentUser.role !== 'admin') {
+          handleInstantMasterAdminAccess();
+        }
+      }
+    }
+    setActiveTab(resolvedTab);
     if (gameId) {
       setSelectedGameId(gameId);
     }
@@ -3482,28 +3512,19 @@ export function App() {
         )}
 
         {/* Dedicated User Dashboard Tab (11-Box Colorful Dashboard) */}
-        {activeTab === 'dashboard' && (
-          currentUser ? (
-            <UserDashboardView
-              currentUser={currentUser}
-              allUsers={users}
-              games={games}
-              tickets={tickets}
-              winners={winners}
-              referralMembers={computedReferralMembers}
-              commissions={commissions}
-              onNavigate={handleNavigate}
-              onOpenDeposit={() => handleNavigate('wallet')}
-              onOpenAuth={handleOpenAuth}
-            />
-          ) : (
-            <ProtectedViewGate
-              title="यूज़र डैशबोर्ड (User Dashboard)"
-              subtitle="डैशबोर्ड, टिकट स्टेटस, इनकम और वॉलेट बैलेंस देखने के लिए कृपया अपने आईडी और पासवर्ड से लॉगिन करें।"
-              onOpenAuth={handleOpenAuth}
-              onNavigate={handleNavigate}
-            />
-          )
+        {(activeTab === 'dashboard' || activeTab === 'user') && (
+          <UserDashboardView
+            currentUser={currentUser}
+            allUsers={users}
+            games={games}
+            tickets={tickets}
+            winners={winners}
+            referralMembers={computedReferralMembers}
+            commissions={commissions}
+            onNavigate={handleNavigate}
+            onOpenDeposit={() => handleNavigate('wallet')}
+            onOpenAuth={handleOpenAuth}
+          />
         )}
 
         {activeTab === 'live' && (
@@ -3690,7 +3711,7 @@ export function App() {
           />
         )}
 
-        {activeTab === 'admin' && currentUser?.role === 'admin' && (
+        {activeTab === 'admin' && (currentUser?.role === 'admin' || currentUser?.email === 'ashishbadawat@gmail.com') && (
           <AdminDashboardView
             stats={adminStats}
             games={games}
@@ -3738,7 +3759,7 @@ export function App() {
         )}
 
         {/* If on Admin tab but not logged in as Admin, show direct portal entry prompt */}
-        {activeTab === 'admin' && currentUser?.role !== 'admin' && (
+        {activeTab === 'admin' && currentUser?.role !== 'admin' && currentUser?.email !== 'ashishbadawat@gmail.com' && (
           <div className="max-w-xl mx-auto py-12 text-center space-y-6">
             <div className="p-8 rounded-3xl bg-slate-900/90 border-2 border-red-500/50 shadow-2xl shadow-red-950/60 space-y-4">
               <div className="w-16 h-16 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center mx-auto text-red-400">

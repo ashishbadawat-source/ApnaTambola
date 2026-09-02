@@ -36,9 +36,9 @@ interface ApnaTambolaLiveArenaProps {
 
 export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
   currentUser,
-  games,
-  tickets,
-  winners,
+  games = [],
+  tickets = [],
+  winners = [],
   onNavigate,
   onOpenDeposit,
 }) => {
@@ -57,7 +57,7 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
   const [markedNumbers, setMarkedNumbers] = useState<number[]>([2, 17, 34, 49, 61, 75, 88]);
   const [claimedPatterns, setClaimedPatterns] = useState<string[]>(['Early Five']);
 
-  const liveGame = games.find((g) => g.status === 'live') || games[0];
+  const liveGame = (games || []).find((g) => g && g.status === 'live') || (games || [])[0];
   const lastCalledNumber = liveGame?.currentNumber || 75;
 
   const toggleMarkNumber = (num: number) => {
@@ -75,8 +75,9 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
     }
   };
 
-  const myActiveTickets = tickets.filter((t) => {
-    const matchedGame = games.find((g) => g.id === t.gameId);
+  const myActiveTickets = (tickets || []).filter((t) => {
+    if (!t) return false;
+    const matchedGame = (games || []).find((g) => g && g.id === t.gameId);
     return matchedGame && matchedGame.status !== 'completed';
   });
 

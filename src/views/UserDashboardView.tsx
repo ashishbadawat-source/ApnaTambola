@@ -51,27 +51,28 @@ interface UserDashboardViewProps {
 export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   currentUser,
   allUsers = [],
-  games,
-  tickets,
-  winners,
-  referralMembers,
+  games = [],
+  tickets = [],
+  winners = [],
+  referralMembers = [],
   commissions = [],
   onNavigate,
   onOpenDeposit,
   onOpenAuth,
 }) => {
-  const liveGame = games.find((g) => g.status === 'live');
-  const upcomingGames = games.filter((g) => g.status === 'upcoming');
-  const myActiveTickets = tickets.filter((t) => {
-    const matchedGame = games.find((g) => g.id === t.gameId);
+  const liveGame = (games || []).find((g) => g && g.status === 'live');
+  const upcomingGames = (games || []).filter((g) => g && g.status === 'upcoming');
+  const myActiveTickets = (tickets || []).filter((t) => {
+    if (!t) return false;
+    const matchedGame = (games || []).find((g) => g && g.id === t.gameId);
     return matchedGame && matchedGame.status !== 'completed';
   });
 
   // Upline sponsor lookup using canonical referral matching
   const uplineUser = currentUser ? (
-    allUsers.find((u) => {
-      if (!currentUser || u.id === currentUser.id) return false;
-      return isDirectChildOf(currentUser, u, commissions);
+    (allUsers || []).find((u) => {
+      if (!u || !currentUser || u.id === currentUser.id) return false;
+      return isDirectChildOf(currentUser, u, commissions || []);
     }) || null
   ) : null;
 
@@ -80,7 +81,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   const totalWinnings = currentUser?.totalWon || 0;
   // Direct Live Users from canonical matcher & database fields (works across all devices)
   const directLiveUsers = currentUser
-    ? allUsers.filter((u) => {
+    ? (allUsers || []).filter((u) => {
         if (!u || u.id === currentUser.id) return false;
         if (u.referrer_id && (u.referrer_id === currentUser.id || u.referrer_id === (currentUser as any).user_id || u.referrer_id === currentUser.referralCode)) {
           return true;
@@ -91,7 +92,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
         if (u.referredBy && (u.referredBy === currentUser.referralCode || u.referredBy === currentUser.id)) {
           return true;
         }
-        return isDirectChildOf(u, currentUser, commissions);
+        return isDirectChildOf(u, currentUser, commissions || []);
       })
     : [];
 
