@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Wallet,
   DollarSign,
@@ -29,6 +29,7 @@ import {
   ExternalLink,
   X,
   Camera,
+  Trash2,
 } from 'lucide-react';
 import { User, WalletTransaction, DepositRequest } from '../../types';
 
@@ -39,6 +40,7 @@ interface ModuleWalletsProps {
   onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
   onApproveDeposit?: (depositId: string, remarks?: string) => Promise<boolean>;
   onRejectDeposit?: (depositId: string, reason?: string) => Promise<boolean>;
+  onDeleteDeposit?: (depositId: string) => Promise<boolean>;
 }
 
 export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
@@ -48,11 +50,12 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   onUpdateWalletBalance,
   onApproveDeposit,
   onRejectDeposit,
+  onDeleteDeposit,
 }) => {
   const [activeTab, setActiveTab] = useState<'deposits' | 'transactions' | 'balances'>('deposits');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [depositStatusFilter, setDepositStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [depositStatusFilter, setDepositStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'duplicates'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
   const [previewDeposit, setPreviewDeposit] = useState<DepositRequest | null>(null);
@@ -60,6 +63,10 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   // Reject / Block Confirmation Modal
   const [rejectingDeposit, setRejectingDeposit] = useState<DepositRequest | null>(null);
   const [rejectReason, setRejectReason] = useState('अमान्य / फर्जी UTR — पेमेंट प्राप्त नहीं हुआ (Fake/Invalid UTR)');
+
+  // Remove / Delete Deposit Slip Modal (Does NOT block user)
+  const [deletingDeposit, setDeletingDeposit] = useState<DepositRequest | null>(null);
+
   const [actionLoading, setActionLoading] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
@@ -77,9 +84,64 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
 
   const pendingDepositsCount = deposits.filter((d) => d.status === 'pending').length;
 
+  // Detect duplicate deposit slips: same UTR or multiple pending slips by the same user
+  const duplicateInfo = useMemo(() => {
+    const utrMap = new Map<string, DepositRequest[]>();
+    const userPendingMap = new Map<string, DepositRequest[]>();
+
+    deposits.forEach((dep) => {
+      if (dep.utrNumber) {
+        const u = dep.utrNumber.trim().toLowerCase();
+        const list = utrMap.get(u) || [];
+        list.push(dep);
+        utrMap.set(u, list);
+      }
+      if (dep.userId && dep.status === 'pending') {
+        const list = userPendingMap.get(dep.userId) || [];
+        list.push(dep);
+        userPendingMap.set(dep.userId, list);
+      }
+    });
+
+    const duplicateDepIds = new Set<string>();
+    const duplicateReasons = new Map<string, string>();
+
+    utrMap.forEach((list) => {
+      if (list.length > 1) {
+        list.forEach((d) => {
+          duplicateDepIds.add(d.id);
+          duplicateReasons.set(d.id, `समान UTR (${list.length} बार भेजा गया)`);
+        });
+      }
+    });
+
+    userPendingMap.forEach((list) => {
+      if (list.length > 1) {
+        list.forEach((d) => {
+          duplicateDepIds.add(d.id);
+          if (!duplicateReasons.has(d.id)) {
+            duplicateReasons.set(d.id, `यूजर की ${list.length} पेंडिंग स्लिप्स मौजूद हैं`);
+          }
+        });
+      }
+    });
+
+    return {
+      utrMap,
+      userPendingMap,
+      duplicateDepIds,
+      duplicateReasons,
+      duplicateCount: duplicateDepIds.size,
+    };
+  }, [deposits]);
+
   const filteredDeposits = deposits.filter((d) => {
     if (!d) return false;
-    if (depositStatusFilter !== 'all' && d.status !== depositStatusFilter) return false;
+    if (depositStatusFilter === 'duplicates') {
+      if (!duplicateInfo.duplicateDepIds.has(d.id)) return false;
+    } else if (depositStatusFilter !== 'all' && d.status !== depositStatusFilter) {
+      return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -136,6 +198,27 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
       setActionNotice(`✓ डिपॉजिट रिजेक्ट कर दिया गया और फर्जी UTR के कारण यूजर ${rejectingDeposit.userName} (ID: ${rejectingDeposit.userId}) को तुरंत ब्लॉक (Block) कर दिया गया!`);
       setRejectingDeposit(null);
       setTimeout(() => setActionNotice(null), 5000);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingDeposit) return;
+    if (!onDeleteDeposit) {
+      alert('Delete function is not available.');
+      return;
+    }
+    setActionLoading(true);
+    const idToDelete = deletingDeposit.id;
+    const utr = deletingDeposit.utrNumber;
+    const uName = deletingDeposit.userName;
+    const success = await onDeleteDeposit(idToDelete);
+    setActionLoading(false);
+    if (success) {
+      setDeletingDeposit(null);
+      setActionNotice(`🗑️ डिपॉजिट स्लिप (UTR: ${utr} | यूजर: ${uName}) को एडमिन द्वारा सफलतापूर्वक रिमूव (हटा) दिया गया!`);
+      setTimeout(() => setActionNotice(null), 5000);
+    } else {
+      alert('स्लिप हटाने में त्रुटि हुई। कृपया पुनः प्रयास करें।');
     }
   };
 
@@ -249,6 +332,9 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
               {[
                 { id: 'all', label: `All Requests (${deposits.length})` },
                 { id: 'pending', label: `⏳ Pending Verification (${pendingDepositsCount})` },
+                ...(duplicateInfo.duplicateCount > 0
+                  ? [{ id: 'duplicates', label: `⚠️ डुप्लिकेट स्लिप्स (${duplicateInfo.duplicateCount})` }]
+                  : []),
                 { id: 'approved', label: '✅ Approved' },
                 { id: 'rejected', label: '❌ Rejected / Blocked' },
               ].map((tab) => (
@@ -257,7 +343,11 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                   onClick={() => setDepositStatusFilter(tab.id as any)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     depositStatusFilter === tab.id
-                      ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                      ? tab.id === 'duplicates'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30'
+                        : 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                      : tab.id === 'duplicates'
+                      ? 'bg-amber-500/20 text-amber-300 hover:text-amber-100 border border-amber-500/40'
                       : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
                   }`}
                 >
@@ -278,6 +368,27 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
             </div>
           </div>
 
+          {/* ⚠️ Duplicate Deposit Notification Banner */}
+          {duplicateInfo.duplicateCount > 0 && (
+            <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-400/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-200">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                <span className="leading-relaxed">
+                  <strong>⚠️ {duplicateInfo.duplicateCount} डुप्लिकेट/अतिरिक्त स्लिप्स पाई गईं:</strong> यूजर ने 2 या 3 बार एक ही रसीद/स्लिप भेज दी है। आप अतिरिक्त स्लिप्स को <strong>"रिमूव करें (Delete)"</strong> बटन से हटा सकते हैं (यूजर ब्लॉक नहीं होगा)।
+                </span>
+              </div>
+              {depositStatusFilter !== 'duplicates' && (
+                <button
+                  type="button"
+                  onClick={() => setDepositStatusFilter('duplicates')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 cursor-pointer shrink-0 shadow"
+                >
+                  डुप्लिकेट स्लिप्स देखें ({duplicateInfo.duplicateCount})
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950/80 text-slate-400 uppercase font-black text-[10px] tracking-wider border-b border-slate-800">
@@ -297,9 +408,18 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                   filteredDeposits.map((dep) => {
                     const matchedUser = users.find((u) => u.id === dep.userId);
                     const isUserBlocked = matchedUser?.isBlocked || matchedUser?.status === 'blocked';
+                    const isDuplicate = duplicateInfo.duplicateDepIds.has(dep.id);
+                    const duplicateReason = duplicateInfo.duplicateReasons.get(dep.id);
 
                     return (
-                      <tr key={dep.id} className="hover:bg-slate-800/40 transition-colors">
+                      <tr
+                        key={dep.id}
+                        className={`transition-colors ${
+                          isDuplicate
+                            ? 'bg-amber-500/10 hover:bg-amber-500/15'
+                            : 'hover:bg-slate-800/40'
+                        }`}
+                      >
                         {/* User Details */}
                         <td className="px-4 py-3.5">
                           <div className="space-y-0.5">
@@ -310,9 +430,20 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                                   BLOCKED
                                 </span>
                               )}
+                              {isDuplicate && (
+                                <span className="px-1.5 py-0.2 rounded bg-amber-500/30 text-amber-200 text-[9px] font-black border border-amber-400/60 animate-pulse">
+                                  ⚠️ DUPLICATE
+                                </span>
+                              )}
                             </div>
                             <div className="text-[10px] font-mono text-amber-400">ID: {dep.userId}</div>
                             <div className="text-[10px] text-slate-400">{dep.userPhone || dep.userEmail || '—'}</div>
+                            {isDuplicate && (
+                              <div className="text-[10px] text-amber-300 font-bold flex items-center gap-1 mt-0.5">
+                                <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>{duplicateReason || 'डुप्लिकेट स्लिप'}</span>
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -431,40 +562,56 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
 
                         {/* Actions */}
                         <td className="px-4 py-3.5 text-right">
-                          {dep.status === 'pending' ? (
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                disabled={actionLoading}
-                                onClick={() => handleApprove(dep)}
-                                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                                title="Approve deposit and credit user wallet"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>OK / Approve</span>
-                              </button>
+                          <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                            {dep.status === 'pending' && (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={actionLoading}
+                                  onClick={() => handleApprove(dep)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-1 shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                                  title="डिपॉजिट स्वीकृत करें और वॉलेट में जोड़ें"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>OK / Approve</span>
+                                </button>
 
-                              <button
-                                type="button"
-                                disabled={actionLoading}
-                                onClick={() => setRejectingDeposit(dep)}
-                                className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
-                                title="Reject and block user ID"
-                              >
-                                <Ban className="w-3.5 h-3.5" />
-                                <span>Reject &amp; Block</span>
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] text-slate-500 font-medium">Processed</span>
-                          )}
+                                <button
+                                  type="button"
+                                  disabled={actionLoading}
+                                  onClick={() => setRejectingDeposit(dep)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 font-bold text-xs flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                                  title="फर्जी UTR होने पर रिजेक्ट करें और यूजर ID ब्लॉक करें"
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  <span>Reject &amp; Block</span>
+                                </button>
+                              </>
+                            )}
+
+                            {/* 🗑️ Remove / Delete Duplicate or Unwanted Deposit Slip */}
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => setDeletingDeposit(dep)}
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 active:scale-95 transition-all cursor-pointer border shadow-sm ${
+                                isDuplicate
+                                  ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-500/50 ring-1 ring-rose-500/40'
+                                  : 'bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-300 border-slate-700 hover:border-rose-500/40'
+                              }`}
+                              title="इस डुप्लिकेट / अतिरिक्त स्लिप को हटाएं (यूजर ब्लॉक नहीं होगा)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                              <span>रिमूव</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                       कोई डिपॉजिट अनुरोध नहीं मिला (No deposit requests found)
                     </td>
                   </tr>
@@ -826,20 +973,36 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-800">
               {previewDeposit.status === 'pending' ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const d = previewDeposit;
-                      setPreviewDeposit(null);
-                      setRejectingDeposit(d);
-                    }}
-                    className="px-4 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-black text-xs border border-red-500/40 cursor-pointer"
-                  >
-                    Reject &amp; Block
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = previewDeposit;
+                        setPreviewDeposit(null);
+                        setRejectingDeposit(d);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold text-xs border border-red-500/40 cursor-pointer"
+                    >
+                      Reject &amp; Block
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = previewDeposit;
+                        setPreviewDeposit(null);
+                        setDeletingDeposit(d);
+                      }}
+                      className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/50 cursor-pointer flex items-center gap-1"
+                      title="डुप्लिकेट स्लिप होने पर बिना ब्लॉक किए हटाएं"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>रिमूव करें (Delete)</span>
+                    </button>
+                  </div>
 
                   <button
                     type="button"
@@ -848,21 +1011,127 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                       setPreviewDeposit(null);
                       await handleApprove(d);
                     }}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-1.5"
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-1.5"
                   >
                     <Check className="w-4 h-4" />
                     <span>Approve ₹{previewDeposit.amount} (स्वीकृत करें)</span>
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => setPreviewDeposit(null)}
-                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs cursor-pointer"
-                >
-                  Close (बंद करें)
-                </button>
+                <div className="flex items-center justify-between w-full gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = previewDeposit;
+                      setPreviewDeposit(null);
+                      setDeletingDeposit(d);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs border border-rose-500/50 cursor-pointer flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>इस स्लिप को लिस्ट से हटाएं (रिमूव)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPreviewDeposit(null)}
+                    className="px-6 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs cursor-pointer"
+                  >
+                    Close (बंद करें)
+                  </button>
+                </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🗑️ ADMIN REMOVE / DELETE DEPOSIT SLIP CONFIRMATION MODAL */}
+      {deletingDeposit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border-2 border-rose-500/60 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-400 font-black text-base sm:text-lg">
+                <Trash2 className="w-5 h-5 text-rose-500" />
+                <span>डिपॉजिट स्लिप रिमूव करें (Delete Deposit Slip)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingDeposit(null)}
+                className="p-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Explanation / Notice */}
+            <div className="p-3.5 rounded-2xl bg-rose-950/30 border border-rose-500/40 space-y-1.5 text-xs text-rose-200">
+              <p className="font-bold text-rose-300 flex items-center gap-1.5 text-sm">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>क्या आप यह डिपॉजिट स्लिप लिस्ट से हटाना (रिमूव) चाहते हैं?</span>
+              </p>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                👉 <strong>महत्वपूर्ण:</strong> यदि किसी यूजर ने 2 या 3 बार एक ही स्लिप भेज दी है, तो इस ऑप्शन से केवल यह अतिरिक्त/डुप्लिकेट स्लिप हटाई जाएगी। <strong>यूजर की आईडी ब्लॉक नहीं होगी</strong> और यूजर का अकाउंट पूरी तरह सुरक्षित रहेगा।
+              </p>
+            </div>
+
+            {/* Slip Summary */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">यूजर नाम (User):</span>
+                <span className="font-black text-white">{deletingDeposit.userName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">यूजर ID:</span>
+                <span className="font-mono text-amber-400 font-bold">{deletingDeposit.userId}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">डिपॉजिट राशि (Amount):</span>
+                <span className="font-black text-emerald-400 font-mono text-sm">
+                  ₹{(deletingDeposit.amount || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">12-Digit UTR:</span>
+                <span className="font-mono font-bold text-amber-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-700">
+                  {deletingDeposit.utrNumber}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">सबमिट तारीख / समय:</span>
+                <span className="text-slate-300">
+                  {deletingDeposit.requestDate
+                    ? new Date(deletingDeposit.requestDate).toLocaleString('en-IN')
+                    : 'Recent'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">वर्तमान स्थिति (Status):</span>
+                <span className="font-black uppercase text-amber-400 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">
+                  {deletingDeposit.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setDeletingDeposit(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer"
+              >
+                रद्द करें (Cancel)
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={handleConfirmDelete}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-rose-900/40 active:scale-95"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{actionLoading ? 'हटाया जा रहा है...' : '🗑️ हां, स्लिप रिमूव करें (Remove)'}</span>
+              </button>
             </div>
           </div>
         </div>

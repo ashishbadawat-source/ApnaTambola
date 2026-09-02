@@ -471,26 +471,41 @@ export function App() {
       const unsubscribeDeposits = onSnapshot(
         collection(db, 'deposits'),
         (snapshot) => {
-          if (!snapshot.empty) {
-            const firestoreDeps: DepositRequest[] = [];
-            snapshot.forEach((docSnap) => {
+          let deletedIds = new Set<string>();
+          try {
+            const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_deposit_ids') || '[]');
+            if (Array.isArray(arr)) deletedIds = new Set(arr);
+          } catch (e) {}
+
+          const firestoreDeps: DepositRequest[] = [];
+          snapshot.forEach((docSnap) => {
+            if (!deletedIds.has(docSnap.id)) {
               firestoreDeps.push({ ...(docSnap.data() as DepositRequest), id: docSnap.id });
+            }
+          });
+
+          setDeposits((prev) => {
+            const map = new Map<string, DepositRequest>();
+            prev.forEach((d) => {
+              if (!deletedIds.has(d.id)) {
+                map.set(d.id, d);
+              }
             });
-            setDeposits((prev) => {
-              const map = new Map<string, DepositRequest>();
-              prev.forEach((d) => map.set(d.id, d));
-              firestoreDeps.forEach((d) => map.set(d.id, d));
-              const merged = Array.from(map.values()).sort((a, b) => {
-                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
-                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
-                return timeB - timeA;
-              });
-              try {
-                localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
-              } catch (e) {}
-              return merged;
+            firestoreDeps.forEach((d) => {
+              if (!deletedIds.has(d.id)) {
+                map.set(d.id, d);
+              }
             });
-          }
+            const merged = Array.from(map.values()).sort((a, b) => {
+              const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+              const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+              return timeB - timeA;
+            });
+            try {
+              localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
         },
         (err) => console.warn('Firestore deposits listener:', err)
       );
@@ -2561,6 +2576,53 @@ export function App() {
     return true;
   };
 
+  // 7c. Admin Remove / Delete Duplicate or Unwanted Deposit Slip (Does NOT block the user)
+  const handleDeleteDeposit = async (depositId: string): Promise<boolean> => {
+    try {
+      const deposit = deposits.find((d) => d.id === depositId);
+      if (!deposit) return false;
+
+      // 1. Record in deleted list to avoid resurrection
+      try {
+        const deletedArr: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_deposit_ids') || '[]');
+        if (!deletedArr.includes(depositId)) {
+          deletedArr.push(depositId);
+          localStorage.setItem('apna_tambola_deleted_deposit_ids', JSON.stringify(deletedArr));
+        }
+      } catch (e) {}
+
+      // 2. Remove from local deposits state
+      setDeposits((prev) => {
+        const next = prev.filter((d) => d.id !== depositId);
+        try {
+          localStorage.setItem('apna_tambola_deposits', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 3. Remove from Firestore
+      try {
+        await deleteDoc(doc(db, 'deposits', depositId));
+      } catch (e) {
+        console.warn('Firestore delete deposit error:', e);
+      }
+
+      // 4. Notify backend server
+      try {
+        await fetch('/api/deposits/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ depositId }),
+        });
+      } catch (e) {}
+
+      return true;
+    } catch (err) {
+      console.error('Error deleting deposit slip:', err);
+      return false;
+    }
+  };
+
   // 7b. Claim Daily Spin / Scratch / Check-in Rewards into Daily Bonus Wallet (Depositors Only)
   const handleClaimDailyReward = async (
     amount: number,
@@ -3851,6 +3913,7 @@ export function App() {
             onRejectWithdrawal={handleRejectWithdrawal}
             onApproveDeposit={handleApproveDeposit}
             onRejectDeposit={handleRejectDeposit}
+            onDeleteDeposit={handleDeleteDeposit}
             onUpdateWalletBalance={handleUpdateWalletBalance}
             onToggleKYC={handleToggleKYC}
             onToggleBlockUser={handleToggleBlockUser}

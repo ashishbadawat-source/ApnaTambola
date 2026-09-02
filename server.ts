@@ -854,6 +854,47 @@ async function startServer() {
     }
   });
 
+  // Admin Delete / Remove Duplicate or Unwanted Deposit Slip
+  app.post('/api/deposits/delete', (req: Request, res: Response) => {
+    try {
+      const { depositId } = req.body;
+      if (!depositId) {
+        return res.status(400).json({ success: false, error: 'Deposit ID is required.' });
+      }
+
+      const beforeLen = deposits.length;
+      deposits = deposits.filter((d) => d.id !== depositId);
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        message: 'डिपॉजिट स्लिप को एडमिन द्वारा सफलतापूर्वक रिमूव (Delete) कर दिया गया है।',
+        deletedId: depositId,
+        countRemoved: beforeLen - deposits.length,
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/deposits/:id', (req: Request, res: Response) => {
+    try {
+      const depositId = req.params.id;
+      const beforeLen = deposits.length;
+      deposits = deposits.filter((d) => d.id !== depositId);
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        message: 'डिपॉजिट स्लिप को एडमिन द्वारा सफलतापूर्वक रिमूव (Delete) कर दिया गया है।',
+        deletedId: depositId,
+        countRemoved: beforeLen - deposits.length,
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   // Tickets List & Sync
   app.get('/api/tickets', (req: Request, res: Response) => {
     res.json(tickets);

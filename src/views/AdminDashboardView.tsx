@@ -83,6 +83,7 @@ interface AdminDashboardViewProps {
   onRejectWithdrawal: (id: string) => Promise<boolean>;
   onApproveDeposit?: (depositId: string, remarks?: string) => Promise<boolean>;
   onRejectDeposit?: (depositId: string, reason?: string) => Promise<boolean>;
+  onDeleteDeposit?: (depositId: string) => Promise<boolean>;
   onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
   onToggleKYC: (userId: string) => Promise<boolean>;
   onToggleBlockUser?: (userId: string) => Promise<boolean>;
@@ -132,6 +133,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onRejectWithdrawal,
   onApproveDeposit,
   onRejectDeposit,
+  onDeleteDeposit,
   onUpdateWalletBalance,
   onToggleKYC,
   onToggleBlockUser,
@@ -368,6 +370,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onUpdateWalletBalance={onUpdateWalletBalance}
             onApproveDeposit={onApproveDeposit}
             onRejectDeposit={onRejectDeposit}
+            onDeleteDeposit={onDeleteDeposit}
           />
         )}
 
