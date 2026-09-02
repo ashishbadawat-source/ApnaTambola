@@ -43,11 +43,57 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   const [manualNumberInput, setManualNumberInput] = useState('');
   const [soundVoice, setSoundVoice] = useState(true);
   const [autoSpeed, setAutoSpeed] = useState<number>(6); // 4s, 6s, 8s
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   const currentGame = games.find((g) => g.id === selectedGameId) || games[0];
 
   const calledNumbers = currentGame?.calledNumbers || [];
   const lastCalledNumber = currentGame?.lastCalledNumber;
+
+  const MIN_TICKETS_TO_START = 100;
+  const soldTicketsCount = tickets.filter((t) => t.gameId === currentGame?.id).length || currentGame?.soldTickets || 0;
+  const isMinTicketsMet = soldTicketsCount >= MIN_TICKETS_TO_START;
+
+  const handleStartLiveGame = async () => {
+    if (!currentGame || !onUpdateGame) return;
+
+    if (soldTicketsCount < MIN_TICKETS_TO_START) {
+      const proceed = confirm(
+        `⚠️ नियम अलर्ट: गेम शुरू करने के लिए कम से कम 100 टिकट बिकना जरूरी है!\n\nवर्तमान में केवल ${soldTicketsCount}/100 टिकट बिके हैं।\n\nक्या आप अभी भी गेम को लाइव चालू करना चाहते हैं?`
+      );
+      if (!proceed) return;
+    }
+
+    await onUpdateGame(currentGame.id, {
+      status: 'live',
+      isActive: true,
+      isGameEnabled: true,
+    });
+    setStatusNotice(`🎮 गेम "${currentGame.title}" सफलतापूर्वक लाइव (LIVE) चालू कर दिया गया है!`);
+    setTimeout(() => setStatusNotice(null), 4000);
+  };
+
+  const handlePauseGame = async () => {
+    if (!currentGame || !onUpdateGame) return;
+    await onUpdateGame(currentGame.id, {
+      status: 'upcoming',
+      autoCalling: false,
+    });
+    setStatusNotice(`⏸️ गेम "${currentGame.title}" को रोक दिया गया है (PAUSED).`);
+    setTimeout(() => setStatusNotice(null), 4000);
+  };
+
+  const handleFinishGame = async () => {
+    if (!currentGame || !onUpdateGame) return;
+    if (confirm(`क्या आप गेम "${currentGame.title}" को समाप्त (COMPLETED) घोषित करना चाहते हैं?`)) {
+      await onUpdateGame(currentGame.id, {
+        status: 'completed',
+        autoCalling: false,
+      });
+      setStatusNotice(`🏁 गेम "${currentGame.title}" समाप्त (COMPLETED) हो गया है! यूज़र अब पुराने टिकट डिलीट कर सकते हैं।`);
+      setTimeout(() => setStatusNotice(null), 4000);
+    }
+  };
 
   const handleManualCall = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,8 +135,20 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-black text-white">Live Tambola Game Controller</h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-300 text-[10px] font-black border border-red-500/40">
-                {currentGame?.status === 'live' ? 'ROOM LIVE' : 'SCHEDULED'}
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-black border ${
+                  currentGame?.status === 'live'
+                    ? 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse'
+                    : currentGame?.status === 'completed'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}
+              >
+                {currentGame?.status === 'live'
+                  ? '🔴 ROOM LIVE'
+                  : currentGame?.status === 'completed'
+                  ? '🏁 FINISHED'
+                  : '⏰ SCHEDULED'}
               </span>
             </div>
             <p className="text-xs text-slate-400">
@@ -99,7 +157,7 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
           </div>
         </div>
 
-        {/* Game Selector */}
+        {/* Game Selector & Action Switcher */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <select
             value={selectedGameId}
@@ -112,6 +170,37 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
               </option>
             ))}
           </select>
+
+          {currentGame?.status !== 'live' ? (
+            <button
+              onClick={handleStartLiveGame}
+              className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg transition-all cursor-pointer ${
+                isMinTicketsMet
+                  ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/30'
+                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/30'
+              }`}
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>{isMinTicketsMet ? 'Start Live Game' : `Start (${soldTicketsCount}/100 Tkts)`}</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={handlePauseGame}
+                className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Pause className="w-3.5 h-3.5" />
+                <span>Pause</span>
+              </button>
+              <button
+                onClick={handleFinishGame}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Finish</span>
+              </button>
+            </div>
+          )}
 
           <button
             onClick={() => setSoundVoice(!soundVoice)}
@@ -127,6 +216,59 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ⚠️ Minimum 100 Tickets Rule Progress Banner */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/30 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-amber-400/20 border border-amber-400/40 flex items-center justify-center shrink-0">
+            <Ticket className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <div className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+              <span>कम से कम 100 टिकट बिक्री नियम (Minimum 100 Tickets Threshold)</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  isMinTicketsMet
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                }`}
+              >
+                {soldTicketsCount}/100 टिकट बिके {isMinTicketsMet ? '✅ लक्ष्य पूरा' : '⏳ बुकिंग जारी'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              नियम: मैच शुरू करने के लिए कम से कम 100 टिकट बिकना जरूरी है ताकि ₹{((currentGame?.ticketPrice || 50) * 100 * 0.7).toLocaleString('en-IN')} का 70% मेगा प्राइज़ पूल बन सके।
+            </p>
+          </div>
+        </div>
+
+        {/* Mini Progress Bar */}
+        <div className="w-full sm:w-48 space-y-1">
+          <div className="flex justify-between text-[10px] font-bold text-slate-400">
+            <span>प्रोग्रेस</span>
+            <span className={isMinTicketsMet ? 'text-emerald-400 font-black' : 'text-amber-400'}>
+              {Math.min(100, Math.round((soldTicketsCount / MIN_TICKETS_TO_START) * 100))}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                isMinTicketsMet
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                  : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+              }`}
+              style={{ width: `${Math.min(100, (soldTicketsCount / MIN_TICKETS_TO_START) * 100)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {statusNotice && (
+        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2 animate-in fade-in duration-300">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{statusNotice}</span>
+        </div>
+      )}
 
       {/* Main Control Strip */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

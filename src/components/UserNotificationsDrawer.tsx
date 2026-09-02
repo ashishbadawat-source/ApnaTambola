@@ -19,7 +19,16 @@ import {
 
 export interface UserNotificationItem {
   id: string;
-  category: 'game_start' | 'ticket_confirmation' | 'winning' | 'referral_commission' | 'withdrawal_status' | 'wallet_credit' | 'p2p_transfer';
+  category:
+    | 'game_start'
+    | 'ticket_confirmation'
+    | 'winning'
+    | 'referral_commission'
+    | 'withdrawal_status'
+    | 'wallet_credit'
+    | 'p2p_transfer'
+    | 'system'
+    | 'ticket_deletion';
   title: string;
   message: string;
   timestamp: string;

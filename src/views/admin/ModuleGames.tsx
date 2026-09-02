@@ -466,7 +466,7 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                 {/* Key Metrics */}
                 <div className="grid grid-cols-3 gap-2 p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-center">
                   <div>
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Prize Pool</div>
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Prize Pool (70%)</div>
                     <div className="text-sm font-black text-amber-400">₹{game.prizePool.toLocaleString('en-IN')}</div>
                   </div>
                   <div>
@@ -474,10 +474,34 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                     <div className="text-sm font-black text-white">₹{game.ticketPrice}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Sold / Total</div>
-                    <div className="text-sm font-black text-emerald-400">{game.soldTickets || 0} / {game.totalTickets}</div>
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Sold / Min 100</div>
+                    <div className={`text-sm font-black ${(game.soldTickets || 0) >= 100 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {game.soldTickets || 0} / 100
+                    </div>
                   </div>
                 </div>
+
+                {/* 100 Tickets Requirement Mini Banner */}
+                {isUpcoming && (
+                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-slate-400 font-bold">100 टिकट नियम (Min 100 to Start):</span>
+                      <span className={`font-black ${(game.soldTickets || 0) >= 100 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {(game.soldTickets || 0) >= 100 ? '✅ रेडी टू स्टार्ट' : `${100 - (game.soldTickets || 0)} टिकट शेष`}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          (game.soldTickets || 0) >= 100
+                            ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                            : 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                        }`}
+                        style={{ width: `${Math.min(100, ((game.soldTickets || 0) / 100) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Prizes Breakdown summary */}
                 <div className="text-xs text-slate-300 space-y-1">
@@ -520,6 +544,13 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                   <>
                     <button
                       onClick={async () => {
+                        const sold = game.soldTickets || 0;
+                        if (sold < 100) {
+                          const proceed = confirm(
+                            `⚠️ नियम अलर्ट: गेम शुरू करने के लिए कम से कम 100 टिकट बिकना जरूरी है!\n\nवर्तमान में केवल ${sold}/100 टिकट बिके हैं।\n\nक्या आप अभी भी गेम को लाइव शुरू करना चाहते हैं?`
+                          );
+                          if (!proceed) return;
+                        }
                         if (onUpdateGame) {
                           await onUpdateGame(game.id, { status: 'live' });
                           onNavigateTab('live_control', game.id);

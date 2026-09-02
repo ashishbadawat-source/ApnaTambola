@@ -1562,6 +1562,39 @@ export function App() {
             calledNumbers: liveGame.calledNumbers,
             isCurrentUser: true,
           });
+        } else {
+          // ⚡ Offline User Auto-Credit: Credit prize money into offline player's withdrawal balance
+          setUsers((prevUsers) =>
+            prevUsers.map((u) => {
+              if (u.id === win.userId || u.name === win.userName) {
+                const currentWinning = u.winningBalance || 0;
+                const newWinning = currentWinning + win.splitPrizeAmount;
+                const newTotal = (u.depositBalance || 0) + newWinning + (u.referralBalance || 0);
+                return {
+                  ...u,
+                  winningBalance: newWinning,
+                  walletBalance: newTotal,
+                };
+              }
+              return u;
+            })
+          );
+
+          // Add transaction ledger for offline player
+          const offlineTxn: WalletTransaction = {
+            id: `txn_auto_offline_${Date.now()}_${win.prizeCode}`,
+            userId: win.userId,
+            type: 'prize_won',
+            amount: win.splitPrizeAmount,
+            balanceAfter: win.splitPrizeAmount,
+            description: win.isEqualSplit
+              ? `🏆 ऑटो-ट्रैक जीत (ऑफलाइन प्लेयर): ${win.prizeName} (${win.totalSplitWinners} विजेताओं में विभाजित) - ${win.gameTitle}`
+              : `🏆 ऑटो-ट्रैक जीत (ऑफलाइन प्लेयर): ${win.prizeName} - ${win.gameTitle}`,
+            referenceId: win.ticketId,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'completed',
+          };
+          setTransactions((prev) => [offlineTxn, ...prev]);
         }
       });
     }
@@ -1585,6 +1618,8 @@ export function App() {
 
   // 1. Call Next Number Handler
   const handleCallNextNumber = (forcedNumber?: number) => {
+    let chosenNumber: number | null = null;
+
     setGames((prevGames) => {
       return prevGames.map((g) => {
         if (g.id !== liveGame?.id) return g;
@@ -1605,6 +1640,7 @@ export function App() {
           nextNum = available[Math.floor(Math.random() * available.length)];
         }
 
+        chosenNumber = nextNum;
         const newCalled = [...g.calledNumbers, nextNum];
         const newPrev = [nextNum, ...g.previousNumbers].slice(0, 5);
 
@@ -1616,6 +1652,65 @@ export function App() {
         };
       });
     });
+
+    // ⚡ Auto-Dab for All Tickets (Online & Offline Users)
+    if (chosenNumber) {
+      const numToDab = chosenNumber;
+      setTickets((prevTickets) =>
+        prevTickets.map((t) => {
+          if (t.gameId === liveGame?.id || !t.gameId) {
+            const hasNum = Array.isArray(t.numbers) && t.numbers.some((row) => Array.isArray(row) && row.includes(numToDab));
+            const isAlreadyMarked = (t.markedNumbers || []).includes(numToDab);
+            if (hasNum && !isAlreadyMarked) {
+              return {
+                ...t,
+                markedNumbers: [...(t.markedNumbers || []), numToDab],
+              };
+            }
+          }
+          return t;
+        })
+      );
+    }
+  };
+
+  // Delete Individual Ticket (Allowed for Completed/Finished Games)
+  const handleDeleteTicket = (ticketId: string) => {
+    setTickets((prev) => prev.filter((t) => t.id !== ticketId && t.ticketId !== ticketId));
+    setUserNotifications((prev) => [
+      {
+        id: `un_del_${Date.now()}`,
+        category: 'system',
+        title: '🗑️ टिकट हटाया गया (Ticket Removed)',
+        message: `टिकट ID ${ticketId} को सफलतापूर्वक हटा दिया गया है और स्टोरेज मेमोरी फ्री हो गई है।`,
+        timestamp: 'Just now',
+        read: false,
+      },
+      ...prev,
+    ]);
+  };
+
+  // Bulk Delete All Completed / Finished Game Tickets to Free Memory
+  const handleDeleteCompletedTickets = () => {
+    const completedGameIds = new Set(
+      games.filter((g) => g.status === 'completed' || g.status === 'cancelled').map((g) => g.id)
+    );
+
+    const initialCount = tickets.length;
+    setTickets((prev) => prev.filter((t) => !completedGameIds.has(t.gameId)));
+    const deletedCount = initialCount - tickets.filter((t) => !completedGameIds.has(t.gameId)).length;
+
+    setUserNotifications((prev) => [
+      {
+        id: `un_del_bulk_${Date.now()}`,
+        category: 'system',
+        title: '🧹 मेमोरी क्लीनअप सफल (Memory Cleaned)',
+        message: `समाप्त हुए गेम के ${deletedCount > 0 ? deletedCount : 'सभी'} पुराने टिकट सफलतापूर्वक हटा दिए गए हैं।`,
+        timestamp: 'Just now',
+        read: false,
+      },
+      ...prev,
+    ]);
   };
 
   // 2. Toggle Auto Caller
@@ -3383,7 +3478,7 @@ export function App() {
         {activeTab === 'live' && (
           <LiveGameView
             game={liveGame}
-            userTickets={tickets}
+            userTickets={currentUser ? (currentUser.role === 'admin' ? tickets : tickets.filter((t) => t.userId === currentUser.id || !t.userId)) : tickets}
             currentUser={currentUser || INITIAL_USERS[0]}
             soundEnabled={soundEnabled}
             setSoundEnabled={setSoundEnabled}
@@ -3425,10 +3520,12 @@ export function App() {
         {activeTab === 'my-tickets' && (
           currentUser ? (
             <MyTicketsView
-              tickets={tickets}
+              tickets={currentUser.role === 'admin' ? tickets : tickets.filter((t) => t.userId === currentUser.id || !t.userId)}
               games={games}
               onNavigate={handleNavigate}
               onToggleAutoMode={handleToggleTicketAutoMode}
+              onDeleteTicket={handleDeleteTicket}
+              onDeleteCompletedTickets={handleDeleteCompletedTickets}
             />
           ) : (
             <ProtectedViewGate
