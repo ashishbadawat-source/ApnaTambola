@@ -111,30 +111,34 @@ export function checkAndAutoTrackWinners(
     if (prizeIndex === -1) continue;
 
     const prize = updatedPrizes[prizeIndex];
-    const remainingSlots = prize.maxWinners - prize.claimedWinners.length;
+    const claimedCount = Array.isArray(prize.claimedWinners) ? prize.claimedWinners.length : 0;
+    const remainingSlots = prize.maxWinners - claimedCount;
     if (remainingSlots <= 0) continue;
 
     // Special condition for 2nd Full House: Only open if 1st Full House has already been claimed!
     if (prizeCode === 'second_full_house') {
       const firstFh = updatedPrizes.find((p) => p.code === 'full_house');
-      if (!firstFh || firstFh.claimedWinners.length === 0) {
+      const firstFhCount = firstFh && Array.isArray(firstFh.claimedWinners) ? firstFh.claimedWinners.length : 0;
+      if (!firstFh || firstFhCount === 0) {
         continue;
       }
     }
 
     // Check all tickets for this game
     for (const ticket of ticketsList) {
+      if (!ticket) continue;
       // Skip tickets that are turned OFF / disabled by admin
       if (ticket.isActive === false || ticket.status === 'disabled' || ticket.status === 'void') {
         continue;
       }
 
       // Check if prize slots are still available in this iteration
-      if (prize.claimedWinners.length >= prize.maxWinners) break;
+      const currentClaimedCount = Array.isArray(prize.claimedWinners) ? prize.claimedWinners.length : 0;
+      if (currentClaimedCount >= prize.maxWinners) break;
 
       // Check if ticket or user already claimed this prize
-      const alreadyClaimed = prize.claimedWinners.some(
-        (w) => w.ticketId === ticket.ticketId || (w.userId === ticket.userId && w.ticketNumber === ticket.ticketNumber)
+      const alreadyClaimed = Array.isArray(prize.claimedWinners) && prize.claimedWinners.some(
+        (w) => w && (w.ticketId === ticket.ticketId || (w.userId === ticket.userId && w.ticketNumber === ticket.ticketNumber))
       );
       if (alreadyClaimed) continue;
 
@@ -148,6 +152,9 @@ export function checkAndAutoTrackWinners(
 
       if (verification.valid) {
         // Winning detected!
+        if (!Array.isArray(prize.claimedWinners)) {
+          prize.claimedWinners = [];
+        }
         const existingCount = prize.claimedWinners.length;
         const totalWinnersCount = existingCount + 1;
         const splitInfo = calculateSplitWinning(prize.amount, totalWinnersCount);

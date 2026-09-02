@@ -458,7 +458,7 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-amber-400/20 text-xs">
             <div className="p-2 rounded-xl bg-amber-500/20 border border-amber-400/40">
               <span className="text-[10px] text-amber-300 font-bold block">Direct Level 1</span>
-              <strong className="text-amber-300 font-black text-sm">{downlineTree?.children.length || 0} Members ⚡</strong>
+              <strong className="text-amber-300 font-black text-sm">{downlineTree?.children?.length || 0} Members ⚡</strong>
             </div>
             <div className="p-2 rounded-xl bg-purple-950/40 border border-purple-800/40">
               <span className="text-[10px] text-purple-300 font-bold block">L1-L5 Downline</span>
@@ -670,7 +670,7 @@ const VisualTreeNodeItem: React.FC<VisualTreeNodeItemProps> = ({
               }`}
             >
               <GitBranch className="w-3.5 h-3.5" />
-              <span>{node.children.length} Downline</span>
+              <span>{node.children?.length || 0} Downline</span>
               {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
           ) : (

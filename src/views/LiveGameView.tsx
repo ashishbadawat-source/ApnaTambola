@@ -85,8 +85,8 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
   );
 
   // Latest claimed prize for the live flash ticker
-  const latestClaimedPrize = game.prizes
-    .filter((p) => p.claimedWinners && p.claimedWinners.length > 0)
+  const latestClaimedPrize = (game.prizes || [])
+    .filter((p) => p && Array.isArray(p.claimedWinners) && p.claimedWinners.length > 0)
     .sort((a, b) => (b.claimedWinners[0]?.claimedAt || '').localeCompare(a.claimedWinners[0]?.claimedAt || ''))[0];
 
   const handleLanguageChange = (newLang: VoiceLanguage) => {
@@ -143,7 +143,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
             : null)
         }
         onViewCelebration={(data) => setCelebrationData(data)}
-        allClaimedPrizes={game.prizes.filter((p) => p.claimedWinners.length > 0)}
+        allClaimedPrizes={(game.prizes || []).filter((p) => Array.isArray(p.claimedWinners) && p.claimedWinners.length > 0)}
       />
 
       {/* Live Header & Game Bar */}
@@ -249,7 +249,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
                 <Sparkles className="w-4 h-4" /> LIVE BINGO BALL
               </span>
               <span className="font-mono">
-                Drawn: <strong className="text-slate-100">{game.calledNumbers.length}</strong> / 90
+                Drawn: <strong className="text-slate-100">{(game.calledNumbers || []).length}</strong> / 90
               </span>
             </div>
 
@@ -301,7 +301,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
                 Previous Drawn Numbers:
               </span>
               <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
-                {game.previousNumbers.length > 0 ? (
+                {(game.previousNumbers || []).length > 0 ? (
                   game.previousNumbers.map((num, idx) => (
                     <div
                       key={idx}
@@ -405,9 +405,10 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
             </div>
 
             <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {game.prizes.map((prize) => {
-                const isClaimed = prize.claimedWinners.length >= prize.maxWinners;
-                const winner = prize.claimedWinners[0];
+              {(game.prizes || []).map((prize) => {
+                const claimedWinnersList = Array.isArray(prize.claimedWinners) ? prize.claimedWinners : [];
+                const isClaimed = claimedWinnersList.length >= prize.maxWinners;
+                const winner = claimedWinnersList[0];
                 return (
                   <div
                     key={prize.id}

@@ -127,7 +127,19 @@ export function App() {
       const saved = localStorage.getItem('apna_tambola_games');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((g: any) => ({
+            ...g,
+            calledNumbers: Array.isArray(g.calledNumbers) ? g.calledNumbers : [],
+            previousNumbers: Array.isArray(g.previousNumbers) ? g.previousNumbers : [],
+            prizes: Array.isArray(g.prizes)
+              ? g.prizes.map((p: any) => ({
+                  ...p,
+                  claimedWinners: Array.isArray(p.claimedWinners) ? p.claimedWinners : [],
+                }))
+              : [],
+          }));
+        }
       }
     } catch (e) {}
     return INITIAL_GAMES;
@@ -402,7 +414,19 @@ export function App() {
           if (!snapshot.empty) {
             const firestoreGames: TambolaGame[] = [];
             snapshot.forEach((docSnap) => {
-              firestoreGames.push({ ...(docSnap.data() as TambolaGame), id: docSnap.id });
+              const g = docSnap.data() as TambolaGame;
+              firestoreGames.push({
+                ...g,
+                id: docSnap.id,
+                calledNumbers: Array.isArray(g.calledNumbers) ? g.calledNumbers : [],
+                previousNumbers: Array.isArray(g.previousNumbers) ? g.previousNumbers : [],
+                prizes: Array.isArray(g.prizes)
+                  ? g.prizes.map((p: any) => ({
+                      ...p,
+                      claimedWinners: Array.isArray(p.claimedWinners) ? p.claimedWinners : [],
+                    }))
+                  : [],
+              });
             });
             setGames((prev) => {
               const map = new Map<string, TambolaGame>();
@@ -707,7 +731,21 @@ export function App() {
 
           if (gamesSnap && !gamesSnap.empty) {
             const fsGames: TambolaGame[] = [];
-            gamesSnap.forEach((d) => fsGames.push({ ...(d.data() as TambolaGame), id: d.id }));
+            gamesSnap.forEach((d) => {
+              const g = d.data() as TambolaGame;
+              fsGames.push({
+                ...g,
+                id: d.id,
+                calledNumbers: Array.isArray(g.calledNumbers) ? g.calledNumbers : [],
+                previousNumbers: Array.isArray(g.previousNumbers) ? g.previousNumbers : [],
+                prizes: Array.isArray(g.prizes)
+                  ? g.prizes.map((p: any) => ({
+                      ...p,
+                      claimedWinners: Array.isArray(p.claimedWinners) ? p.claimedWinners : [],
+                    }))
+                  : [],
+              });
+            });
             if (fsGames.length > 0) {
               setGames((prev) => {
                 const map = new Map<string, TambolaGame>();
@@ -1096,7 +1134,21 @@ export function App() {
 
   const autoCallTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const liveGame = games.find((g) => g.id === selectedGameId) || games.find((g) => g.status === 'live') || games[0];
+  const rawLiveGame = (games || []).find((g) => g && g.id === selectedGameId) || (games || []).find((g) => g && g.status === 'live') || (games || [])[0];
+  const liveGame = React.useMemo(() => {
+    if (!rawLiveGame) return undefined;
+    return {
+      ...rawLiveGame,
+      calledNumbers: Array.isArray(rawLiveGame.calledNumbers) ? rawLiveGame.calledNumbers : [],
+      previousNumbers: Array.isArray(rawLiveGame.previousNumbers) ? rawLiveGame.previousNumbers : [],
+      prizes: Array.isArray(rawLiveGame.prizes)
+        ? rawLiveGame.prizes.map((p) => ({
+            ...p,
+            claimedWinners: Array.isArray(p.claimedWinners) ? p.claimedWinners : [],
+          }))
+        : [],
+    };
+  }, [rawLiveGame]);
 
   const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
     setAuthModalMode(mode);
@@ -1484,13 +1536,13 @@ export function App() {
         clearInterval(autoCallTimerRef.current);
       }
     };
-  }, [liveGame?.autoCalling, liveGame?.calledNumbers.length, liveGame?.status]);
+  }, [liveGame?.autoCalling, liveGame?.calledNumbers?.length, liveGame?.status]);
 
   // ⚡ Automatic Winner Tracking Engine (Includes Online, Auto Mode & Offline tickets)
   useEffect(() => {
-    if (!liveGame || !liveGame.currentNumber || liveGame.calledNumbers.length === 0) return;
+    if (!liveGame || !liveGame.currentNumber || !liveGame.calledNumbers || liveGame.calledNumbers.length === 0) return;
 
-    const gameTickets = tickets.filter((t) => t.gameId === liveGame.id || !t.gameId);
+    const gameTickets = (tickets || []).filter((t) => t && (t.gameId === liveGame.id || !t.gameId));
 
     const trackingResult = checkAndAutoTrackWinners({
       gameId: liveGame.id,
@@ -2057,28 +2109,29 @@ export function App() {
     if (!prize) return;
 
     // Check if current user already claimed this prize on this ticket
-    const alreadyClaimedOnThisTicket = prize.claimedWinners.some(
-      (w) => w.ticketId === ticket.ticketId && w.userId === currentUser.id
+    const claimedWinnersList = Array.isArray(prize.claimedWinners) ? prize.claimedWinners : [];
+    const alreadyClaimedOnThisTicket = claimedWinnersList.some(
+      (w) => w && w.ticketId === ticket.ticketId && w.userId === currentUser.id
     );
     if (alreadyClaimedOnThisTicket) {
       alert(`You have already claimed ${prize.name} on Ticket #${ticket.ticketNumber}!`);
       return;
     }
 
-    if (prize.claimedWinners.length >= prize.maxWinners) {
+    if (claimedWinnersList.length >= prize.maxWinners) {
       alert(`The ${prize.name} has already reached maximum winners (${prize.maxWinners})!`);
       return;
     }
 
     // Check validity against called numbers
-    const result = verifyClaim(prizeCode, ticket.numbers, liveGame.calledNumbers, liveGame.currentNumber);
+    const result = verifyClaim(prizeCode, ticket.numbers, liveGame.calledNumbers || [], liveGame.currentNumber);
     if (!result.valid) {
       alert(`Claim Rejected: ${result.reason}`);
       return;
     }
 
     // Equal Split Calculation: If multiple winners, divide prize pool equally (e.g. ₹400 / 2 = ₹200 each)
-    const existingWinnersCount = prize.claimedWinners.length;
+    const existingWinnersCount = claimedWinnersList.length;
     const totalWinnersForPrize = existingWinnersCount + 1;
     const splitInfo = calculateSplitWinning(prize.amount, totalWinnersForPrize);
     const splitAmount = splitInfo.perWinnerAmount;
