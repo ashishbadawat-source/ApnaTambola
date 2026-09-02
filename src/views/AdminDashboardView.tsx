@@ -16,6 +16,7 @@ import {
   Palette,
   Sparkles,
   Mail,
+  TrendingUp,
 } from 'lucide-react';
 import {
   AdminStats,
@@ -48,6 +49,7 @@ import { ModuleReports } from './admin/ModuleReports';
 import { ModuleNotifications } from './admin/ModuleNotifications';
 import { ModuleSettings } from './admin/ModuleSettings';
 import { ModuleEmailSettings } from './admin/ModuleEmailSettings';
+import { ModuleReferralAnalytics } from './admin/ModuleReferralAnalytics';
 
 interface AdminDashboardViewProps {
   stats: AdminStats;
@@ -160,12 +162,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     { id: 'tickets', label: '5. Ticket Management', icon: Ticket, badge: `${tickets.length}` },
     { id: 'prizes', label: '6. Prize Management', icon: Trophy, badge: null },
     { id: 'referrals', label: '7. 5-Level Referral', icon: Share2, badge: 'MLM' },
-    { id: 'wallets', label: '8. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
-    { id: 'withdrawals', label: '9. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
-    { id: 'reports', label: '10. Reports & Analytics', icon: BarChart3, badge: null },
-    { id: 'notifications', label: '11. Notifications', icon: Bell, badge: null },
-    { id: 'settings', label: '12. Site & Security', icon: Settings, badge: null },
-    { id: 'email_settings', label: '13. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
+    { id: 'referral_growth', label: '8. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },
+    { id: 'wallets', label: '9. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
+    { id: 'withdrawals', label: '10. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
+    { id: 'reports', label: '11. Reports & Analytics', icon: BarChart3, badge: null },
+    { id: 'notifications', label: '12. Notifications', icon: Bell, badge: null },
+    { id: 'settings', label: '13. Site & Security', icon: Settings, badge: null },
+    { id: 'email_settings', label: '14. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
   ];
 
   return (
@@ -178,7 +181,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
               SUPER ADMIN MASTER GOVERNANCE
             </span>
             <span className="text-xs text-amber-300 font-semibold hidden sm:inline">
-              13 Comprehensive Modules Active
+              14 Comprehensive Modules Active
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-2">
@@ -324,6 +327,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onUpdateUser={onUpdateUser || onRegisterUser}
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
+          />
+        )}
+
+        {activeTab === 'referral_growth' && (
+          <ModuleReferralAnalytics
+            users={users}
+            commissions={commissions}
+            onNavigateToReferrals={() => handleSetActiveTab('referrals')}
+            title="30-Day Referral Sign-ups Growth Analysis"
+            description="Daily line chart aggregation based on createdAt timestamp to track campaign effectiveness and growth velocity."
           />
         )}
 
