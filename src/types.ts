@@ -76,6 +76,8 @@ export interface TambolaTicket {
   isWinningTicket?: boolean;
   wonPrizes?: string[];
   qrCodeData?: string;
+  matchDate?: string;
+  matchTime?: string;
   isActive?: boolean; // Admin ON / OFF toggle for individual ticket (Default true: ON / चालू, false: OFF / बंद)
   status?: 'active' | 'void' | 'disabled' | 'refunded';
   disabledReason?: string;

@@ -37,10 +37,16 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   onOpenDeposit,
   onNavigate,
 }) => {
-  const activeGames = games.filter((g) => g.status === 'live' || g.status === 'upcoming');
-  const [chosenGameId, setChosenGameId] = useState<string>(
-    selectedGameId || activeGames[0]?.id || games[0]?.id || ''
-  );
+  const allGames = Array.isArray(games) && games.length > 0 ? games : [];
+  const activeGames = allGames.filter((g) => g.status !== 'completed');
+
+  // Default to the first game that is enabled by admin, or the first game
+  const initialGame =
+    allGames.find((g) => g.id === selectedGameId) ||
+    allGames.find((g) => g.isGameEnabled !== false && g.isActive !== false && g.isBookingOpen !== false) ||
+    allGames[0];
+
+  const [chosenGameId, setChosenGameId] = useState<string>(initialGame?.id || '');
   const [quantity, setQuantity] = useState<number>(2);
   const [loading, setLoading] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -48,15 +54,15 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   // Live interactive preview ticket generator
   const [previewMatrix, setPreviewMatrix] = useState<number[][]>(() => generateTambolaTicketMatrix());
 
-  const selectedGame = games.find((g) => g.id === chosenGameId) || activeGames[0];
+  const selectedGame = allGames.find((g) => g.id === chosenGameId) || initialGame;
   const ticketPrice = selectedGame?.ticketPrice || 50;
   const totalCost = ticketPrice * quantity;
   // User cannot buy tickets until funded by admin (depositBalance)
   const canAfford = currentUser.depositBalance >= totalCost;
 
   const isGlobalBookingOpen = siteSettings?.globalTicketBookingEnabled !== false;
-  const isGameActive = selectedGame?.isGameEnabled !== false;
-  const isBookingAllowed = isGlobalBookingOpen && selectedGame?.isBookingOpen !== false;
+  const isGameActive = selectedGame?.isGameEnabled !== false && selectedGame?.isActive !== false && selectedGame?.status !== 'cancelled';
+  const isBookingAllowed = isGlobalBookingOpen && selectedGame?.isBookingOpen !== false && selectedGame?.bookingOpen !== false;
   const canPurchaseNow = isGameActive && isBookingAllowed && canAfford;
 
   const handleRegeneratePreview = () => {
@@ -70,11 +76,11 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
       return;
     }
     if (!isGameActive) {
-      alert('यह गेम एडमिन द्वारा बंद (OFF) कर दिया गया है।');
+      alert(`यह ₹${ticketPrice} वाला टिकट एडमिन द्वारा बंद (OFF) कर दिया गया है। कृपया चालू टिकट चुनें।`);
       return;
     }
     if (!isBookingAllowed) {
-      alert('इस गेम की टिकट बुकिंग एडमिन द्वारा बंद (CLOSED) कर दी गई है।');
+      alert(`इस गेम (₹${ticketPrice}) की टिकट बुकिंग एडमिन द्वारा बंद कर दी गई है।`);
       return;
     }
     if (!canAfford) {
@@ -106,6 +112,8 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
     markedNumbers: [],
     price: ticketPrice,
     purchaseDate: new Date().toISOString(),
+    matchDate: selectedGame?.date || 'Today',
+    matchTime: selectedGame?.startTime || '09:00 PM',
     isActive: true,
     status: 'active',
   };
@@ -146,82 +154,140 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
         {/* Left Column: Options & Checkout */}
         <div className="lg:col-span-6 space-y-6">
           <div className="glass-panel rounded-3xl p-6 sm:p-8 border border-purple-500/20 shadow-2xl space-y-6">
-            {/* 1. Select Game */}
-            <div className="space-y-2">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                1. Select Game / Match
-              </label>
-              <div className="space-y-2">
-                {activeGames.map((g) => {
-                  const gEnabled = g.isGameEnabled !== false;
-                  const gBooking = g.isBookingOpen !== false;
+            {/* 1. Select Ticket Rate & Game */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
+                  1. टिकट दर (Ticket Rate) व मैच चुनें
+                </label>
+                <span className="text-[11px] text-amber-400 font-bold">
+                  {allGames.filter((g) => g.isGameEnabled !== false && g.isActive !== false && g.isBookingOpen !== false).length} टिकट चालू हैं
+                </span>
+              </div>
 
-                  return (
-                    <div
-                      key={g.id}
-                      onClick={() => setChosenGameId(g.id)}
-                      className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                        chosenGameId === g.id
-                          ? 'bg-purple-900/40 border-amber-400 shadow-lg shadow-purple-900/30 ring-1 ring-amber-400/60'
-                          : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
-                      } ${!gEnabled ? 'opacity-60 border-red-500/30' : ''}`}
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          {g.status === 'live' && gEnabled && (
-                            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                          )}
-                          <span className="font-bold text-sm text-slate-100">{g.title}</span>
-                          {!gEnabled && (
-                            <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/40 text-[9px] font-black">
-                              🔴 बंद (OFF)
-                            </span>
-                          )}
-                          {gEnabled && !gBooking && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black flex items-center gap-0.5">
-                              <Lock className="w-2.5 h-2.5" />
-                              <span>बुकिंग बंद</span>
-                            </span>
+              {/* Quick Rate Selector Pills */}
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {allGames
+                  .slice()
+                  .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
+                  .map((g) => {
+                    const gEnabled = g.isGameEnabled !== false && g.isActive !== false && g.status !== 'cancelled';
+                    const gBooking = g.isBookingOpen !== false && g.bookingOpen !== false;
+                    const isFullyActive = gEnabled && gBooking;
+                    const isSelected = chosenGameId === g.id;
+
+                    return (
+                      <button
+                        key={`pill-${g.id}`}
+                        type="button"
+                        onClick={() => setChosenGameId(g.id)}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden ${
+                          isSelected
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-400/20 ring-2 ring-amber-400 font-black'
+                            : isFullyActive
+                            ? 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700 font-bold'
+                            : 'bg-red-950/30 border-red-500/30 text-slate-400 opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="text-sm font-black font-mono">₹{g.ticketPrice}</div>
+                        <div className="text-[9px] truncate mt-0.5">
+                          {isFullyActive ? (
+                            <span className={isSelected ? 'text-slate-900 font-bold' : 'text-emerald-400 font-bold'}>🟢 चालू</span>
+                          ) : (
+                            <span className="text-red-400 font-bold">🔴 बंद</span>
                           )}
                         </div>
-                        <span className="text-xs text-slate-400">
-                          {g.startTime} • Prize Pool: <strong className="text-amber-400">₹{g.prizePool.toLocaleString('en-IN')}</strong>
-                        </span>
-                      </div>
+                      </button>
+                    );
+                  })}
+              </div>
 
-                      <div className="text-right">
-                        <span className="font-black text-amber-300 text-sm">
-                          ₹{g.ticketPrice}
-                        </span>
-                        <span className="text-[10px] text-slate-500 block">per ticket</span>
+              {/* Detailed Game Cards List */}
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                {allGames
+                  .slice()
+                  .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
+                  .map((g) => {
+                    const gEnabled = g.isGameEnabled !== false && g.isActive !== false && g.status !== 'cancelled';
+                    const gBooking = g.isBookingOpen !== false && g.bookingOpen !== false;
+                    const isFullyActive = gEnabled && gBooking;
+                    const isSelected = chosenGameId === g.id;
+
+                    return (
+                      <div
+                        key={g.id}
+                        onClick={() => setChosenGameId(g.id)}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-purple-900/40 border-amber-400 shadow-lg shadow-purple-900/30 ring-1 ring-amber-400/60'
+                            : isFullyActive
+                            ? 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                            : 'bg-[#1a0c0e] border-red-500/30 opacity-75 hover:opacity-90'
+                        }`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            {g.status === 'live' && isFullyActive && (
+                              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                            )}
+                            <span className="font-bold text-sm text-slate-100">{g.title}</span>
+                            {isFullyActive ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-black">
+                                🟢 चालू (BOOK NOW)
+                              </span>
+                            ) : !gEnabled ? (
+                              <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-[9px] font-black">
+                                🔴 एडमिन द्वारा बंद (OFF)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black flex items-center gap-0.5">
+                                <Lock className="w-2.5 h-2.5" />
+                                <span>बुकिंग बंद</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                            <span className="text-amber-300 font-semibold">📅 {g.date || 'Today'}</span>
+                            <span>•</span>
+                            <span className="text-purple-300 font-semibold">⏰ {g.startTime || '09:00 PM'}</span>
+                            <span>•</span>
+                            <span>पूल: <strong className="text-amber-400">₹{g.prizePool.toLocaleString('en-IN')}</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className={`font-black text-base font-mono block ${isSelected ? 'text-amber-300' : 'text-slate-100'}`}>
+                            ₹{g.ticketPrice}
+                          </span>
+                          <span className="text-[10px] text-slate-400">प्रति टिकट</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
 
             {/* Admin Game / Booking Status Notices */}
             {!isGameActive && (
-              <div className="p-4 rounded-2xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs space-y-1">
+              <div className="p-4 rounded-2xl bg-red-950/80 border border-red-500/60 text-red-200 text-xs space-y-1.5 shadow-lg">
                 <div className="font-black flex items-center gap-1.5 text-red-300 text-sm">
-                  <XCircle className="w-4 h-4 text-red-400" />
-                  <span>यह गेम एडमिन द्वारा बंद (OFF) कर दिया गया है</span>
+                  <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>यह ₹{ticketPrice} वाला टिकट एडमिन द्वारा बंद (OFF) कर दिया गया है</span>
                 </div>
                 <p className="text-[11px] text-red-300/90 leading-relaxed">
-                  एडमिन ने इस गेम को अस्थायी रूप से रोक दिया है। इस गेम के लिए टिकट बुकिंग उपलब्ध नहीं है।
+                  एडमिन ने ₹{ticketPrice} वाले टिकट को वर्तमान में बंद (Disabled) कर रखा है। आप केवल वही टिकट बुक कर सकते हैं जो एडमिन ने चालू (🟢) किया है। कृपया ऊपर से चालू टिकट (जैसे ₹5 या ₹10) चुनें।
                 </p>
               </div>
             )}
 
             {isGameActive && !isBookingAllowed && (
-              <div className="p-4 rounded-2xl bg-amber-950/80 border border-amber-500/60 text-amber-200 text-xs space-y-1">
+              <div className="p-4 rounded-2xl bg-amber-950/80 border border-amber-500/60 text-amber-200 text-xs space-y-1.5 shadow-lg">
                 <div className="font-black flex items-center gap-1.5 text-amber-300 text-sm">
-                  <Lock className="w-4 h-4 text-amber-400" />
+                  <Lock className="w-4 h-4 text-amber-400 shrink-0" />
                   <span>टिकट बुकिंग बंद (Booking Closed by Admin)</span>
                 </div>
                 <p className="text-[11px] text-amber-300/90 leading-relaxed">
-                  इस गेम की टिकट बुकिंग एडमिन द्वारा बंद कर दी गई है। कृपया अगले मैच या टूर्नामेंट के लिए प्रतीक्षा करें।
+                  इस गेम (₹{ticketPrice}) की टिकट बुकिंग एडमिन द्वारा बंद कर दी गई है। कृपया अगले मैच या टूर्नामेंट के लिए प्रतीक्षा करें।
                 </p>
               </div>
             )}
@@ -270,20 +336,32 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
             {/* 3. Cost & Wallet Summary */}
             <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2.5">
               <div className="flex justify-between text-xs text-slate-400">
-                <span>Tournament Ticket Price:</span>
-                <span className="font-bold text-amber-300">
-                  ₹{ticketPrice} / ticket
+                <span>मैच नाम (Match):</span>
+                <span className="font-bold text-slate-200">
+                  {selectedGame?.title || 'Tambola Match'}
                 </span>
               </div>
               <div className="flex justify-between text-xs text-slate-400">
-                <span>Quantity Selected:</span>
-                <span className="font-bold text-slate-200">
+                <span>मैच शेड्यूल (Schedule):</span>
+                <span className="font-bold text-amber-300">
+                  📅 {selectedGame?.date || 'Today'} • ⏰ {selectedGame?.startTime || '09:00 PM'}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>टिकट दर (Ticket Rate):</span>
+                <span className="font-black text-amber-400 font-mono">
+                  ₹{ticketPrice} / टिकट
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-400">
+                <span>टिकट संख्या (Quantity):</span>
+                <span className="font-bold text-slate-200 font-mono">
                   {quantity} {quantity === 1 ? 'Ticket' : 'Tickets'}
                 </span>
               </div>
               <div className="flex justify-between text-xs text-slate-400 pt-1.5 border-t border-slate-800/80">
-                <span className="font-bold text-slate-300">Total Purchase Amount:</span>
-                <span className="font-black text-amber-400 text-base">
+                <span className="font-bold text-slate-300">कुल देय राशि (Total Amount):</span>
+                <span className="font-black text-amber-400 text-base font-mono">
                   ₹{totalCost}
                 </span>
               </div>
@@ -337,7 +415,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                 className="w-full py-4 rounded-2xl bg-red-950/80 border border-red-500/60 text-red-300 font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-80"
               >
                 <XCircle className="w-5 h-5 text-red-400" />
-                <span>गेम बंद है (Game Disabled by Admin)</span>
+                <span>₹{ticketPrice} वाला टिकट एडमिन द्वारा बंद (OFF) है</span>
               </button>
             ) : !isBookingAllowed ? (
               <button
@@ -345,7 +423,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                 className="w-full py-4 rounded-2xl bg-amber-950/80 border border-amber-500/60 text-amber-300 font-bold text-sm flex items-center justify-center gap-2 cursor-not-allowed opacity-80"
               >
                 <Lock className="w-5 h-5 text-amber-400" />
-                <span>टिकट बुकिंग बंद है (Booking Closed by Admin)</span>
+                <span>₹{ticketPrice} वाले टिकट की बुकिंग बंद है</span>
               </button>
             ) : canAfford ? (
               <div className="space-y-1.5">

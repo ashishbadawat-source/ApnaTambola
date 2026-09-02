@@ -93,6 +93,11 @@ export const PrintTicketModal: React.FC<PrintTicketModalProps> = ({ ticket, onCl
               <p className="text-xs text-slate-300">
                 Player: <strong className="text-white">{ticket.userName}</strong> | Ticket #{ticket.ticketNumber} ({theme.name})
               </p>
+              {(ticket.matchDate || ticket.matchTime) && (
+                <p className="text-xs text-amber-300 font-mono mt-0.5">
+                  Match Schedule: 📅 {ticket.matchDate || 'Today'} • ⏰ {ticket.matchTime || '09:00 PM'}
+                </p>
+              )}
             </div>
 
             {/* QR Code */}

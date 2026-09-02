@@ -81,6 +81,90 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
   const [prizes, setPrizes] = useState<Omit<GamePrize, 'id' | 'claimedWinners'>[]>(DEFAULT_PRIZE_SET);
   const [loading, setLoading] = useState(false);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
+  // Real-time schedule draft edits for quick inline date & time modification
+  const [scheduleDrafts, setScheduleDrafts] = useState<Record<string, { date: string; time: string }>>({});
+
+  const getGameScheduleDraft = (game: TambolaGame) => {
+    if (!game) return { date: 'Today', time: '09:00 PM' };
+    return (
+      scheduleDrafts[game.id] || {
+        date: game.date || 'Today',
+        time: game.startTime || '09:00 PM',
+      }
+    );
+  };
+
+  const updateScheduleDraft = (gameId: string, field: 'date' | 'time', value: string) => {
+    setScheduleDrafts((prev) => {
+      const current = prev[gameId] || {
+        date: safeGames.find((g) => g.id === gameId)?.date || 'Today',
+        time: safeGames.find((g) => g.id === gameId)?.startTime || '09:00 PM',
+      };
+      return {
+        ...prev,
+        [gameId]: { ...current, [field]: value },
+      };
+    });
+  };
+
+  const handleSaveGameSchedule = async (gameId: string) => {
+    if (!onUpdateGame || !gameId) return;
+    const game = safeGames.find((g) => g.id === gameId);
+    if (!game) return;
+    const draft = scheduleDrafts[gameId] || {
+      date: game.date || 'Today',
+      time: game.startTime || '09:00 PM',
+    };
+    await onUpdateGame(gameId, {
+      date: draft.date.trim() || 'Today',
+      startTime: draft.time.trim() || '09:00 PM',
+    });
+    setActionNotice(`गेम "${game.title}" का शेड्यूल: दिनांक "${draft.date}" व समय "${draft.time}" सफलतापूर्वक सेव कर दिया गया है!`);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleQuickToggleTicketTier = async (game: TambolaGame, enable: boolean) => {
+    if (!onUpdateGame || !game) return;
+    await onUpdateGame(game.id, {
+      isGameEnabled: enable,
+      isActive: enable,
+      isBookingOpen: enable,
+      bookingOpen: enable,
+      status: enable ? (game.status === 'cancelled' ? 'upcoming' : game.status) : 'cancelled',
+    });
+    setActionNotice(
+      `₹${game.ticketPrice} का टिकट (${game.title}) एडमिन द्वारा ${enable ? 'चालू (ON) - बुकिंग खुली' : 'बंद (OFF) - बुकिंग बंद'} कर दिया गया है!`
+    );
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleQuickCreateTier = async (price: number) => {
+    const titles: Record<number, string> = {
+      5: '⚡ ₹5 Mini Fast Housie',
+      10: '🚀 ₹10 Quick Super Housie',
+      15: '🎯 ₹15 Express Dhamaka',
+      20: '🔥 ₹20 Mega 20 Tambola',
+      30: '⚡ ₹30 Lightning Super Housie',
+      50: '🏆 ₹50 Jackpot Night Bumper',
+      100: '👑 ₹100 Weekend Grand Maha Housie',
+    };
+    const title = titles[price] || `₹${price} Special Tambola Match`;
+    const pool = price * 200 * 0.7; // 70% prize pool
+    await onCreateGame({
+      title,
+      ticketPrice: price,
+      date: 'Today',
+      startTime: '09:30 PM',
+      prizePool: pool,
+      isGameEnabled: true,
+      isActive: true,
+      isBookingOpen: true,
+      bookingOpen: true,
+      status: 'upcoming',
+    });
+    setActionNotice(`₹${price} वाला नया गेम "${title}" सफलतापूर्वक शुरू कर दिया गया और चालू (ON) है!`);
+    setTimeout(() => setActionNotice(null), 4000);
+  };
 
   const computedPrizePool = prizes.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
@@ -292,6 +376,169 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
           <span>{actionNotice}</span>
         </div>
       )}
+
+      {/* 🎟️ टिकट दर & लाइव शेड्यूल मास्टर कंट्रोलर (User Requested Ticket Master Control) */}
+      <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-[#17142b] via-[#1f1938] to-[#17142b] border-2 border-amber-400/60 shadow-2xl space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-500/20 px-3 py-1 rounded-full border border-amber-400/40">
+              <Ticket className="w-3.5 h-3.5" />
+              <span>टिकट दर, चालू/बंद व दिनांक-समय मास्टर कंट्रोल</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-black text-white">
+              🎟️ टिकट श्रेणियां (₹5, ₹10, ₹15, ₹50...) चालू / बंद &amp; शेड्यूल
+            </h3>
+            <p className="text-xs text-slate-300 max-w-3xl">
+              एडमिन जो भी टिकट दर (जैसे ₹5 या ₹10 वाला) यहाँ <strong className="text-emerald-400">चालू (ON)</strong> करेगा, यूजर वही टिकट खरीद सकेगा। जो टिकट <strong className="text-red-400">बंद (OFF)</strong> होगा, उस पर यूजर को 'एडमिन द्वारा बंद' दिखेगा। आप प्रत्येक टिकट की तारीख और समय भी यहीं से तुरंत सेट व सेव कर सकते हैं।
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {[5, 10, 15, 20, 50, 100].map((p) => {
+              const exists = safeGames.some((g) => (g.ticketPrice || 0) === p);
+              if (exists) return null;
+              return (
+                <button
+                  key={p}
+                  onClick={() => handleQuickCreateTier(p)}
+                  className="px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/40 text-amber-300 font-bold text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                  title={`₹${p} वाला नया टिकट मैच जोड़ें`}
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>+ ₹{p} टिकट जोड़ें</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Dynamic Grid of Ticket Tiers */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {safeGames
+            .slice()
+            .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
+            .map((game) => {
+              const draft = getGameScheduleDraft(game);
+              const isEnabled = game.isGameEnabled !== false && game.isActive !== false && game.status !== 'cancelled';
+              const isBooking = game.isBookingOpen !== false && game.bookingOpen !== false;
+              const isFullyActive = isEnabled && isBooking;
+
+              return (
+                <div
+                  key={`tier-${game.id}`}
+                  className={`rounded-2xl p-4 border transition-all space-y-3 shadow-lg ${
+                    isFullyActive
+                      ? 'bg-slate-900/90 border-emerald-500/50 shadow-emerald-950/30'
+                      : 'bg-[#180b0e] border-red-500/50 shadow-red-950/30 opacity-90'
+                  }`}
+                >
+                  {/* Top: Price Pill & Master Switch */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-3 py-1 rounded-xl text-sm font-black font-mono shadow-md border ${
+                        isFullyActive
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-slate-800 text-slate-300 border-slate-700'
+                      }`}>
+                        ₹{game.ticketPrice || 0} का टिकट
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-300 truncate max-w-[130px]" title={game.title}>
+                        {game.title}
+                      </span>
+                    </div>
+
+                    {/* 1-Click Master ON / OFF Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => handleQuickToggleTicketTier(game, !isFullyActive)}
+                      className={`px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer border shadow-md active:scale-95 ${
+                        isFullyActive
+                          ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 border-emerald-300'
+                          : 'bg-red-600 hover:bg-red-500 text-white border-red-400'
+                      }`}
+                      title={isFullyActive ? 'इस टिकट को बंद करें (Turn OFF)' : 'इस टिकट को चालू करें (Turn ON)'}
+                    >
+                      {isFullyActive ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5 text-slate-950" />
+                          <span>🟢 चालू (ON)</span>
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="w-3.5 h-3.5 text-white" />
+                          <span>🔴 बंद (OFF)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status Indicator text for user */}
+                  <div className="text-[11px] flex items-center justify-between px-2.5 py-1 rounded-lg bg-black/40 border border-white/10 font-mono">
+                    <span className="text-slate-400">यूजर बुकिंग स्थिति:</span>
+                    <span className={`font-black ${isFullyActive ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {isFullyActive ? '✓ यूजर खरीद सकता है' : '✗ बुकिंग बंद (OFF)'}
+                    </span>
+                  </div>
+
+                  {/* Inline Date & Time Schedule Setter */}
+                  <div className="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-amber-400" />
+                        <span>ड्रॉ तारीख व समय सेट करें:</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {game.totalTicketsSold || 0} टिकट सोल्ड
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">तारीख (Date)</label>
+                        <input
+                          type="text"
+                          value={draft.date}
+                          onChange={(e) => updateScheduleDraft(game.id, 'date', e.target.value)}
+                          placeholder="e.g. Today / 2026-09-02"
+                          className="w-full px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-amber-400 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">समय (Time)</label>
+                        <input
+                          type="text"
+                          value={draft.time}
+                          onChange={(e) => updateScheduleDraft(game.id, 'time', e.target.value)}
+                          placeholder="e.g. 09:00 PM"
+                          className="w-full px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-amber-400 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveGameSchedule(game.id)}
+                        className="flex-1 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>💾 सेव शेड्यूल (Save Schedule)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(game)}
+                        className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 cursor-pointer"
+                        title="Edit all details"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+      </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-800 pb-3 overflow-x-auto">
@@ -511,6 +758,46 @@ export const ModuleGames: React.FC<ModuleGamesProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* 📅 Quick Date & Time Schedule Quick Editor */}
+                <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-amber-400" />
+                      <span>तारीख &amp; समय तुरंत अपडेट करें:</span>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">तारीख (Date)</label>
+                      <input
+                        type="text"
+                        value={getGameScheduleDraft(game).date}
+                        onChange={(e) => updateScheduleDraft(game.id, 'date', e.target.value)}
+                        placeholder="e.g. Today"
+                        className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-amber-400 outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 font-semibold block mb-0.5">समय (Time)</label>
+                      <input
+                        type="text"
+                        value={getGameScheduleDraft(game).time}
+                        onChange={(e) => updateScheduleDraft(game.id, 'time', e.target.value)}
+                        placeholder="e.g. 09:00 PM"
+                        className="w-full px-2 py-1 rounded bg-slate-900 border border-slate-700 text-white text-xs font-semibold focus:border-amber-400 outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveGameSchedule(game.id)}
+                    className="w-full py-1.5 rounded-lg bg-amber-400/90 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>💾 तारीख व समय सेव करें</span>
+                  </button>
+                </div>
 
                 {/* Prizes Breakdown summary */}
                 <div className="text-xs text-slate-300 space-y-1">

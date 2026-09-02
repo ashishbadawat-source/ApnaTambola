@@ -153,11 +153,19 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
       <div className="p-3 sm:p-4 space-y-3">
         {/* Game Title & Progress Bar & Auto Mode Switch */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 truncate max-w-[230px]">
-            <span className="w-2.5 h-2.5 rounded-full ring-2 ring-white/30" style={{ backgroundColor: theme.previewHex }} />
-            <span className="text-slate-100 font-black truncate text-xs sm:text-sm">
-              {gameTitleDisplay}
-            </span>
+          <div className="space-y-0.5 max-w-[240px]">
+            <div className="flex items-center gap-2 truncate">
+              <span className="w-2.5 h-2.5 rounded-full ring-2 ring-white/30" style={{ backgroundColor: theme.previewHex }} />
+              <span className="text-slate-100 font-black truncate text-xs sm:text-sm">
+                {gameTitleDisplay}
+              </span>
+            </div>
+            {(ticket.matchDate || ticket.matchTime) && (
+              <div className="text-[10px] text-amber-300/90 flex items-center gap-2 font-mono pl-4">
+                <span>📅 {ticket.matchDate}</span>
+                <span>⏰ {ticket.matchTime}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2">

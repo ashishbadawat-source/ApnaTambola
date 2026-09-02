@@ -1973,6 +1973,24 @@ export function App() {
     const game = games.find((g) => g.id === gameId);
     if (!game) return false;
 
+    // Check if Game or Ticket Tier is Active / Enabled by Admin
+    if (game.isGameEnabled === false || game.isActive === false || game.status === 'cancelled') {
+      alert(`⚠️ यह ₹${game.ticketPrice} वाला टिकट (${game.title}) एडमिन द्वारा बंद (OFF) कर दिया गया है। आप केवल एडमिन द्वारा चालू किए गए टिकट ही बुक कर सकते हैं।`);
+      return false;
+    }
+
+    // Check if Booking is Open for this Ticket
+    if (game.isBookingOpen === false || game.bookingOpen === false) {
+      alert(`⚠️ इस टिकट (${game.title}) की टिकट बुकिंग एडमिन द्वारा बंद (CLOSED) कर दी गई है।`);
+      return false;
+    }
+
+    // Check global site booking switch
+    if (siteSettings?.globalTicketBookingEnabled === false) {
+      alert(`⚠️ मास्टर टिकट बुकिंग एडमिन द्वारा अस्थायी रूप से बंद है।`);
+      return false;
+    }
+
     // Exact total cost calculation (e.g., ₹5, ₹10, ₹15, ₹50 etc. * quantity)
     const totalCost = game.ticketPrice * quantity;
 
@@ -2018,7 +2036,11 @@ export function App() {
         markedNumbers: [],
         price: game.ticketPrice,
         colorTheme: assignedColor,
+        matchDate: game.date || 'Today',
+        matchTime: game.startTime || '09:00 PM',
         purchaseDate: new Date().toISOString(),
+        isActive: true,
+        status: 'active',
       });
     }
 
@@ -2928,21 +2950,26 @@ export function App() {
   // 11. Admin Create Game (With Admin-decided Rate, Prizes, and Ticket Color Theme)
   const handleCreateGame = async (gameData: Partial<TambolaGame>): Promise<boolean> => {
     const code = `TL-${Math.floor(100 + Math.random() * 900)}`;
+    const isEnabled = gameData.isGameEnabled !== undefined ? gameData.isGameEnabled : gameData.isActive !== undefined ? gameData.isActive : true;
+    const isBooking = gameData.isBookingOpen !== undefined ? gameData.isBookingOpen : gameData.bookingOpen !== undefined ? gameData.bookingOpen : true;
+
     const newGame: TambolaGame = {
       id: `game_${Date.now()}`,
       title: gameData.title || 'New Tambola Match',
       gameCode: code,
       startTime: gameData.startTime || '10:00 PM',
       date: gameData.date || 'Today',
-      ticketPrice: gameData.ticketPrice || 50,
-      prizePool: gameData.prizePool || 10000,
+      ticketPrice: Number(gameData.ticketPrice) || 50,
+      prizePool: Number(gameData.prizePool) || 10000,
       ticketColorTheme: gameData.ticketColorTheme || 'multi',
       totalTicketsSold: 0,
       registeredPlayers: 0,
       maxPlayers: 500,
       status: 'upcoming',
-      isActive: true,
-      bookingOpen: true,
+      isGameEnabled: isEnabled,
+      isActive: isEnabled,
+      isBookingOpen: isBooking,
+      bookingOpen: isBooking,
       calledNumbers: [],
       currentNumber: null,
       previousNumbers: [],
@@ -2959,7 +2986,14 @@ export function App() {
       rules: 'Standard 90-ball Indian Tambola rules apply. Numbers 1-90 drawn by RNG.',
     };
 
-    setGames((prev) => [newGame, ...prev]);
+    setGames((prev) => {
+      const next = [newGame, ...prev];
+      try {
+        localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
     try {
       const gameRef = doc(db, 'games', newGame.id);
       await setDoc(gameRef, newGame);
@@ -2971,15 +3005,42 @@ export function App() {
 
   // 12. Admin Update Game (Rate, Prizes, Colors, Timings, Game ON/OFF, Booking ON/OFF)
   const handleUpdateGame = async (gameId: string, updates: Partial<TambolaGame>): Promise<boolean> => {
-    setGames((prev) =>
-      prev.map((g) => (g.id === gameId ? { ...g, ...updates } : g))
-    );
+    // Synchronize aliases
+    const normalizedUpdates: Partial<TambolaGame> = { ...updates };
+    if (updates.isGameEnabled !== undefined && updates.isActive === undefined) {
+      normalizedUpdates.isActive = updates.isGameEnabled;
+    } else if (updates.isActive !== undefined && updates.isGameEnabled === undefined) {
+      normalizedUpdates.isGameEnabled = updates.isActive;
+    }
+    if (updates.isBookingOpen !== undefined && updates.bookingOpen === undefined) {
+      normalizedUpdates.bookingOpen = updates.isBookingOpen;
+    } else if (updates.bookingOpen !== undefined && updates.isBookingOpen === undefined) {
+      normalizedUpdates.isBookingOpen = updates.bookingOpen;
+    }
+
+    setGames((prev) => {
+      const next = prev.map((g) => (g.id === gameId ? { ...g, ...normalizedUpdates } : g));
+      try {
+        localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
     try {
       const gameRef = doc(db, 'games', gameId);
-      setDoc(gameRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
+      setDoc(gameRef, { ...normalizedUpdates, updatedAt: new Date().toISOString() }, { merge: true });
     } catch (e) {
       console.warn('Firestore game update notice:', e);
     }
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'GAME_UPDATED', gameId, updates: normalizedUpdates });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 
