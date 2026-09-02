@@ -23,6 +23,11 @@ import {
   ExternalLink,
   Send,
   ArrowRightLeft,
+  Upload,
+  Image as ImageIcon,
+  Camera,
+  X,
+  FileText,
 } from 'lucide-react';
 import { User, WalletTransaction, WithdrawalRequest, SiteSettings } from '../types';
 
@@ -71,6 +76,9 @@ export const WalletView: React.FC<WalletViewProps> = ({
   const [depositAmount, setDepositAmount] = useState<number>(500);
   const [depositMethod, setDepositMethod] = useState<string>('UPI (PhonePe / GPay / Paytm)');
   const [utrNumber, setUtrNumber] = useState<string>('');
+  const [proofImage, setProofImage] = useState<string | null>(null);
+  const [proofImageName, setProofImageName] = useState<string>('');
+  const [isDraggingProof, setIsDraggingProof] = useState<boolean>(false);
   const [copiedAdminUpi, setCopiedAdminUpi] = useState(false);
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositSuccess, setDepositSuccess] = useState<string | null>(null);
@@ -145,6 +153,49 @@ export const WalletView: React.FC<WalletViewProps> = ({
   const [txnFilter, setTxnFilter] = useState<string>('all');
   const [txnSearch, setTxnSearch] = useState<string>('');
 
+  // Screenshot file handlers
+  const processScreenshotFile = (file: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setDepositError('कृपया केवल फोटो/इमेज (JPG, PNG, WebP) फाइल अपलोड करें।');
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setDepositError('स्क्रीनशॉट फाइल का साइज 8MB से कम होना चाहिए।');
+      return;
+    }
+
+    setProofImageName(file.name);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      setProofImage(result);
+      setDepositError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleScreenshotInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processScreenshotFile(file);
+    }
+  };
+
+  const handleScreenshotDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingProof(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processScreenshotFile(file);
+    }
+  };
+
+  const handleRemoveScreenshot = () => {
+    setProofImage(null);
+    setProofImageName('');
+  };
+
   const handleDepositSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setDepositError(null);
@@ -161,11 +212,17 @@ export const WalletView: React.FC<WalletViewProps> = ({
 
     setDepositLoading(true);
     const finalUtr = utrNumber.trim() || `UPI${Math.floor(100000000000 + Math.random() * 900000000000)}`;
-    const success = await onDeposit(depositAmount, depositMethod, finalUtr);
+    const success = await onDeposit(depositAmount, depositMethod, finalUtr, proofImage || undefined);
     setDepositLoading(false);
     if (success) {
-      setDepositSuccess(`₹${depositAmount} सफलतापूर्वक आपके वॉलेट में जोड़ दिया गया है! (Ref: ${finalUtr})`);
+      setDepositSuccess(
+        `₹${depositAmount} की डिपोजिट रिक्वेस्ट सफलतापूर्वक दर्ज हो गई है! ${
+          proofImage ? 'पेमेंट स्क्रीनशॉट संलग्न है।' : ''
+        } (Ref: ${finalUtr})`
+      );
       setUtrNumber('');
+      setProofImage(null);
+      setProofImageName('');
       setTimeout(() => setDepositSuccess(null), 5000);
     }
   };
@@ -764,6 +821,87 @@ export const WalletView: React.FC<WalletViewProps> = ({
               <p className="text-[10px] text-slate-400">
                 Tip: After transferring via UPI, check your UPI app for the 12-digit UTR or Transaction ID.
               </p>
+            </div>
+
+            {/* 📸 4. Upload Payment Screenshot (पेमेंट रसीद / स्क्रीनशॉट) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-amber-400" />
+                  <span>4. Payment Screenshot / Proof (स्क्रीनशॉट अपलोड करें - ऐच्छिक/अनुशंसित)</span>
+                </label>
+                {proofImage && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>संलग्न है</span>
+                  </span>
+                )}
+              </div>
+
+              {!proofImage ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingProof(true);
+                  }}
+                  onDragLeave={() => setIsDraggingProof(false)}
+                  onDrop={handleScreenshotDrop}
+                  className={`p-5 rounded-2xl border-2 border-dashed transition-all text-center space-y-2 cursor-pointer relative ${
+                    isDraggingProof
+                      ? 'border-amber-400 bg-amber-500/10'
+                      : 'border-slate-700 hover:border-amber-400/60 bg-slate-950/70'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleScreenshotInputChange}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="w-10 h-10 rounded-2xl bg-amber-400/10 text-amber-300 mx-auto flex items-center justify-center border border-amber-400/20">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white">
+                      यहाँ क्लिक करें या स्क्रीनशॉट ड्रैग करके छोड़ें (Click or Drag &amp; Drop)
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      PNG, JPG, JPEG, WebP (Max 8MB) — तुरंत अप्रूवल में मददगार
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-slate-950 border-2 border-emerald-500/40 flex items-center justify-between gap-3 shadow-inner">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-14 h-14 rounded-xl overflow-hidden bg-slate-900 border border-slate-700 shrink-0 relative">
+                      <img
+                        src={proofImage}
+                        alt="Payment Proof"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300 truncate">
+                        <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{proofImageName || 'Payment_Receipt.png'}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        स्क्रीनशॉट सफलता से अटैच हो गया है
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveScreenshot}
+                    className="p-2 rounded-xl bg-red-500/20 text-red-400 hover:bg-red-500/30 text-xs font-bold flex items-center gap-1 border border-red-500/30 cursor-pointer shrink-0"
+                    title="Remove Screenshot"
+                  >
+                    <X className="w-4 h-4" />
+                    <span className="hidden sm:inline">हटाएँ</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 🎁 10% Daily Bonus Reward Unlock Preview Card */}

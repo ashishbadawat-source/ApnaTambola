@@ -894,3 +894,41 @@ export const INITIAL_USER_NOTIFICATIONS = [
   },
 ];
 
+export const INITIAL_OFFER_POPUPS = [
+  {
+    id: 'offer_01',
+    title: '🎉 Mega Bumper Deposit Offer',
+    subtitle: '10% Extra Bonus on Every Recharge!',
+    description: 'रिचार्ज पर 10% अतिरिक्त रिवार्ड बोनस अनलॉक करें और लाइव तंबोला मैच में भाग लें। न्यूनतम रिचार्ज ₹100 पर पाएं विशेष लाभ।',
+    imageUrl: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?auto=format&fit=crop&w=800&q=80',
+    badgeText: '🔥 HOT OFFER',
+    promoCode: 'TAMBOLA100',
+    discountOrBonusText: '10% Instant Wallet Reward Unlock',
+    actionText: 'Add Money Now (रिचार्ज करें)',
+    actionTab: 'wallet',
+    isActive: true,
+    showOnAppLaunch: true,
+    targetAudience: 'all' as const,
+    priority: 1,
+    createdAt: '2026-06-01T10:00:00.000Z',
+  },
+  {
+    id: 'offer_02',
+    title: '🏆 Mega Housie Night Bumper',
+    subtitle: 'Win from ₹50,000 Prize Pool!',
+    description: 'आज रात का सबसे बड़ा तंबोला महा-मुकाबला! सिर्फ ₹50 का टिकट खरीदें और फुल हाउस में ₹25,000 तक कैश जीतें।',
+    imageUrl: 'https://images.unsplash.com/photo-1511193311914-0346f16efe90?auto=format&fit=crop&w=800&q=80',
+    badgeText: '⭐ BIG BUMPER',
+    promoCode: 'MEGA50',
+    discountOrBonusText: '₹50,000 Guaranteed Pool',
+    actionText: 'Book Tickets (टिकट खरीदें)',
+    actionTab: 'games',
+    isActive: true,
+    showOnAppLaunch: false,
+    targetAudience: 'all' as const,
+    priority: 2,
+    createdAt: '2026-06-02T12:00:00.000Z',
+  },
+];
+
+

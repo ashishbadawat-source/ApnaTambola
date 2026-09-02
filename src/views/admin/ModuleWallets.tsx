@@ -24,6 +24,11 @@ import {
   User as UserIcon,
   CreditCard,
   QrCode,
+  Eye,
+  Image as ImageIcon,
+  ExternalLink,
+  X,
+  Camera,
 } from 'lucide-react';
 import { User, WalletTransaction, DepositRequest } from '../../types';
 
@@ -50,6 +55,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   const [depositStatusFilter, setDepositStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
+  const [previewDeposit, setPreviewDeposit] = useState<DepositRequest | null>(null);
 
   // Reject / Block Confirmation Modal
   const [rejectingDeposit, setRejectingDeposit] = useState<DepositRequest | null>(null);
@@ -279,6 +285,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                   <th className="px-4 py-3.5">User / Player Details</th>
                   <th className="px-4 py-3.5">Deposit Amount</th>
                   <th className="px-4 py-3.5">12-Digit UTR Number</th>
+                  <th className="px-4 py-3.5">Screenshot Proof</th>
                   <th className="px-4 py-3.5">Payment Method / Time</th>
                   <th className="px-4 py-3.5">Bonus Benefits</th>
                   <th className="px-4 py-3.5">Status</th>
@@ -330,6 +337,29 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                           </div>
                           {copiedUtr === dep.utrNumber && (
                             <span className="text-[9px] text-emerald-400 font-bold block mt-0.5">✓ Copied to clipboard!</span>
+                          )}
+                        </td>
+
+                        {/* Screenshot Proof */}
+                        <td className="px-4 py-3.5">
+                          {dep.proofImageUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDeposit(dep)}
+                              className="px-2.5 py-1.5 rounded-xl bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 text-[11px] font-bold border border-amber-400/40 flex items-center gap-1.5 transition-all cursor-pointer group shadow"
+                            >
+                              <div className="w-5 h-5 rounded-md overflow-hidden bg-slate-900 shrink-0 border border-amber-400/40">
+                                <img
+                                  src={dep.proofImageUrl}
+                                  alt="Proof thumbnail"
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <span>📸 रसीद देखें</span>
+                              <Eye className="w-3 h-3 group-hover:scale-110 transition-transform" />
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-500 italic">⚡ UTR Only (रसीद नहीं)</span>
                           )}
                         </td>
 
@@ -734,6 +764,106 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 📸 PAYMENT SCREENSHOT / RECEIPT PREVIEW MODAL */}
+      {previewDeposit && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-lg rounded-3xl bg-slate-900 border-2 border-amber-400 shadow-2xl p-5 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-300 flex items-center justify-center border border-amber-400/30">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white">Payment Screenshot &amp; Proof</h3>
+                  <p className="text-[11px] text-slate-400">
+                    User: <strong className="text-white">{previewDeposit.userName}</strong> (ID: {previewDeposit.userId})
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPreviewDeposit(null)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Details Badges */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                <span className="text-[10px] text-slate-400 block font-bold">Deposit Amount:</span>
+                <span className="text-sm font-black text-emerald-400 font-mono">
+                  ₹{previewDeposit.amount.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                <span className="text-[10px] text-slate-400 block font-bold">UTR Number:</span>
+                <span className="text-xs font-black text-amber-300 font-mono select-all">
+                  {previewDeposit.utrNumber}
+                </span>
+              </div>
+            </div>
+
+            {/* Screenshot Display */}
+            <div className="flex-1 overflow-auto rounded-2xl bg-slate-950 p-2 border border-slate-800 flex items-center justify-center min-h-[260px] max-h-[420px]">
+              {previewDeposit.proofImageUrl ? (
+                <img
+                  src={previewDeposit.proofImageUrl}
+                  alt="Payment Proof Receipt"
+                  className="max-h-[380px] w-auto max-w-full rounded-xl object-contain shadow-md"
+                />
+              ) : (
+                <div className="text-center py-10 text-slate-500 text-xs">
+                  कोई स्क्रीनशॉट उपलब्ध नहीं है
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800">
+              {previewDeposit.status === 'pending' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = previewDeposit;
+                      setPreviewDeposit(null);
+                      setRejectingDeposit(d);
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 font-black text-xs border border-red-500/40 cursor-pointer"
+                  >
+                    Reject &amp; Block
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const d = previewDeposit;
+                      setPreviewDeposit(null);
+                      await handleApprove(d);
+                    }}
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Approve ₹{previewDeposit.amount} (स्वीकृत करें)</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPreviewDeposit(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs cursor-pointer"
+                >
+                  Close (बंद करें)
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

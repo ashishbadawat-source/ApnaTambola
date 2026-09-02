@@ -474,3 +474,24 @@ export interface EmailTemplateDefinition {
   defaultSubject: string;
   supportedVariables: { key: string; label: string; example: string }[];
 }
+
+// 🎁 Promotional Offer Popup System Types
+export interface OfferPopup {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  imageUrl?: string;
+  badgeText?: string; // e.g. "🔥 HOT OFFER", "🎉 FESTIVAL SPECIAL", "🎁 10% EXTRA"
+  promoCode?: string; // e.g. "TAMBOLA100", "DIWALI50"
+  discountOrBonusText?: string; // e.g. "Get 10% Extra on Every Deposit"
+  actionText: string; // e.g. "Recharge Now", "Play Live Match", "Claim Bonus"
+  actionTab: string; // e.g. "wallet", "live", "games", "referral", "bonus"
+  startDate?: string;
+  endDate?: string;
+  isActive: boolean;
+  showOnAppLaunch: boolean;
+  targetAudience?: 'all' | 'new_users' | 'existing_users';
+  priority?: number;
+  createdAt: string;
+}

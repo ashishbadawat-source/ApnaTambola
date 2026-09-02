@@ -17,6 +17,7 @@ import {
   Sparkles,
   Mail,
   TrendingUp,
+  Gift,
 } from 'lucide-react';
 import {
   AdminStats,
@@ -32,6 +33,7 @@ import {
   AdminNotification,
   LoginHistoryEntry,
   SiteSettings,
+  OfferPopup,
 } from '../types';
 
 import { INITIAL_SITE_SETTINGS } from '../data/mockData';
@@ -50,6 +52,7 @@ import { ModuleNotifications } from './admin/ModuleNotifications';
 import { ModuleSettings } from './admin/ModuleSettings';
 import { ModuleEmailSettings } from './admin/ModuleEmailSettings';
 import { ModuleReferralAnalytics } from './admin/ModuleReferralAnalytics';
+import { ModuleOfferPopups } from './admin/ModuleOfferPopups';
 
 interface AdminDashboardViewProps {
   stats: AdminStats;
@@ -64,6 +67,10 @@ interface AdminDashboardViewProps {
   notifications?: AdminNotification[];
   loginHistory?: LoginHistoryEntry[];
   siteSettings?: SiteSettings;
+  offers?: OfferPopup[];
+  onSaveOffer?: (offer: OfferPopup) => Promise<boolean> | void;
+  onDeleteOffer?: (offerId: string) => Promise<boolean> | void;
+  onToggleOfferStatus?: (offerId: string) => Promise<boolean> | void;
   activeModule?: string;
   onModuleChange?: (module: string) => void;
   onCallNext: (number?: number) => void;
@@ -109,6 +116,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   notifications = [],
   loginHistory = [],
   siteSettings = INITIAL_SITE_SETTINGS,
+  offers = [],
+  onSaveOffer,
+  onDeleteOffer,
+  onToggleOfferStatus,
   activeModule,
   onModuleChange,
   onCallNext,
@@ -153,6 +164,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
   const pendingDepositsCount = deposits.filter((d) => d.status === 'pending').length;
   const liveGamesCount = games.filter((g) => g.status === 'live').length;
+  const activeOffersCount = offers.filter((o) => o.isActive).length;
 
   const NAV_ITEMS = [
     { id: 'dashboard', label: '1. Dashboard', icon: LayoutDashboard, badge: null },
@@ -165,10 +177,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     { id: 'referral_growth', label: '8. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },
     { id: 'wallets', label: '9. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
     { id: 'withdrawals', label: '10. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
-    { id: 'reports', label: '11. Reports & Analytics', icon: BarChart3, badge: null },
-    { id: 'notifications', label: '12. Notifications', icon: Bell, badge: null },
-    { id: 'settings', label: '13. Site & Security', icon: Settings, badge: null },
-    { id: 'email_settings', label: '14. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
+    { id: 'offers', label: '11. Offer Popups', icon: Gift, badge: activeOffersCount > 0 ? `${activeOffersCount} ON` : 'NEW', badgeColor: 'bg-pink-500 text-white font-black' },
+    { id: 'reports', label: '12. Reports & Analytics', icon: BarChart3, badge: null },
+    { id: 'notifications', label: '13. Notifications', icon: Bell, badge: null },
+    { id: 'settings', label: '14. Site & Security', icon: Settings, badge: null },
+    { id: 'email_settings', label: '15. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
   ];
 
   return (
@@ -356,6 +369,15 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             withdrawals={withdrawals}
             onApproveWithdrawal={onApproveWithdrawal}
             onRejectWithdrawal={onRejectWithdrawal}
+          />
+        )}
+
+        {activeTab === 'offers' && (
+          <ModuleOfferPopups
+            offers={offers}
+            onSaveOffer={onSaveOffer || (() => {})}
+            onDeleteOffer={onDeleteOffer || (() => {})}
+            onToggleOfferStatus={onToggleOfferStatus || (() => {})}
           />
         )}
 
