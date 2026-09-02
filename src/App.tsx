@@ -66,7 +66,7 @@ import {
 } from './types';
 import { generateTambolaTicketMatrix, generateTicketId, verifyClaim } from './utils/tambolaTicket';
 import { checkAndAutoTrackWinners } from './utils/autoWinnerTracker';
-import { FlashWinnerItem } from './components/LiveWinnerFlashTicker';
+import { LiveWinnerFlashTicker, FlashWinnerItem } from './components/LiveWinnerFlashTicker';
 import { WinnerFlashData } from './components/WinnerCelebrationModal';
 import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
 import { playWinningFanfare, playNumberCallSound } from './utils/audio';
@@ -3329,6 +3329,17 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        {/* Real-time Global Winner Flash Notification for all users across any tab */}
+        {activeWinnerFlash && (
+          <div className="mb-5 animate-in fade-in slide-in-from-top-3 duration-500">
+            <LiveWinnerFlashTicker
+              activeFlash={activeWinnerFlash}
+              onDismiss={() => setActiveWinnerFlash(null)}
+              onViewCelebration={(data) => setCelebrationData(data)}
+            />
+          </div>
+        )}
+
         {/* Home Page: Always shows the complete, rich Landing Page with all platform overviews, ticket, deposit, withdrawal, and income details */}
         {(activeTab === 'home' || activeTab === 'landing') && (
           <HomeView
