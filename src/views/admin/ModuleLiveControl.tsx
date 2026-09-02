@@ -23,36 +23,43 @@ import { playNumberCallSound, speakNumberCall } from '../../utils/audio';
 interface ModuleLiveControlProps {
   games: TambolaGame[];
   tickets: TambolaTicket[];
-  onCallNext: (number?: number) => void;
-  onToggleAuto: () => void;
-  onResetGame: () => void;
+  onCallNext: (number?: number, gameId?: string) => void;
+  onToggleAuto: (gameId?: string) => void;
+  onResetGame: (gameId?: string) => void;
   onUpdateGame?: (gameId: string, updates: Partial<TambolaGame>) => Promise<boolean>;
 }
 
 export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
-  games,
-  tickets,
+  games = [],
+  tickets = [],
   onCallNext,
   onToggleAuto,
   onResetGame,
   onUpdateGame,
 }) => {
+  const safeGames = Array.isArray(games) ? games.filter(Boolean) : [];
+  const safeTickets = Array.isArray(tickets) ? tickets.filter(Boolean) : [];
+
   const [selectedGameId, setSelectedGameId] = useState<string>(
-    games.find((g) => g.status === 'live')?.id || games[0]?.id || ''
+    safeGames.find((g) => g.status === 'live')?.id || safeGames[0]?.id || ''
   );
   const [manualNumberInput, setManualNumberInput] = useState('');
   const [soundVoice, setSoundVoice] = useState(true);
-  const [autoSpeed, setAutoSpeed] = useState<number>(6); // 4s, 6s, 8s
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
-  const currentGame = games.find((g) => g.id === selectedGameId) || games[0];
+  const currentGame = safeGames.find((g) => g.id === selectedGameId) || safeGames.find((g) => g.status === 'live') || safeGames[0];
 
-  const calledNumbers = currentGame?.calledNumbers || [];
-  const lastCalledNumber = currentGame?.lastCalledNumber;
+  const calledNumbers = Array.isArray(currentGame?.calledNumbers) ? currentGame.calledNumbers : [];
+  const lastCalledNumber = currentGame?.currentNumber || currentGame?.lastCalledNumber;
 
   const MIN_TICKETS_TO_START = 100;
-  const soldTicketsCount = tickets.filter((t) => t.gameId === currentGame?.id).length || currentGame?.soldTickets || 0;
+  const soldTicketsCount = safeTickets.filter((t) => t.gameId === currentGame?.id).length || currentGame?.soldTickets || currentGame?.totalTicketsSold || 0;
   const isMinTicketsMet = soldTicketsCount >= MIN_TICKETS_TO_START;
+
+  const isLive = currentGame?.status === 'live';
+  const isCompleted = currentGame?.status === 'completed';
+  const isEnabled = currentGame?.isActive !== false && currentGame?.isGameEnabled !== false;
+  const isBookingOpen = currentGame?.bookingOpen !== false && currentGame?.isBookingOpen !== false;
 
   const handleStartLiveGame = async () => {
     if (!currentGame || !onUpdateGame) return;
@@ -68,9 +75,25 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
       status: 'live',
       isActive: true,
       isGameEnabled: true,
+      bookingOpen: false,
+      isBookingOpen: false,
     });
-    setStatusNotice(`🎮 गेम "${currentGame.title}" सफलतापूर्वक लाइव (LIVE) चालू कर दिया गया है!`);
+    setStatusNotice(`🟢 गेम "${currentGame.title || 'Tambola Match'}" सफलतापूर्वक लाइव (LIVE ON) चालू कर दिया गया है!`);
     setTimeout(() => setStatusNotice(null), 4000);
+  };
+
+  const handleStopLiveGame = async () => {
+    if (!currentGame || !onUpdateGame) return;
+    if (confirm(`क्या आप गेम "${currentGame.title || 'Tambola Match'}" का लाइव मोड बंद (LIVE OFF) करना चाहते हैं?`)) {
+      await onUpdateGame(currentGame.id, {
+        status: 'upcoming',
+        isActive: false,
+        isGameEnabled: false,
+        autoCalling: false,
+      });
+      setStatusNotice(`🔴 गेम "${currentGame.title || 'Tambola Match'}" का लाइव मोड बंद (LIVE OFF) कर दिया गया है!`);
+      setTimeout(() => setStatusNotice(null), 4000);
+    }
   };
 
   const handlePauseGame = async () => {
@@ -79,31 +102,47 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
       status: 'upcoming',
       autoCalling: false,
     });
-    setStatusNotice(`⏸️ गेम "${currentGame.title}" को रोक दिया गया है (PAUSED).`);
+    setStatusNotice(`⏸️ गेम "${currentGame.title || 'Tambola Match'}" को रोक दिया गया है (PAUSED).`);
     setTimeout(() => setStatusNotice(null), 4000);
   };
 
   const handleFinishGame = async () => {
     if (!currentGame || !onUpdateGame) return;
-    if (confirm(`क्या आप गेम "${currentGame.title}" को समाप्त (COMPLETED) घोषित करना चाहते हैं?`)) {
+    if (confirm(`क्या आप गेम "${currentGame.title || 'Tambola Match'}" को समाप्त (COMPLETED) घोषित करना चाहते हैं?`)) {
       await onUpdateGame(currentGame.id, {
         status: 'completed',
         autoCalling: false,
       });
-      setStatusNotice(`🏁 गेम "${currentGame.title}" समाप्त (COMPLETED) हो गया है! यूज़र अब पुराने टिकट डिलीट कर सकते हैं।`);
+      setStatusNotice(`🏁 गेम "${currentGame.title || 'Tambola Match'}" समाप्त (COMPLETED) हो गया है! यूज़र अब पुराने टिकट डिलीट कर सकते हैं।`);
       setTimeout(() => setStatusNotice(null), 4000);
     }
   };
 
+  const handleToggleBooking = async () => {
+    if (!currentGame || !onUpdateGame) return;
+    const newBooking = !isBookingOpen;
+    await onUpdateGame(currentGame.id, {
+      bookingOpen: newBooking,
+      isBookingOpen: newBooking,
+    });
+    setStatusNotice(
+      newBooking
+        ? `🎟️ "${currentGame.title || 'Tambola Match'}" के लिए टिकट बुकिंग चालू (OPEN) कर दी गई है!`
+        : `🔒 "${currentGame.title || 'Tambola Match'}" के लिए टिकट बुकिंग बंद (CLOSED) कर दी गई है!`
+    );
+    setTimeout(() => setStatusNotice(null), 4000);
+  };
+
   const handleManualCall = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentGame) return;
     const num = parseInt(manualNumberInput, 10);
     if (!isNaN(num) && num >= 1 && num <= 90) {
       if (calledNumbers.includes(num)) {
         alert(`Number ${num} has already been called!`);
         return;
       }
-      onCallNext(num);
+      onCallNext(num, currentGame.id);
       if (soundVoice) {
         playNumberCallSound();
         speakNumberCall(num);
@@ -113,8 +152,8 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   };
 
   const handleBallClick = (num: number) => {
-    if (calledNumbers.includes(num)) return;
-    onCallNext(num);
+    if (!currentGame || calledNumbers.includes(num)) return;
+    onCallNext(num, currentGame.id);
     if (soundVoice) {
       playNumberCallSound();
       speakNumberCall(num);
@@ -123,6 +162,18 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
 
   // 1-90 Array
   const boardNumbers = Array.from({ length: 90 }, (_, i) => i + 1);
+
+  if (safeGames.length === 0) {
+    return (
+      <div className="p-8 text-center rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
+        <AlertCircle className="w-12 h-12 text-amber-400 mx-auto" />
+        <h3 className="text-lg font-black text-white">कोई टूर्नामेंट उपलब्ध नहीं है (No Tournaments Found)</h3>
+        <p className="text-xs text-slate-400 max-w-md mx-auto">
+          लाइव कंट्रोलर का उपयोग करने के लिए कृपया पहले 'Game Management' टैब से एक नया गेम/टूर्नामेंट बनाएं।
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -164,26 +215,53 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
             onChange={(e) => setSelectedGameId(e.target.value)}
             className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400 cursor-pointer"
           >
-            {games.map((g) => (
+            {safeGames.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.title} ({(g.status || 'upcoming').toUpperCase()})
               </option>
             ))}
           </select>
 
-          {currentGame?.status !== 'live' ? (
-            <button
-              onClick={handleStartLiveGame}
-              className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg transition-all cursor-pointer ${
-                isMinTicketsMet
-                  ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-500/30'
-                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/30'
-              }`}
-            >
-              <Play className="w-4 h-4 fill-current" />
-              <span>{isMinTicketsMet ? 'Start Live Game' : `Start (${soldTicketsCount}/100 Tkts)`}</span>
-            </button>
-          ) : (
+          {/* Quick ON / OFF Master Switch for selected game */}
+          <button
+            onClick={isLive ? handleStopLiveGame : handleStartLiveGame}
+            className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-lg transition-all cursor-pointer border ${
+              isLive
+                ? 'bg-red-500/20 text-red-300 border-red-500/50 hover:bg-red-500/30'
+                : isMinTicketsMet
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 border-emerald-400/50 shadow-emerald-500/30'
+                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400/50 shadow-amber-500/30'
+            }`}
+            title={isLive ? 'गेम को लाइव बंद करें (Turn LIVE OFF)' : 'गेम को लाइव चालू करें (Turn LIVE ON)'}
+          >
+            {isLive ? (
+              <>
+                <Pause className="w-3.5 h-3.5 text-red-400" />
+                <span>🔴 LIVE OFF (बंद)</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>🟢 LIVE ON (चालू)</span>
+              </>
+            )}
+          </button>
+
+          {/* Ticket Booking Toggle */}
+          <button
+            onClick={handleToggleBooking}
+            className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer border ${
+              isBookingOpen
+                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/30'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/60 hover:bg-amber-500/30'
+            }`}
+            title={isBookingOpen ? 'टिकट बुकिंग बंद करें (Close Booking)' : 'टिकट बुकिंग चालू करें (Open Booking)'}
+          >
+            <Ticket className="w-3.5 h-3.5" />
+            <span>{isBookingOpen ? '🎟️ बुकिंग OPEN' : '🔒 बुकिंग CLOSED'}</span>
+          </button>
+
+          {isLive && (
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handlePauseGame}
@@ -299,7 +377,8 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
           <div className="w-full space-y-2.5">
             <button
               onClick={() => {
-                onCallNext();
+                if (!currentGame) return;
+                onCallNext(undefined, currentGame.id);
                 if (soundVoice) {
                   const remaining = Array.from({ length: 90 }, (_, i) => i + 1).filter((n) => !calledNumbers.includes(n));
                   if (remaining.length > 0) {
@@ -317,7 +396,7 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
 
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={onToggleAuto}
+                onClick={() => onToggleAuto(currentGame?.id)}
                 className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   currentGame?.autoCalling
                     ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-500/30'
@@ -340,7 +419,7 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
               <button
                 onClick={() => {
                   if (confirm('Reset this game and clear all called balls?')) {
-                    onResetGame();
+                    onResetGame(currentGame?.id);
                   }
                 }}
                 className="py-2.5 rounded-xl bg-slate-900 hover:bg-red-950/60 text-slate-400 hover:text-red-300 border border-slate-800 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"

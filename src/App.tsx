@@ -1617,22 +1617,25 @@ export function App() {
   };
 
   // 1. Call Next Number Handler
-  const handleCallNextNumber = (forcedNumber?: number) => {
+  const handleCallNextNumber = (forcedNumber?: number, targetGameId?: string) => {
     let chosenNumber: number | null = null;
+    const activeTargetId = targetGameId || liveGame?.id;
+    if (!activeTargetId) return;
 
     setGames((prevGames) => {
       return prevGames.map((g) => {
-        if (g.id !== liveGame?.id) return g;
-        if (g.calledNumbers.length >= 90) {
+        if (g.id !== activeTargetId) return g;
+        const calledList = Array.isArray(g.calledNumbers) ? g.calledNumbers : [];
+        if (calledList.length >= 90) {
           return { ...g, autoCalling: false, status: 'completed' };
         }
 
         let nextNum: number;
-        if (forcedNumber && !g.calledNumbers.includes(forcedNumber)) {
+        if (forcedNumber && !calledList.includes(forcedNumber)) {
           nextNum = forcedNumber;
         } else {
           const available = Array.from({ length: 90 }, (_, i) => i + 1).filter(
-            (n) => !g.calledNumbers.includes(n)
+            (n) => !calledList.includes(n)
           );
           if (available.length === 0) {
             return { ...g, autoCalling: false, status: 'completed' };
@@ -1641,12 +1644,13 @@ export function App() {
         }
 
         chosenNumber = nextNum;
-        const newCalled = [...g.calledNumbers, nextNum];
-        const newPrev = [nextNum, ...g.previousNumbers].slice(0, 5);
+        const newCalled = [...calledList, nextNum];
+        const newPrev = [nextNum, ...(Array.isArray(g.previousNumbers) ? g.previousNumbers : [])].slice(0, 5);
 
         return {
           ...g,
           currentNumber: nextNum,
+          lastCalledNumber: nextNum,
           calledNumbers: newCalled,
           previousNumbers: newPrev,
         };
@@ -1658,9 +1662,10 @@ export function App() {
       const numToDab = chosenNumber;
       setTickets((prevTickets) =>
         prevTickets.map((t) => {
-          if (t.gameId === liveGame?.id || !t.gameId) {
+          if (!t) return t;
+          if (t.gameId === activeTargetId || !t.gameId) {
             const hasNum = Array.isArray(t.numbers) && t.numbers.some((row) => Array.isArray(row) && row.includes(numToDab));
-            const isAlreadyMarked = (t.markedNumbers || []).includes(numToDab);
+            const isAlreadyMarked = Array.isArray(t.markedNumbers) && t.markedNumbers.includes(numToDab);
             if (hasNum && !isAlreadyMarked) {
               return {
                 ...t,
@@ -1676,7 +1681,7 @@ export function App() {
 
   // Delete Individual Ticket (Allowed for Completed/Finished Games)
   const handleDeleteTicket = (ticketId: string) => {
-    setTickets((prev) => prev.filter((t) => t.id !== ticketId && t.ticketId !== ticketId));
+    setTickets((prev) => prev.filter((t) => t && t.id !== ticketId && t.ticketId !== ticketId));
     setUserNotifications((prev) => [
       {
         id: `un_del_${Date.now()}`,
@@ -1693,12 +1698,12 @@ export function App() {
   // Bulk Delete All Completed / Finished Game Tickets to Free Memory
   const handleDeleteCompletedTickets = () => {
     const completedGameIds = new Set(
-      games.filter((g) => g.status === 'completed' || g.status === 'cancelled').map((g) => g.id)
+      games.filter((g) => g && (g.status === 'completed' || g.status === 'cancelled')).map((g) => g.id)
     );
 
     const initialCount = tickets.length;
-    setTickets((prev) => prev.filter((t) => !completedGameIds.has(t.gameId)));
-    const deletedCount = initialCount - tickets.filter((t) => !completedGameIds.has(t.gameId)).length;
+    setTickets((prev) => prev.filter((t) => t && !completedGameIds.has(t.gameId)));
+    const deletedCount = initialCount - tickets.filter((t) => t && !completedGameIds.has(t.gameId)).length;
 
     setUserNotifications((prev) => [
       {
@@ -1714,28 +1719,31 @@ export function App() {
   };
 
   // 2. Toggle Auto Caller
-  const handleToggleAutoCaller = () => {
-    if (!liveGame) return;
+  const handleToggleAutoCaller = (targetGameId?: string) => {
+    const activeTargetId = targetGameId || liveGame?.id;
+    if (!activeTargetId) return;
     setGames((prevGames) =>
       prevGames.map((g) =>
-        g.id === liveGame.id ? { ...g, autoCalling: !g.autoCalling } : g
+        g.id === activeTargetId ? { ...g, autoCalling: !g.autoCalling } : g
       )
     );
   };
 
   // 3. Reset Game Match
-  const handleResetGame = () => {
-    if (!liveGame) return;
+  const handleResetGame = (targetGameId?: string) => {
+    const activeTargetId = targetGameId || liveGame?.id;
+    if (!activeTargetId) return;
     setGames((prevGames) =>
       prevGames.map((g) =>
-        g.id === liveGame.id
+        g.id === activeTargetId
           ? {
               ...g,
               currentNumber: undefined,
+              lastCalledNumber: undefined,
               calledNumbers: [],
               previousNumbers: [],
               autoCalling: false,
-              prizes: g.prizes.map((p) => ({ ...p, claimedWinners: [] })),
+              prizes: Array.isArray(g.prizes) ? g.prizes.map((p) => ({ ...p, claimedWinners: [] })) : [],
             }
           : g
       )
