@@ -563,15 +563,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                   )}
                 </div>
 
-                {/* Direct Logout button on Desktop */}
+                {/* Direct Prominent Logout button on Screen (Visible on ALL devices) */}
                 {onLogout && (
                   <button
+                    id="screen-direct-logout-btn"
                     onClick={onLogout}
-                    title="लॉगआउट"
-                    className="hidden lg:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-rose-950/50 border border-slate-700 hover:border-rose-500/50 text-slate-400 hover:text-rose-300 text-xs font-bold transition-all cursor-pointer"
+                    title="लॉगआउट करें (Log Out)"
+                    className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-gradient-to-r from-rose-950/90 via-red-950/90 to-rose-950/90 hover:from-rose-900 hover:to-red-900 border border-rose-500/70 hover:border-rose-400 text-rose-200 hover:text-white text-xs font-black shadow-md shadow-rose-950/50 transition-all cursor-pointer shrink-0 active:scale-95 group"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>लॉगआउट</span>
+                    <LogOut className="w-3.5 h-3.5 text-rose-400 group-hover:text-white transition-colors" />
+                    <span className="text-[11px] sm:text-xs">लॉगआउट</span>
                   </button>
                 )}
               </>
@@ -656,6 +657,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </button>
                   );
                 })}
+
+                {/* Direct Subnav Logout Button */}
+                {currentUser && onLogout && (
+                  <button
+                    id="subnav-btn-logout"
+                    onClick={onLogout}
+                    className="relative px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/60 text-rose-300 hover:text-white ml-1 shadow-sm"
+                    title="लॉगआउट करें (Log Out)"
+                  >
+                    <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                    <span>लॉगआउट</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -685,6 +699,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </button>
                   );
                 })}
+
+                {/* Admin Subnav Logout Button */}
+                {onLogout && (
+                  <button
+                    id="admin-subnav-btn-logout"
+                    onClick={onLogout}
+                    className="relative px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/60 text-rose-300 hover:text-white ml-1 shadow-sm"
+                    title="एडमिन लॉगआउट (Log Out)"
+                  >
+                    <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                    <span>लॉगआउट</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -794,6 +821,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             <ShieldCheck className="w-4 h-4" />
             <span>👑 व्यवस्थापक (एडमिन) पोर्टल खोलें</span>
           </button>
+
+          {/* Direct Prominent Mobile Logout Button */}
+          {currentUser && onLogout && (
+            <button
+              id="mobile-drawer-logout-btn"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onLogout();
+              }}
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-950/90 via-red-950/90 to-rose-950/90 hover:from-rose-900 hover:to-red-900 border-2 border-rose-500/60 hover:border-rose-400 text-rose-200 hover:text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-rose-950/50 cursor-pointer transition-all active:scale-95"
+            >
+              <LogOut className="w-4 h-4 text-rose-400" />
+              <span>🚪 खाते से लॉगआउट करें (Log Out)</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -808,6 +850,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onSelectAdminModule(mod);
           }
         }}
+        onLogout={onLogout}
       />
     </header>
   );

@@ -3816,6 +3816,7 @@ export function App() {
             onNavigate={handleNavigate}
             onOpenDeposit={() => handleNavigate('wallet')}
             onOpenAuth={handleOpenAuth}
+            onLogout={handleLogout}
           />
         )}
 

@@ -30,6 +30,7 @@ import {
   Layers,
   PhoneCall,
   MessageCircle,
+  LogOut,
 } from 'lucide-react';
 import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
@@ -46,6 +47,7 @@ interface UserDashboardViewProps {
   onNavigate: (tab: string, gameId?: string) => void;
   onOpenDeposit: () => void;
   onOpenAuth?: (mode?: 'login' | 'register') => void;
+  onLogout?: () => void;
 }
 
 export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
@@ -59,6 +61,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   onNavigate,
   onOpenDeposit,
   onOpenAuth,
+  onLogout,
 }) => {
   const liveGame = (games || []).find((g) => g && g.status === 'live');
   const upcomingGames = (games || []).filter((g) => g && g.status === 'upcoming');
@@ -416,19 +419,31 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             </div>
           </div>
 
-          {/* Quick Header Right Badge with Official Logo */}
-          <div className="flex items-center gap-3">
+          {/* Quick Header Right Badge with Official Logo & Logout Button */}
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap justify-end">
+            {currentUser && onLogout && (
+              <button
+                id="dashboard-header-logout-btn"
+                type="button"
+                onClick={onLogout}
+                className="px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-rose-950/90 via-red-950/90 to-rose-950/90 hover:from-rose-900 hover:to-red-900 border-2 border-rose-500/70 hover:border-rose-400 text-rose-200 hover:text-white text-xs font-black flex items-center gap-1.5 shadow-lg shadow-rose-950/60 cursor-pointer transition-all active:scale-95 shrink-0"
+                title="खाते से तुरंत बाहर निकलें (Log Out)"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                <span>लॉगआउट</span>
+              </button>
+            )}
             <img
               src="/logo.png"
               alt="Apna Tambola"
-              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover shadow-xl shadow-amber-500/40 border-2 border-amber-400 shrink-0"
+              className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover shadow-xl shadow-amber-500/40 border-2 border-amber-400 shrink-0"
               onError={(e) => {
                 (e.target as HTMLElement).style.display = 'none';
               }}
             />
-            <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-950/80 border border-amber-400/40 text-right">
+            <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/80 border border-amber-400/40 text-right hidden xs:block">
               <span className="text-[10px] uppercase font-bold text-amber-400/80 block">All-in-One Dashboard</span>
-              <span className="text-xs font-black text-white">11 Dedicated Color Themed Modules</span>
+              <span className="text-xs font-black text-white">11 Dedicated Modules</span>
             </div>
           </div>
         </div>
@@ -891,6 +906,32 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             );
           })}
         </div>
+
+        {/* Account Session Logout Card at Bottom */}
+        {currentUser && onLogout && (
+          <div className="mt-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950/30 via-slate-900 to-rose-950/30 border border-rose-500/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <LogOut className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white">सक्रिय खिलाड़ी सत्र (Active User Session)</h4>
+                <p className="text-xs text-slate-400">
+                  खिलाड़ी: <strong className="text-amber-300">{currentUser.name}</strong> (ID: {currentUser.id}) • क्या आप इस डिवाइस से लॉगआउट करना चाहते हैं?
+                </p>
+              </div>
+            </div>
+            <button
+              id="dashboard-bottom-logout-btn"
+              type="button"
+              onClick={onLogout}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-950/50 cursor-pointer transition-all active:scale-95 shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>लॉगआउट करें (Log Out of Account)</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

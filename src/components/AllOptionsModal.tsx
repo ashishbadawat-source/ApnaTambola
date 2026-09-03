@@ -23,6 +23,7 @@ import {
   ChevronRight,
   Gift,
   Award,
+  LogOut,
 } from 'lucide-react';
 
 interface AllOptionsModalProps {
@@ -32,6 +33,7 @@ interface AllOptionsModalProps {
   onNavigate: (tab: string, gameId?: string) => void;
   isAdminView?: boolean;
   onSelectAdminModule?: (moduleKey: string) => void;
+  onLogout?: () => void;
 }
 
 export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
@@ -41,6 +43,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
   onNavigate,
   isAdminView = false,
   onSelectAdminModule,
+  onLogout,
 }) => {
   if (!isOpen) return null;
 
@@ -390,6 +393,32 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
               })}
             </div>
           </div>
+
+          {/* Section 3: Account Session & Logout */}
+          {onLogout && (
+            <div className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-rose-950/40 border border-rose-500/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-white">खाता सत्र व सुरक्षा (Account Session)</h4>
+                  <p className="text-[11px] text-slate-400">इस डिवाइस से तुरंत सुरक्षित रूप से बाहर निकलें</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onLogout();
+                }}
+                className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-950/50 cursor-pointer transition-all active:scale-95 shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>लॉगआउट करें (Log Out)</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

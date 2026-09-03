@@ -392,8 +392,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 </p>
               </div>
 
-              {/* Photo Upload Action Buttons */}
-              <div className="flex items-center gap-2 justify-center sm:justify-start pt-1 sm:pt-0">
+              {/* Photo Upload Action Buttons & Logout Button */}
+              <div className="flex items-center gap-2 justify-center sm:justify-start pt-1 sm:pt-0 flex-wrap">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -410,6 +410,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
                   <span>Avatars</span>
                 </button>
+                {onLogout && (
+                  <button
+                    id="profile-header-logout-btn"
+                    type="button"
+                    onClick={onLogout}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-rose-950/90 to-red-950/90 hover:from-rose-900 hover:to-red-900 border-2 border-rose-500/60 hover:border-rose-400 text-rose-200 hover:text-white font-black text-xs flex items-center gap-1.5 shadow-md shadow-rose-950/50 transition-all cursor-pointer active:scale-95"
+                    title="खाते से तुरंत बाहर निकलें (Log Out)"
+                  >
+                    <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                    <span>लॉगआउट (Log Out)</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1374,6 +1386,30 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Account Security & Session Logout Card */}
+      {onLogout && (
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-rose-950/40 border-2 border-rose-500/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="space-y-1 text-center sm:text-left">
+            <h3 className="text-base font-black text-white flex items-center justify-center sm:justify-start gap-2">
+              <LogOut className="w-5 h-5 text-rose-400" />
+              <span>खाता सुरक्षा व लॉगआउट (Account Security &amp; Logout)</span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              इस डिवाइस से अपना सत्र समाप्त करने के लिए लॉगआउट करें। आपकी सभी जीती गई राशि और खरीदे गए टिकट सुरक्षित रहेंगे।
+            </p>
+          </div>
+          <button
+            id="profile-bottom-logout-btn"
+            type="button"
+            onClick={onLogout}
+            className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-950/60 border border-rose-400/50 cursor-pointer transition-all active:scale-95 shrink-0"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>लॉगआउट करें (Log Out of Apna Tambola)</span>
+          </button>
         </div>
       )}
 
