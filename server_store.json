@@ -1,6 +1,43 @@
 {
   "users": [
     {
+      "id": "usr_admin_001",
+      "name": "Tambola Live Admin",
+      "email": "admin@tambolalive.com",
+      "phone": "+91 90000 00001",
+      "password": "admin@tambola",
+      "role": "admin",
+      "walletBalance": 85410,
+      "depositBalance": 0,
+      "winningBalance": 0,
+      "referralBalance": 10,
+      "kycStatus": "verified",
+      "referralCode": "REF-ADMIN",
+      "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=160&q=80",
+      "createdAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "usr_ashish_101",
+      "name": "Ashish Badawat",
+      "email": "ashishbadawat@gmail.com",
+      "phone": "+91 98765 43210",
+      "password": "password123",
+      "role": "user",
+      "status": "active",
+      "isBlocked": false,
+      "walletBalance": 1920,
+      "depositBalance": 1920,
+      "winningBalance": 0,
+      "referralBalance": 0,
+      "bonusRewardBalance": 0,
+      "firstDepositBonusClaimed": true,
+      "hasDeposited": true,
+      "referralCode": "REF-ASH101",
+      "kycStatus": "verified",
+      "avatar": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80",
+      "createdAt": "2026-09-03T09:32:40.558Z"
+    },
+    {
       "id": "usr_1787828334122_9677",
       "name": "Suresh Kumar",
       "email": "sureshkumar2233@tambolalive.com",
@@ -36,16 +73,16 @@
       "email": "rameshsharma3210@tambolalive.com",
       "phone": "+91 9876543210",
       "password": "123456",
-      "role": "user",
+      "role": "admin",
       "status": "active",
       "isBlocked": false,
-      "walletBalance": 0,
-      "depositBalance": 0,
+      "walletBalance": 1010,
+      "depositBalance": 1010,
       "winningBalance": 0,
       "referralBalance": 0,
       "bonusRewardBalance": 0,
-      "firstDepositBonusClaimed": false,
-      "hasDeposited": false,
+      "firstDepositBonusClaimed": true,
+      "hasDeposited": true,
       "referralCode": "REF-RAM470",
       "referredBy": "REF-ADMIN",
       "referredByUserId": "usr_admin_001",
@@ -61,20 +98,25 @@
       }
     },
     {
-      "id": "usr_admin_001",
-      "name": "Tambola Live Admin",
-      "email": "admin@tambolalive.com",
-      "phone": "+91 90000 00001",
-      "password": "admin@tambola",
-      "role": "admin",
-      "walletBalance": 85410,
+      "id": "usr_rohit_202",
+      "name": "Rohit Sharma",
+      "email": "rohit.s@gmail.com",
+      "phone": "+91 98222 11111",
+      "password": "password123",
+      "role": "user",
+      "status": "active",
+      "isBlocked": false,
+      "walletBalance": 0,
       "depositBalance": 0,
       "winningBalance": 0,
-      "referralBalance": 10,
+      "referralBalance": 0,
+      "bonusRewardBalance": 0,
+      "firstDepositBonusClaimed": false,
+      "hasDeposited": false,
+      "referralCode": "REF-ROH202",
       "kycStatus": "verified",
-      "referralCode": "REF-ADMIN",
       "avatar": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=160&q=80",
-      "createdAt": "2026-01-01T00:00:00.000Z"
+      "createdAt": "2026-09-03T09:32:25.608Z"
     }
   ],
   "games": [
@@ -447,8 +489,8 @@
       "startTime": "21:00 (Live Now)",
       "ticketPrice": 50,
       "maxPlayers": 250,
-      "registeredPlayers": 184,
-      "totalTicketsSold": 312,
+      "registeredPlayers": 185,
+      "totalTicketsSold": 314,
       "prizePool": 10920,
       "status": "live",
       "isGameEnabled": true,
@@ -532,15 +574,19 @@
         22,
         83,
         44,
-        62
+        62,
+        71,
+        30,
+        60,
+        72
       ],
-      "currentNumber": 62,
+      "currentNumber": 72,
       "previousNumbers": [
-        44,
-        83,
-        22,
-        16,
-        1
+        60,
+        30,
+        71,
+        62,
+        44
       ],
       "autoCalling": true,
       "callIntervalSeconds": 6,
@@ -1018,6 +1064,102 @@
   ],
   "tickets": [
     {
+      "id": "tkt_1788428215735_1",
+      "gameId": "game_live_101",
+      "gameTitle": "🔥 Mega Bumper Jackpot - Room #101",
+      "userId": "usr_ashish_101",
+      "userName": "Ashish Badawat",
+      "ticketNumber": 314,
+      "ticketId": "TKT-WP3S-ZQ4W",
+      "numbers": [
+        [
+          3,
+          15,
+          22,
+          0,
+          42,
+          52,
+          0,
+          0,
+          0
+        ],
+        [
+          7,
+          0,
+          0,
+          34,
+          45,
+          0,
+          66,
+          75,
+          0
+        ],
+        [
+          0,
+          0,
+          23,
+          37,
+          0,
+          54,
+          0,
+          77,
+          85
+        ]
+      ],
+      "markedNumbers": [],
+      "price": 50,
+      "purchaseDate": "2026-09-03T09:36:55.735Z",
+      "qrCodeData": "TAMBOLA-LIVE|TKT-WP3S-ZQ4W|TB-LIVE-101|Ashish Badawat"
+    },
+    {
+      "id": "tkt_1788428215735_0",
+      "gameId": "game_live_101",
+      "gameTitle": "🔥 Mega Bumper Jackpot - Room #101",
+      "userId": "usr_ashish_101",
+      "userName": "Ashish Badawat",
+      "ticketNumber": 313,
+      "ticketId": "TKT-FAL8-NKZN",
+      "numbers": [
+        [
+          7,
+          11,
+          0,
+          30,
+          41,
+          51,
+          0,
+          0,
+          0
+        ],
+        [
+          9,
+          0,
+          22,
+          35,
+          0,
+          0,
+          67,
+          77,
+          0
+        ],
+        [
+          0,
+          16,
+          29,
+          0,
+          0,
+          53,
+          0,
+          78,
+          83
+        ]
+      ],
+      "markedNumbers": [],
+      "price": 50,
+      "purchaseDate": "2026-09-03T09:36:55.735Z",
+      "qrCodeData": "TAMBOLA-LIVE|TKT-FAL8-NKZN|TB-LIVE-101|Ashish Badawat"
+    },
+    {
       "id": "tkt_user_001",
       "gameId": "game_live_101",
       "gameTitle": "🔥 Mega Bumper Jackpot - Room #101",
@@ -1286,6 +1428,42 @@
   ],
   "transactions": [
     {
+      "id": "txn_reg_1788428234430",
+      "userId": "usr_ashish_101",
+      "type": "signup_bonus",
+      "amount": 10,
+      "balanceAfter": 1920,
+      "description": "🎁 प्रथम डिपॉजिट बोनस: ₹10 वेलकम बोनस टिकट वॉलेट में जमा किया गया",
+      "paymentMethod": "Registration Bonus",
+      "referenceId": "REG-DEP-BONUS-UPI482910492817",
+      "timestamp": "09:37 AM, Today",
+      "status": "completed"
+    },
+    {
+      "id": "txn_1788428234425",
+      "userId": "usr_ashish_101",
+      "type": "deposit",
+      "amount": 1000,
+      "balanceAfter": 1920,
+      "description": "डिपॉजिट स्वीकृत (UTR: UPI482910492817)",
+      "paymentMethod": "UPI",
+      "referenceId": "UPI482910492817",
+      "utrNumber": "UPI482910492817",
+      "timestamp": "09:37 AM, Today",
+      "status": "completed"
+    },
+    {
+      "id": "txn_1788428215736",
+      "userId": "usr_ashish_101",
+      "type": "ticket_purchase",
+      "amount": -100,
+      "status": "completed",
+      "description": "Purchased 2 Ticket(s) for 🔥 Mega Bumper Jackpot - Room #101",
+      "referenceId": "TB-LIVE-101",
+      "timestamp": "2026-09-03T09:36:55.736Z",
+      "balanceAfter": 910
+    },
+    {
       "id": "txn_101",
       "userId": "usr_ashish_101",
       "type": "deposit",
@@ -1387,8 +1565,8 @@
       "utrNumber": "UPI482910492817",
       "status": "approved",
       "requestDate": "2026-08-14 15:15",
-      "processedDate": "2026-08-14 15:20",
-      "adminRemarks": "Verified in HDFC Current Account - OK",
+      "processedDate": "2026-09-03T09:37:14.424Z",
+      "adminRemarks": "UTR Verified & Payment Received - Approved",
       "registrationBonus": 10,
       "bonusRewardUnlock": 0
     },
@@ -1486,10 +1664,12 @@
     "adminAccountHolder": "Tambola Live Entertainment Pvt Ltd",
     "adminUpiNote": "Pay using Google Pay, PhonePe, Paytm, CRED or any UPI app. Enter the 12-digit UTR number after payment.",
     "voiceLanguage": "both",
+    "globalTicketBookingEnabled": true,
+    "ticketPrizePoolPercentage": 70,
     "p2pTransferFeePercentage": 5,
     "defaultTicketTheme": "multi",
     "adminUsername": "admin@tambolalive.com",
     "adminPassword": "admin"
   },
-  "updatedAt": "2026-08-27T10:58:54.122Z"
+  "updatedAt": "2026-09-03T09:37:14.430Z"
 }

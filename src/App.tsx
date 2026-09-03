@@ -1952,10 +1952,10 @@ export function App() {
 
         setUsers((prev) => prev.map((u) => (u.id === updatedUpline.id ? updatedUpline : u)));
 
-        // Persist to Firestore
+        // Persist to Firestore & Local Storage
         try {
-          setDoc(doc(db, 'commissions', commRecord.id), commRecord);
-          setDoc(doc(db, 'users', updatedUpline.id), updatedUpline, { merge: true });
+          setDoc(doc(db, 'commissions', commRecord.id), commRecord).catch(() => {});
+          setDoc(doc(db, 'users', updatedUpline.id), updatedUpline, { merge: true }).catch(() => {});
         } catch (e) {
           console.warn('Firestore commission persistence warning:', e);
         }
@@ -1979,158 +1979,222 @@ export function App() {
     }
   };
 
-  // 5. Buy Tickets Handler (Strictly requires funded deposit wallet from Admin recharge)
+  // 5. Buy Tickets Handler (Supports Deposit balance + Winning balance + Referral balance)
   const handleBuyTickets = async (gameId: string, quantity: number): Promise<boolean> => {
-    if (!currentUser) {
-      handleOpenAuth('login');
-      return false;
-    }
-    const game = games.find((g) => g.id === gameId);
-    if (!game) return false;
+    try {
+      if (!currentUser) {
+        handleOpenAuth('login');
+        return false;
+      }
+      const game = games.find((g) => g.id === gameId);
+      if (!game) return false;
 
-    // Check if Game or Ticket Tier is Active / Enabled by Admin
-    if (game.isGameEnabled === false || game.isActive === false || game.status === 'cancelled') {
-      alert(`⚠️ यह ₹${game.ticketPrice} वाला टिकट (${game.title}) एडमिन द्वारा बंद (OFF) कर दिया गया है। आप केवल एडमिन द्वारा चालू किए गए टिकट ही बुक कर सकते हैं।`);
-      return false;
-    }
-
-    // Check if Booking is Open for this Ticket
-    if (game.isBookingOpen === false || game.bookingOpen === false) {
-      alert(`⚠️ इस टिकट (${game.title}) की टिकट बुकिंग एडमिन द्वारा बंद (CLOSED) कर दी गई है।`);
-      return false;
-    }
-
-    // Check global site booking switch
-    if (siteSettings?.globalTicketBookingEnabled === false) {
-      alert(`⚠️ मास्टर टिकट बुकिंग एडमिन द्वारा अस्थायी रूप से बंद है।`);
-      return false;
-    }
-
-    // Exact total cost calculation (e.g., ₹5, ₹10, ₹15, ₹50 etc. * quantity)
-    const totalCost = game.ticketPrice * quantity;
-
-    // User CANNOT buy tickets until deposit wallet is funded by admin / recharge
-    if (currentUser.depositBalance < totalCost) {
-      const errorNotif: UserNotificationItem = {
-        id: `un_err_${Date.now()}`,
-        category: 'wallet_credit',
-        title: '⚠️ टिकट खरीदने हेतु फंड आवश्यक',
-        message: `टिकट खरीदने के लिए टिकट वॉलेट (Deposit Wallet) में कम से कम ₹${totalCost} होना आवश्यक है। (वर्तमान टिकट बैलेंस: ₹${currentUser.depositBalance})। जब तक एडमिन से फंड ऐड (Recharge) नहीं होता, तब तक टिकट नहीं खरीदा जा सकता।`,
-        timestamp: 'Just now',
-        read: false,
-        actionTab: 'wallet',
-      };
-      setUserNotifications((prev) => [errorNotif, ...prev]);
-      return false;
-    }
-
-    // Determine ticket colors (Prioritizes per-game color theme, falls back to Admin siteSettings)
-    const newTickets: TambolaTicket[] = [];
-    const activeColorSetting = game.ticketColorTheme || siteSettings.defaultTicketTheme || 'multi';
-
-    for (let i = 0; i < quantity; i++) {
-      const ticketNum = game.totalTicketsSold + i + 1;
-      
-      let assignedColor: TicketColorThemeId = 'ruby';
-      if (!activeColorSetting || activeColorSetting === 'multi') {
-        // Rotates and changes every ticket dynamically across palettes
-        assignedColor = COLOR_KEYS[(ticketNum - 1 + i) % COLOR_KEYS.length];
-      } else {
-        assignedColor = activeColorSetting;
+      // Check if Game or Ticket Tier is Active / Enabled by Admin
+      if (game.isGameEnabled === false || game.isActive === false || game.status === 'cancelled') {
+        alert(`⚠️ यह ₹${game.ticketPrice} वाला टिकट (${game.title}) एडमिन द्वारा बंद (OFF) कर दिया गया है। आप केवल एडमिन द्वारा चालू किए गए टिकट ही बुक कर सकते हैं।`);
+        return false;
       }
 
-      newTickets.push({
-        id: `tkt_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
-        gameId: game.id,
-        gameTitle: game.title,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        ticketNumber: ticketNum,
-        ticketId: generateTicketId(),
-        numbers: generateTambolaTicketMatrix(),
-        markedNumbers: [],
-        price: game.ticketPrice,
-        colorTheme: assignedColor,
-        matchDate: game.date || 'Today',
-        matchTime: game.startTime || '09:00 PM',
-        purchaseDate: new Date().toISOString(),
-        isActive: true,
-        status: 'active',
-      });
-    }
+      // Check if Booking is Open for this Ticket
+      if (game.isBookingOpen === false || game.bookingOpen === false) {
+        alert(`⚠️ इस टिकट (${game.title}) की टिकट बुकिंग एडमिन द्वारा बंद (CLOSED) कर दी गई है।`);
+        return false;
+      }
 
-    // Deduct exact payment amount from user deposit balance and update wallet balance
-    setCurrentUser((prev) => {
-      if (!prev) return null;
-      const newDeposit = prev.depositBalance - totalCost;
-      const newWallet = newDeposit + prev.winningBalance + (prev.referralBalance || 0);
-      return {
-        ...prev,
+      // Check global site booking switch
+      if (siteSettings?.globalTicketBookingEnabled === false) {
+        alert(`⚠️ मास्टर टिकट बुकिंग एडमिन द्वारा अस्थायी रूप से बंद है।`);
+        return false;
+      }
+
+      // Exact total cost calculation (e.g., ₹5, ₹10, ₹15, ₹50 etc. * quantity)
+      const totalCost = game.ticketPrice * quantity;
+
+      // User needs available wallet balance
+      const availableBalance = (currentUser.depositBalance || 0) + (currentUser.winningBalance || 0) + (currentUser.referralBalance || 0);
+      if (availableBalance < totalCost) {
+        const errorNotif: UserNotificationItem = {
+          id: `un_err_${Date.now()}`,
+          category: 'wallet_credit',
+          title: '⚠️ टिकट खरीदने हेतु फंड आवश्यक',
+          message: `टिकट खरीदने के लिए वॉलेट में कम से कम ₹${totalCost} होना आवश्यक है। (वर्तमान उपलब्ध बैलेंस: ₹${availableBalance})। कृपया वॉलेट में फंड ऐड करें।`,
+          timestamp: 'Just now',
+          read: false,
+          actionTab: 'wallet',
+        };
+        setUserNotifications((prev) => [errorNotif, ...prev]);
+        return false;
+      }
+
+      // Determine ticket colors (Prioritizes per-game color theme, falls back to Admin siteSettings)
+      const newTickets: TambolaTicket[] = [];
+      const activeColorSetting = game.ticketColorTheme || siteSettings.defaultTicketTheme || 'multi';
+
+      for (let i = 0; i < quantity; i++) {
+        const ticketNum = game.totalTicketsSold + i + 1;
+        
+        let assignedColor: TicketColorThemeId = 'ruby';
+        if (!activeColorSetting || activeColorSetting === 'multi') {
+          // Rotates and changes every ticket dynamically across palettes
+          assignedColor = COLOR_KEYS[(ticketNum - 1 + i) % COLOR_KEYS.length];
+        } else {
+          assignedColor = activeColorSetting;
+        }
+
+        newTickets.push({
+          id: `tkt_${Date.now()}_${i}_${Math.floor(Math.random() * 1000)}`,
+          gameId: game.id,
+          gameTitle: game.title,
+          userId: currentUser.id,
+          userName: currentUser.name,
+          ticketNumber: ticketNum,
+          ticketId: generateTicketId(),
+          numbers: generateTambolaTicketMatrix(),
+          markedNumbers: [],
+          price: game.ticketPrice,
+          colorTheme: assignedColor,
+          matchDate: game.date || 'Today',
+          matchTime: game.startTime || '09:00 PM',
+          purchaseDate: new Date().toISOString(),
+          isActive: true,
+          status: 'active',
+        });
+      }
+
+      // Deduct from deposit balance first, then winning balance, then referral balance
+      let remToDeduct = totalCost;
+      let newDeposit = currentUser.depositBalance || 0;
+      let newWinning = currentUser.winningBalance || 0;
+      let newReferral = currentUser.referralBalance || 0;
+
+      if (newDeposit >= remToDeduct) {
+        newDeposit -= remToDeduct;
+        remToDeduct = 0;
+      } else {
+        remToDeduct -= newDeposit;
+        newDeposit = 0;
+      }
+
+      if (remToDeduct > 0 && newWinning >= remToDeduct) {
+        newWinning -= remToDeduct;
+        remToDeduct = 0;
+      } else if (remToDeduct > 0) {
+        remToDeduct -= newWinning;
+        newWinning = 0;
+      }
+
+      if (remToDeduct > 0 && newReferral >= remToDeduct) {
+        newReferral -= remToDeduct;
+        remToDeduct = 0;
+      }
+
+      const newWallet = newDeposit + newWinning + newReferral;
+
+      const updatedCurrentUser: User = {
+        ...currentUser,
         depositBalance: newDeposit,
+        winningBalance: newWinning,
+        referralBalance: newReferral,
         walletBalance: newWallet,
       };
-    });
 
-    // Record wallet transaction
-    const newTxn: WalletTransaction = {
-      id: `txn_${Date.now()}`,
-      userId: currentUser.id,
-      type: 'ticket_purchase',
-      amount: -totalCost,
-      balanceAfter: (currentUser.depositBalance - totalCost) + currentUser.winningBalance + (currentUser.referralBalance || 0),
-      description: `Bought ${quantity} ticket(s) @ ₹${game.ticketPrice} each (Total: -₹${totalCost}) for ${game.title}`,
-      referenceId: newTickets[0].ticketId,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
-      status: 'completed',
-    };
-    setTransactions((prev) => [newTxn, ...prev]);
+      setCurrentUser(updatedCurrentUser);
 
-    // Update game tickets sold count & dynamically re-calculate standard 7-prize pool
-    setGames((prev) =>
-      prev.map((g) => {
-        if (g.id !== gameId) return g;
-        const newTicketsSold = g.totalTicketsSold + quantity;
-        const { prizePool, prizes } = calculateTambolaDynamicPrizes(
-          newTicketsSold,
-          g.ticketPrice,
-          g.prizes
-        );
-        return {
-          ...g,
-          totalTicketsSold: newTicketsSold,
-          registeredPlayers: g.registeredPlayers + 1,
-          prizePool,
-          prizes,
-        };
-      })
-    );
+      setUsers((prev) => {
+        const nextUsers = prev.map((u) => (u.id === updatedCurrentUser.id ? updatedCurrentUser : u));
+        try {
+          localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
+        } catch (e) {}
+        return nextUsers;
+      });
 
-    setTickets((prev) => [...newTickets, ...prev]);
+      // Record wallet transaction
+      const newTxn: WalletTransaction = {
+        id: `txn_${Date.now()}`,
+        userId: currentUser.id,
+        type: 'ticket_purchase',
+        amount: -totalCost,
+        balanceAfter: newWallet,
+        description: `Bought ${quantity} ticket(s) @ ₹${game.ticketPrice} each (Total: -₹${totalCost}) for ${game.title}`,
+        referenceId: newTickets[0].ticketId,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'completed',
+      };
+      setTransactions((prev) => [newTxn, ...prev]);
 
-    // Update admin stats
-    setAdminStats((prev) => ({
-      ...prev,
-      ticketsSold: prev.ticketsSold + quantity,
-      totalRevenue: prev.totalRevenue + totalCost,
-    }));
+      // Update game tickets sold count & dynamically re-calculate standard 7-prize pool
+      setGames((prev) =>
+        prev.map((g) => {
+          if (g.id !== gameId) return g;
+          const newTicketsSold = g.totalTicketsSold + quantity;
+          const { prizePool, prizes } = calculateTambolaDynamicPrizes(
+            newTicketsSold,
+            g.ticketPrice,
+            g.prizes
+          );
+          return {
+            ...g,
+            totalTicketsSold: newTicketsSold,
+            registeredPlayers: g.registeredPlayers + 1,
+            prizePool,
+            prizes,
+          };
+        })
+      );
 
-    // Distribute 5-Level Referral commissions
-    distributeReferralCommissions(totalCost);
+      setTickets((prev) => {
+        const next = [...newTickets, ...prev];
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
 
-    // Push notification to user notifications list
-    const ticketNotif: UserNotificationItem = {
-      id: `un_${Date.now()}`,
-      category: 'ticket_confirmation',
-      title: `🎟️ ${quantity} Ticket(s) Confirmed for ${game.title}`,
-      message: `Your ${quantity} ticket(s) (IDs: ${newTickets.map((t) => t.ticketId).join(', ')}) are generated. Good luck!`,
-      timestamp: 'Just now',
-      read: false,
-      actionTab: 'my-tickets',
-      ticketId: newTickets[0].ticketId,
-    };
-    setUserNotifications((prev) => [ticketNotif, ...prev]);
+      // Update admin stats
+      setAdminStats((prev) => ({
+        ...prev,
+        ticketsSold: prev.ticketsSold + quantity,
+        totalRevenue: prev.totalRevenue + totalCost,
+      }));
 
-    return true;
+      // Distribute 5-Level Referral commissions
+      try {
+        distributeReferralCommissions(totalCost);
+      } catch (err) {
+        console.warn('Referral distribution warning:', err);
+      }
+
+      // Sync purchase to server API
+      fetch('/api/tickets/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gameId: game.id,
+          quantity,
+          userId: currentUser.id,
+          user: updatedCurrentUser,
+          tickets: newTickets,
+        }),
+      }).catch((e) => console.warn('Ticket server purchase sync warning:', e));
+
+      // Push notification to user notifications list
+      const ticketNotif: UserNotificationItem = {
+        id: `un_${Date.now()}`,
+        category: 'ticket_confirmation',
+        title: `🎟️ ${quantity} Ticket(s) Confirmed for ${game.title}`,
+        message: `Your ${quantity} ticket(s) (IDs: ${newTickets.map((t) => t.ticketId).join(', ')}) are generated. Good luck!`,
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'my-tickets',
+        ticketId: newTickets[0].ticketId,
+      };
+      setUserNotifications((prev) => [ticketNotif, ...prev]);
+
+      return true;
+    } catch (err: any) {
+      console.error('Error in handleBuyTickets:', err);
+      return false;
+    }
   };
 
   // 6. Claim Prize Handler with instant verification & Equal Split Logic
@@ -2378,8 +2442,40 @@ export function App() {
     const deposit = deposits.find((d) => d.id === depositId);
     if (!deposit) return false;
 
-    const targetUser = users.find((u) => u.id === deposit.userId);
-    if (!targetUser) return false;
+    // Multi-factor target user lookup
+    let targetUser = users.find((u) => u.id === deposit.userId);
+    if (!targetUser && deposit.userPhone) {
+      const cleanPhone = deposit.userPhone.replace(/\D/g, '').slice(-10);
+      targetUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+    }
+    if (!targetUser && deposit.userEmail) {
+      targetUser = users.find((u) => u.email && u.email.toLowerCase() === deposit.userEmail?.toLowerCase());
+    }
+    if (!targetUser && deposit.userName) {
+      targetUser = users.find((u) => u.name && u.name.trim().toLowerCase() === deposit.userName.trim().toLowerCase());
+    }
+
+    if (!targetUser) {
+      // Auto-construct user object so payment funds are never lost!
+      targetUser = {
+        id: deposit.userId || `usr_${Date.now()}`,
+        name: deposit.userName || 'Player',
+        email: deposit.userEmail || `${(deposit.userName || 'player').toLowerCase().replace(/\s+/g, '')}@tambolalive.com`,
+        phone: deposit.userPhone || '+91 9999999999',
+        role: 'user',
+        status: 'active',
+        isBlocked: false,
+        walletBalance: 0,
+        depositBalance: 0,
+        winningBalance: 0,
+        referralBalance: 0,
+        bonusRewardBalance: 0,
+        referralCode: `REF-${(deposit.userName || 'PLY').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+        kycStatus: 'verified',
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+        createdAt: new Date().toISOString(),
+      };
+    }
 
     const regBonus = deposit.registrationBonus || 0;
     const rewUnlock = deposit.bonusRewardUnlock || 0;
@@ -2418,14 +2514,23 @@ export function App() {
 
     // Update users state
     setUsers((prev) => {
-      const nextUsers = prev.map((u) => (u.id === updatedTargetUser.id ? updatedTargetUser : u));
+      const exists = prev.some((u) => u.id === updatedTargetUser.id);
+      const nextUsers = exists
+        ? prev.map((u) => (u.id === updatedTargetUser.id ? updatedTargetUser : u))
+        : [updatedTargetUser, ...prev];
       try {
         localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
       } catch (e) {}
       return nextUsers;
     });
 
-    if (currentUser && currentUser.id === updatedTargetUser.id) {
+    const isCurrentActiveUser =
+      currentUser &&
+      (currentUser.id === updatedTargetUser.id ||
+        (currentUser.phone && updatedTargetUser.phone && currentUser.phone.replace(/\D/g, '').endsWith(updatedTargetUser.phone.replace(/\D/g, '').slice(-10))) ||
+        (currentUser.email && updatedTargetUser.email && currentUser.email.toLowerCase() === updatedTargetUser.email.toLowerCase()));
+
+    if (isCurrentActiveUser) {
       setCurrentUser(updatedTargetUser);
     }
 
@@ -2448,7 +2553,12 @@ export function App() {
       fetch('/api/deposits/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ depositId, remarks }),
+        body: JSON.stringify({
+          depositId,
+          remarks,
+          deposit,
+          updatedUser: updatedTargetUser,
+        }),
       }).catch(() => {});
     } catch (e) {}
 

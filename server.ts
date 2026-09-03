@@ -597,15 +597,27 @@ async function startServer() {
 
   app.post('/api/users/wallet-adjust', (req: Request, res: Response) => {
     try {
-      const { userId, amount, type } = req.body;
-      const targetUser = users.find((u) => u.id === userId);
+      const { userId, amount, type, phone, email } = req.body;
+      let targetUser = users.find((u) => u.id === userId);
+      if (!targetUser && (phone || userId)) {
+        const queryPhone = (phone || userId).replace(/\D/g, '').slice(-10);
+        if (queryPhone.length >= 10) {
+          targetUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(queryPhone));
+        }
+      }
+      if (!targetUser && email) {
+        targetUser = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
+      }
+
       if (targetUser) {
         const num = Number(amount) || 0;
         if (type === 'credit') {
           targetUser.walletBalance = (targetUser.walletBalance || 0) + num;
           targetUser.depositBalance = (targetUser.depositBalance || 0) + num;
+          targetUser.hasDeposited = true;
         } else {
           targetUser.walletBalance = Math.max(0, (targetUser.walletBalance || 0) - num);
+          targetUser.depositBalance = Math.max(0, (targetUser.depositBalance || 0) - num);
         }
         saveStateToDisk();
         return res.json({ success: true, user: targetUser });
@@ -741,8 +753,15 @@ async function startServer() {
 
   app.post('/api/deposits/approve', (req: Request, res: Response) => {
     try {
-      const { depositId, adminRemarks } = req.body;
-      const deposit = deposits.find((d) => d.id === depositId);
+      const { depositId, adminRemarks, updatedUser, deposit: clientDeposit } = req.body;
+      let deposit = deposits.find((d) => d.id === depositId);
+
+      // If deposit not yet in server list, adopt client-provided deposit
+      if (!deposit && clientDeposit && clientDeposit.id) {
+        deposit = clientDeposit;
+        deposits.unshift(deposit);
+      }
+
       if (!deposit) {
         return res.status(404).json({ success: false, error: 'Deposit request not found.' });
       }
@@ -751,7 +770,49 @@ async function startServer() {
       deposit.processedDate = new Date().toISOString();
       deposit.adminRemarks = adminRemarks || 'UTR Verified & Payment Received - Approved';
 
-      const targetUser = users.find((u) => u.id === deposit.userId);
+      // Robust Multi-Factor User Lookup
+      let targetUser = users.find((u) => u.id === deposit!.userId);
+      if (!targetUser && deposit.userPhone) {
+        const cleanPhone = deposit.userPhone.replace(/\D/g, '').slice(-10);
+        targetUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+      }
+      if (!targetUser && deposit.userEmail) {
+        targetUser = users.find((u) => u.email && u.email.toLowerCase() === deposit!.userEmail!.toLowerCase());
+      }
+      if (!targetUser && deposit.userName) {
+        targetUser = users.find((u) => u.name && u.name.trim().toLowerCase() === deposit!.userName!.trim().toLowerCase());
+      }
+
+      // If user still not found in server records, adopt updatedUser from client or auto-create to never lose user payment!
+      if (!targetUser) {
+        if (updatedUser && updatedUser.id) {
+          targetUser = { ...updatedUser };
+          users.push(targetUser);
+        } else {
+          targetUser = {
+            id: deposit.userId || `usr_${Date.now()}`,
+            name: deposit.userName || 'Player',
+            email: deposit.userEmail || `${(deposit.userName || 'user').toLowerCase().replace(/\s+/g, '')}@tambolalive.com`,
+            phone: deposit.userPhone || '+91 9999999999',
+            role: 'user',
+            status: 'active',
+            isBlocked: false,
+            walletBalance: 0,
+            depositBalance: 0,
+            winningBalance: 0,
+            referralBalance: 0,
+            bonusRewardBalance: 0,
+            firstDepositBonusClaimed: false,
+            hasDeposited: false,
+            referralCode: `REF-${(deposit.userName || 'PLY').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+            kycStatus: 'verified',
+            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+            createdAt: new Date().toISOString(),
+          };
+          users.push(targetUser);
+        }
+      }
+
       if (targetUser) {
         const bonus1st = deposit.registrationBonus || (!targetUser.hasDeposited && !targetUser.firstDepositBonusClaimed ? 10 : 0);
         const rewardUnlock = deposit.bonusRewardUnlock || 0;
@@ -764,11 +825,11 @@ async function startServer() {
         targetUser.walletBalance = (targetUser.depositBalance || 0) + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0);
 
         // Update transaction status
-        const txn = transactions.find((t) => t.referenceId === deposit.utrNumber || t.utrNumber === deposit.utrNumber);
+        const txn = transactions.find((t) => t.referenceId === deposit!.utrNumber || t.utrNumber === deposit!.utrNumber);
         if (txn) {
           txn.status = 'completed';
           txn.balanceAfter = targetUser.walletBalance;
-          txn.description = `Deposit approved via ${deposit.paymentMethod} (UTR: ${deposit.utrNumber})`;
+          txn.description = `डिपॉजिट स्वीकृत via ${deposit.paymentMethod} (UTR: ${deposit.utrNumber})`;
         } else {
           transactions.unshift({
             id: `txn_${Date.now()}`,
@@ -810,6 +871,52 @@ async function startServer() {
         user: targetUser,
         message: 'Deposit approved and wallet balance credited successfully.',
       });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // Direct Admin Fund Recharge / Instant Wallet Credit
+  app.post('/api/deposits/direct-credit', (req: Request, res: Response) => {
+    try {
+      const { userId, phone, email, amount, remarks } = req.body;
+      const numAmount = Number(amount) || 0;
+      if (numAmount <= 0) {
+        return res.status(400).json({ success: false, error: 'Amount must be greater than 0' });
+      }
+
+      let targetUser = users.find((u) => u.id === userId);
+      if (!targetUser && phone) {
+        const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+        targetUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+      }
+      if (!targetUser && email) {
+        targetUser = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
+      }
+
+      if (!targetUser) {
+        return res.status(404).json({ success: false, error: 'User not found for direct credit' });
+      }
+
+      targetUser.depositBalance = (targetUser.depositBalance || 0) + numAmount;
+      targetUser.walletBalance = (targetUser.depositBalance || 0) + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0);
+      targetUser.hasDeposited = true;
+
+      const directTxn: WalletTransaction = {
+        id: `txn_dir_${Date.now()}`,
+        userId: targetUser.id,
+        type: 'deposit',
+        amount: numAmount,
+        balanceAfter: targetUser.walletBalance,
+        description: remarks || `Admin Direct Fund Recharge (+₹${numAmount})`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'completed',
+      };
+      transactions.unshift(directTxn);
+
+      saveStateToDisk();
+
+      res.json({ success: true, user: targetUser, transaction: directTxn });
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -1046,49 +1153,72 @@ async function startServer() {
 
   // 3. Ticket Purchase Engine & 5-Level Commission Engine
   app.post('/api/tickets/buy', (req: Request, res: Response) => {
-    const { gameId, quantity = 1, userId } = req.body;
+    const { gameId, quantity = 1, userId, tickets: clientTickets, user: clientUser } = req.body;
     const game = games.find((g) => g.id === gameId);
     if (!game) return res.status(404).json({ error: 'Game not found' });
 
-    const buyer = users.find((u) => u.id === (userId || users[0].id)) || users[0];
+    let buyer = users.find((u) => u.id === (userId || (clientUser ? clientUser.id : '')));
+    if (!buyer && req.body.phone) {
+      buyer = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(req.body.phone.replace(/\D/g, '').slice(-10)));
+    }
+    if (!buyer && clientUser && clientUser.id) {
+      buyer = { ...clientUser };
+      users.push(buyer);
+    }
+    if (!buyer) {
+      buyer = users[0];
+    }
+
     const totalCost = game.ticketPrice * quantity;
 
     // Check balance
-    if (buyer.walletBalance < totalCost) {
-      return res.status(400).json({ error: `Insufficient balance (₹${buyer.walletBalance}). Required: ₹${totalCost}. Please add funds to wallet.` });
+    if ((buyer.walletBalance || 0) < totalCost) {
+      return res.status(400).json({ error: `Insufficient balance (₹${buyer.walletBalance || 0}). Required: ₹${totalCost}. Please add funds to wallet.` });
     }
 
     // Deduct from buyer wallet
     buyer.walletBalance -= totalCost;
-    if (buyer.depositBalance >= totalCost) {
-      buyer.depositBalance -= totalCost;
+    if ((buyer.depositBalance || 0) >= totalCost) {
+      buyer.depositBalance = (buyer.depositBalance || 0) - totalCost;
     } else {
-      const remaining = totalCost - buyer.depositBalance;
+      const remaining = totalCost - (buyer.depositBalance || 0);
       buyer.depositBalance = 0;
-      buyer.winningBalance = Math.max(0, buyer.winningBalance - remaining);
+      buyer.winningBalance = Math.max(0, (buyer.winningBalance || 0) - remaining);
     }
 
-    // Generate Tickets
+    // Adopt client-generated tickets or generate new tickets
     const newTickets: TambolaTicket[] = [];
-    for (let i = 0; i < quantity; i++) {
-      const matrix = generateTambolaTicketMatrix();
-      const ticketId = generateTicketId();
-      const ticket: TambolaTicket = {
-        id: `tkt_${Date.now()}_${i}`,
-        gameId: game.id,
-        gameTitle: game.title,
-        userId: buyer.id,
-        userName: buyer.name,
-        ticketNumber: game.totalTicketsSold + i + 1,
-        ticketId,
-        numbers: matrix,
-        markedNumbers: [],
-        price: game.ticketPrice,
-        purchaseDate: new Date().toISOString(),
-        qrCodeData: `TAMBOLA-LIVE|${ticketId}|${game.gameCode}|${buyer.name}`,
-      };
-      newTickets.push(ticket);
-      tickets.unshift(ticket);
+    if (Array.isArray(clientTickets) && clientTickets.length > 0) {
+      for (const ct of clientTickets) {
+        newTickets.push(ct);
+        const existingIdx = tickets.findIndex((t) => t.id === ct.id);
+        if (existingIdx >= 0) {
+          tickets[existingIdx] = ct;
+        } else {
+          tickets.unshift(ct);
+        }
+      }
+    } else {
+      for (let i = 0; i < quantity; i++) {
+        const matrix = generateTambolaTicketMatrix();
+        const ticketId = generateTicketId();
+        const ticket: TambolaTicket = {
+          id: `tkt_${Date.now()}_${i}`,
+          gameId: game.id,
+          gameTitle: game.title,
+          userId: buyer.id,
+          userName: buyer.name,
+          ticketNumber: game.totalTicketsSold + i + 1,
+          ticketId,
+          numbers: matrix,
+          markedNumbers: [],
+          price: game.ticketPrice,
+          purchaseDate: new Date().toISOString(),
+          qrCodeData: `TAMBOLA-LIVE|${ticketId}|${game.gameCode}|${buyer.name}`,
+        };
+        newTickets.push(ticket);
+        tickets.unshift(ticket);
+      }
     }
 
     game.totalTicketsSold += quantity;
@@ -1107,6 +1237,8 @@ async function startServer() {
       balanceAfter: buyer.walletBalance,
     };
     transactions.unshift(txn);
+
+    saveStateToDisk();
 
     // 8-LEVEL REFERRAL COMMISSION ENGINE (Server-Side Calculation)
     if (siteSettings.referralSystemEnabled) {

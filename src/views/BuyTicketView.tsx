@@ -50,6 +50,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   const [quantity, setQuantity] = useState<number>(2);
   const [loading, setLoading] = useState<boolean>(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
 
   // Live interactive preview ticket generator
   const [previewMatrix, setPreviewMatrix] = useState<number[][]>(() => generateTambolaTicketMatrix());
@@ -57,8 +58,9 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   const selectedGame = allGames.find((g) => g.id === chosenGameId) || initialGame;
   const ticketPrice = selectedGame?.ticketPrice || 50;
   const totalCost = ticketPrice * quantity;
-  // User cannot buy tickets until funded by admin (depositBalance)
-  const canAfford = currentUser.depositBalance >= totalCost;
+  // Available wallet balance (deposit + winning + referral)
+  const availableBalance = (currentUser?.depositBalance || 0) + (currentUser?.winningBalance || 0) + (currentUser?.referralBalance || 0);
+  const canAfford = availableBalance >= totalCost;
 
   const isGlobalBookingOpen = siteSettings?.globalTicketBookingEnabled !== false;
   const isGameActive = selectedGame?.isGameEnabled !== false && selectedGame?.isActive !== false && selectedGame?.status !== 'cancelled';
@@ -88,15 +90,23 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
       return;
     }
 
-    setLoading(true);
-    setSuccessMessage(null);
-    const success = await onBuyTickets(selectedGame.id, quantity);
-    setLoading(false);
-    if (success) {
-      setSuccessMessage(
-        `🎉 Successfully bought ${quantity} ticket(s) for ${selectedGame.title}! Exactly ₹${totalCost} has been deducted from your Ticket Wallet.`
-      );
-      handleRegeneratePreview();
+    try {
+      setLoading(true);
+      setErrorNotice(null);
+      setSuccessMessage(null);
+      const success = await onBuyTickets(selectedGame.id, quantity);
+      setLoading(false);
+      if (success) {
+        setSuccessMessage(
+          `🎉 सफलतापूर्वक ${quantity} टिकट बुक हो गए (${selectedGame.title})! आपके वॉलेट से ₹${totalCost} काट लिए गए हैं।`
+        );
+        handleRegeneratePreview();
+      } else {
+        setErrorNotice('टिकट बुकिंग पूरी नहीं हो सकी। कृपया वॉलेट बैलेंस चेक करें या पुनः प्रयास करें।');
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setErrorNotice(`त्रुटि: ${err?.message || 'टिकट बुक नहीं हो सका। कृपया पुनः प्रयास करें।'}`);
     }
   };
 
