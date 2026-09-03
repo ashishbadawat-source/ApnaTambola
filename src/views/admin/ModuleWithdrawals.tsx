@@ -104,11 +104,11 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
         <div className="flex items-center gap-3">
           <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-400/40 text-xs">
             <span className="text-amber-400 font-bold">Pending: </span>
-            <strong className="text-amber-300 font-black">₹{totalPendingAmount.toLocaleString('en-IN')}</strong> ({pendingList.length})
+            <strong className="text-amber-300 font-black">₹{(totalPendingAmount || 0).toLocaleString('en-IN')}</strong> ({pendingList.length})
           </div>
           <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
             <span className="text-emerald-400 font-bold">Approved: </span>
-            <strong className="text-emerald-300 font-black">₹{totalApprovedAmount.toLocaleString('en-IN')}</strong>
+            <strong className="text-emerald-300 font-black">₹{(totalApprovedAmount || 0).toLocaleString('en-IN')}</strong>
           </div>
         </div>
       </div>
@@ -251,8 +251,8 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
 
                   <td className="px-4 py-3.5 space-y-0.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-slate-400 text-xs line-through">₹{req.amount.toLocaleString('en-IN')}</span>
-                      <span className="text-emerald-400 font-black text-sm">₹{reqNet.toLocaleString('en-IN')}</span>
+                      <span className="text-slate-400 text-xs line-through">₹{(req?.amount || 0).toLocaleString('en-IN')}</span>
+                      <span className="text-emerald-400 font-black text-sm">₹{(reqNet || 0).toLocaleString('en-IN')}</span>
                     </div>
                     <div className="text-[10px] text-slate-400">
                       <span className="text-red-400">TDS 10%: -₹{reqTds}</span> • <span className="text-amber-400">Admin 5%: -₹{reqAdminFee}</span>

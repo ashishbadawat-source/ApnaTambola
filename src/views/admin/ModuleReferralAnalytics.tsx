@@ -328,7 +328,7 @@ export const ReferralGrowthAnalytics: React.FC<ReferralGrowthAnalyticsProps> = (
             <span>Referrals ({daysCount}d)</span>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-amber-300 font-mono mt-1.5">
-            {stats.totalReferrals.toLocaleString()}
+            {(stats?.totalReferrals || 0).toLocaleString()}
           </div>
           <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
             <span className="text-amber-400 font-bold">{stats.referralSharePercent}%</span> of all {stats.totalSignups} sign-ups

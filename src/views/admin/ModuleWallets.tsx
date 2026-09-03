@@ -761,7 +761,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                     <td className="px-4 py-3 font-mono text-pink-300 font-bold">₹{u.winningBalance || 0}</td>
                     <td className="px-4 py-3 font-mono text-emerald-400 font-bold">₹{u.referralBalance || 0}</td>
                     <td className="px-4 py-3 font-black text-amber-300 text-sm">
-                      ₹{(u.walletBalance || (u.depositBalance + u.winningBalance + u.referralBalance)).toLocaleString('en-IN')}
+                      ₹{((u?.walletBalance ?? ((u?.depositBalance || 0) + (u?.winningBalance || 0) + (u?.referralBalance || 0))) || 0).toLocaleString('en-IN')}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

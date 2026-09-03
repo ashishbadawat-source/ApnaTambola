@@ -1,0 +1,123 @@
+Total calls found: 122
+src/App.tsx:1655:            title: `🏆 बधाई! आप ₹${(win?.splitPrizeAmount || 0).toLocaleString('en-IN')} जीत गए!`,
+src/App.tsx:2331:      title: `🏆 Congratulations! You Won ₹${(splitAmount || 0).toLocaleString('en-IN')}!`,
+src/App.tsx:2897:        message: `अपर्याप्त वॉलेट बैलेंस! ₹${amount} भेजने के लिए 5% ट्रांसफर शुल्क (₹${feeAmount}) सहित कुल ₹${totalDeduction} की आवश्यकता है। आपका बैलेंस: ₹${(currentUser?.walletBalance || 0).toLocaleString('en-IN')}`,
+src/App.tsx:3003:      title: `💸 P2P Transfer Successful: ₹${(amount || 0).toLocaleString('en-IN')} Sent`,
+src/App.tsx:3040:        message: `अपर्याप्त विथड्रॉल बैलेंस! आपके पास केवल ₹${(currentUser?.winningBalance || 0).toLocaleString('en-IN')} उपलब्ध है।`,
+src/App.tsx:3074:      title: `🔄 वॉलेट ट्रांसफर सफल: ₹${(amount || 0).toLocaleString('en-IN')}`,
+src/components/ApnaTambolaLiveArena.tsx:150:                Wallet Balance: ₹{(currentUser?.walletBalance || 1450.75).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+src/components/LiveWinnerFlashTicker.tsx:125:                  ₹{(activeFlash?.prizeAmount || 0).toLocaleString('en-IN')}
+src/components/Navbar.tsx:457:                      ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+src/components/WinnerCelebrationModal.tsx:116:            ₹{(winnerData?.prizeAmount || 0).toLocaleString('en-IN')}
+src/components/admin/ReferralGrowthChart.tsx:434:            {stats.totalReferrals.toLocaleString()}
+src/utils/emailTemplates.ts:246:      const time = data.requestTime || new Date().toLocaleString();
+src/utils/emailTemplates.ts:434:      const date = data.requestDate || new Date().toLocaleString();
+src/utils/emailTemplates.ts:555:      const date = data.date || new Date().toLocaleString();
+src/views/BuyTicketView.tsx:264:                            <span>पूल: <strong className="text-amber-400">₹{g.prizePool.toLocaleString('en-IN')}</strong></span>
+src/views/BuyTicketView.tsx:387:                    ₹{currentUser.depositBalance.toLocaleString('en-IN')}
+src/views/BuyTicketView.tsx:395:                    ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+src/views/GamesLobbyView.tsx:76:              ₹{(totalLivePool || 0).toLocaleString('en-IN')}
+src/views/GamesLobbyView.tsx:194:                      ₹{(game.prizePool || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:211:                  ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:217:                  ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:223:                  ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:229:                  ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:390:                  ₹{(totalPrizePool || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:428:                    ग्रैंड बंपर प्राइज पूल: <strong className="text-amber-400 text-sm">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</strong>
+src/views/HomeView.tsx:909:              ₹{(totalMonthlyEarnings || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:1151:                    ₹{(game?.prizePool || 0).toLocaleString('en-IN')}
+src/views/HomeView.tsx:1222:                  +₹{(win?.prizeAmount || 0).toLocaleString('en-IN')}
+src/views/LiveGameView.tsx:180:              Prize: <strong className="text-amber-300 font-black">₹{game.prizePool.toLocaleString('en-IN')}</strong>
+src/views/LiveGameView.tsx:403:                Pool: ₹{game.prizePool.toLocaleString('en-IN')}
+src/views/LiveGameView.tsx:426:                        ₹{prize.amount.toLocaleString('en-IN')}
+src/views/ProfileView.tsx:435:                  ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+src/views/ProfileView.tsx:441:                  ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/ProfileView.tsx:453:                  ₹{(currentUser?.totalWinnings || 18500).toLocaleString('en-IN')}
+src/views/ProfileView.tsx:792:                  Wallet Balance: <strong className="text-white">₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}</strong>
+src/views/ProfileView.tsx:803:                    ₹{transferAmount.toLocaleString('en-IN')}
+src/views/ProfileView.tsx:813:                    +₹{calculatedTransferFee.toLocaleString('en-IN')}
+src/views/ProfileView.tsx:823:                    ₹{calculatedTotalDeduction.toLocaleString('en-IN')}
+src/views/ProfileView.tsx:835:                    ₹{Math.max(0, (currentUser?.walletBalance || 0) - calculatedTotalDeduction).toLocaleString('en-IN')}
+src/views/ProfileView.tsx:1404:                <strong className="text-emerald-400 font-mono">₹{transferAmount.toLocaleString('en-IN')}</strong>
+src/views/ProfileView.tsx:1408:                <strong className="text-amber-400 font-mono">+₹{calculatedTransferFee.toLocaleString('en-IN')}</strong>
+src/views/ProfileView.tsx:1412:                <span>₹{calculatedTotalDeduction.toLocaleString('en-IN')}</span>
+src/views/ProfileView.tsx:1416:                <span className="font-bold">₹{transferAmount.toLocaleString('en-IN')}</span>
+src/views/UserDashboardView.tsx:232:      badgeText: `₹${(currentUser?.walletBalance || 0).toLocaleString('en-IN')} कुल बैलेंस`,
+src/views/UserDashboardView.tsx:519:                ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+src/views/UserDashboardView.tsx:554:                ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/UserDashboardView.tsx:589:                ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
+src/views/UserDashboardView.tsx:616:            <div className="text-lg font-black text-amber-300 font-mono mt-0.5">₹{totalWinnings.toLocaleString('en-IN')}</div>
+src/views/UserDashboardView.tsx:809:                प्राइज पूल: <span className="text-amber-300 font-mono">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</span> • करंट ड्रा: बॉल #{(liveGame?.calledNumbers || []).length} / 90
+src/views/WalletView.tsx:242:      setWithdrawError(`आप केवल अपनी विनिंग बैलेंस (₹${(currentUser?.winningBalance || 0).toLocaleString('en-IN')}) से निकासी कर सकते हैं।`);
+src/views/WalletView.tsx:282:      setConvertError(`आपकी विथड्रॉल बैलेंस (₹${(currentUser?.winningBalance || 0).toLocaleString('en-IN')}) से अधिक राशि ट्रांसफर नहीं हो सकती।`);
+src/views/WalletView.tsx:372:            ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:393:            ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:445:            ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:460:            ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:1008:                ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:1131:                  <span className="font-bold text-white font-mono text-sm">₹{withdrawAmount.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1142:                  <span className="font-bold text-red-400 font-mono">-₹{calculatedTdsAmount.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1153:                  <span className="font-bold text-amber-400 font-mono">-₹{calculatedAdminFee.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1159:                  <span className="font-bold text-red-400 font-mono">-₹{calculatedTotalDeductions.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1173:                    ₹{calculatedNetPayout.toLocaleString('en-IN')}
+src/views/WalletView.tsx:1339:                ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:1349:                ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:1419:                  <strong className="text-emerald-300 font-mono">₹{(currentUser.winningBalance - convertAmount).toLocaleString('en-IN')}</strong>
+src/views/WalletView.tsx:1423:                  <strong className="text-purple-300 font-mono">₹{(currentUser.depositBalance + convertAmount).toLocaleString('en-IN')}</strong>
+src/views/WalletView.tsx:1631:                  Balance: <strong className="text-white">₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}</strong>
+src/views/WalletView.tsx:1638:                  <span className="font-bold text-emerald-400 font-mono text-sm">₹{transferAmount.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1648:                  <span className="font-bold text-amber-400 font-mono">+₹{p2pFeeAmount.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1653:                  <span className="font-black text-base text-amber-400 font-mono">₹{p2pTotalDeduction.toLocaleString('en-IN')}</span>
+src/views/WalletView.tsx:1659:                    ₹{Math.max(0, currentUser.walletBalance - p2pTotalDeduction).toLocaleString('en-IN')}
+src/views/WalletView.tsx:1814:              Total Won: ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+src/views/WalletView.tsx:1848:              Commission Earned: ₹{(currentUser?.referralBalance || 0).toLocaleString('en-IN')}
+src/views/WinnersView.tsx:46:            ₹{totalPrizePaid.toLocaleString('en-IN')}
+src/views/WinnersView.tsx:112:                  ₹{w.prizeAmount.toLocaleString('en-IN')}
+src/views/admin/ModuleDashboard.tsx:538:                  <span className="text-amber-400 font-black text-xs">₹{(totalRevenue * 0.7).toLocaleString('en-IN')} Total Pool</span>
+src/views/admin/ModuleDashboard.tsx:564:              <span className="text-xs text-slate-400">Total Distributed: <strong className="text-pink-300">₹{totalPrizeDistributed.toLocaleString('en-IN')}</strong></span>
+src/views/admin/ModuleDashboard.tsx:853:                        <td className="py-2 px-2 text-cyan-300">₹{(tx.balanceAfter || 95300).toLocaleString('en-IN')}</td>
+src/views/admin/ModuleDashboard.tsx:941:                      ₹{(lbUser.winningBalance || 15400 - idx * 3200).toLocaleString('en-IN')}
+src/views/admin/ModuleDashboard.tsx:1035:                <div className="text-lg font-black text-cyan-300 font-mono">₹{simCalculated.totalCollection.toLocaleString('en-IN')}</div>
+src/views/admin/ModuleDashboard.tsx:1039:                <div className="text-lg font-black text-pink-400 font-mono">₹{simCalculated.prizePool.toLocaleString('en-IN')}</div>
+src/views/admin/ModuleDashboard.tsx:1043:                <div className="text-lg font-black text-amber-400 font-mono">₹{simCalculated.adminShare.toLocaleString('en-IN')}</div>
+src/views/admin/ModuleDashboard.tsx:1070:                        ₹{p.amount.toLocaleString('en-IN')}
+src/views/admin/ModuleEmailSettings.tsx:238:        date: new Date().toLocaleString(),
+src/views/admin/ModuleEmailSettings.tsx:314:      date: new Date().toLocaleString(),
+src/views/admin/ModuleGames.tsx:726:                    <div className="text-sm font-black text-amber-400">₹{(game.prizePool || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleGames.tsx:1042:                    <span>Prize Breakdown (Total Pool: ₹{(computedPrizePool || 0).toLocaleString('en-IN')})</span>
+src/views/admin/ModuleLiveControl.tsx:318:              नियम: मैच शुरू करने के लिए कम से कम 100 टिकट बिकना जरूरी है ताकि ₹{((currentGame?.ticketPrice || 50) * 100 * 0.7).toLocaleString('en-IN')} का 70% मेगा प्राइज़ पूल बन सके।
+src/views/admin/ModulePrizes.tsx:87:    setNotice(`✅ 70% प्राइज पूल (₹${simPrizePool.toLocaleString('en-IN')}) और 30% एडमिन मार्जिन (₹${simAdminMargin.toLocaleString('en-IN')}) का मास्टर प्राइज सेट लोड कर दिया गया है!`);
+src/views/admin/ModulePrizes.tsx:146:    setNotice(`Master prize template applied to all live & upcoming games! (Total Pool: ₹${totalPrizePool.toLocaleString('en-IN')})`);
+src/views/admin/ModulePrizes.tsx:243:            <div className="text-xl font-black text-white font-mono">₹{simCollection.toLocaleString('en-IN')}</div>
+src/views/admin/ModulePrizes.tsx:253:              <span className="text-lg font-black text-emerald-400">₹{simPrizePool.toLocaleString('en-IN')}</span>
+src/views/admin/ModulePrizes.tsx:254:              <span className="text-sm font-black text-amber-300">₹{simAdminMargin.toLocaleString('en-IN')}</span>
+src/views/admin/ModulePrizes.tsx:298:            ₹{totalPrizePool.toLocaleString('en-IN')}
+src/views/admin/ModulePrizes.tsx:309:              ₹{(prizesList.find((p) => p.code === 'full_house')?.amount || 6000).toLocaleString('en-IN')}
+src/views/admin/ModulePrizes.tsx:319:              ).toLocaleString('en-IN')}
+src/views/admin/ModuleReferralAnalytics.tsx:331:            {stats.totalReferrals.toLocaleString()}
+src/views/admin/ModuleReports.tsx:115:          <div className="text-2xl font-black text-white mt-1">₹{(totalTicketRevenue || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleReports.tsx:121:          <div className="text-2xl font-black text-purple-300 mt-1">₹{(totalPrizePaid || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleReports.tsx:133:          <div className="text-2xl font-black text-emerald-300 mt-1">₹{(netPlatformProfit || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleReports.tsx:187:                      <td className="px-4 py-3 font-black text-amber-300">₹{(gross || 0).toLocaleString('en-IN')}</td>
+src/views/admin/ModuleReports.tsx:188:                      <td className="px-4 py-3 font-mono">₹{(g.prizePool || 0).toLocaleString('en-IN')}</td>
+src/views/admin/ModuleReports.tsx:292:                ₹{((transactions || []).filter((t) => t?.type === 'deposit').reduce((s, t) => s + (t?.amount || 0), 0)).toLocaleString('en-IN')}
+src/views/admin/ModuleReports.tsx:298:                ₹{((withdrawals || []).filter((w) => w?.status === 'approved').reduce((s, w) => s + (w?.amount || 0), 0)).toLocaleString('en-IN')}
+src/views/admin/ModuleReports.tsx:304:                ₹{((withdrawals || []).filter((w) => w?.status === 'pending').reduce((s, w) => s + (w?.amount || 0), 0)).toLocaleString('en-IN')}
+src/views/admin/ModuleSettings.tsx:526:                          <span className="font-black text-amber-400 font-mono">₹{(g.prizePool || 0).toLocaleString('en-IN')}</span>
+src/views/admin/ModuleUsers.tsx:575:                          ₹{(user.walletBalance || (user.depositBalance + user.winningBalance + user.referralBalance)).toLocaleString('en-IN')}
+src/views/admin/ModuleUsers.tsx:864:                  Current Balance: ₹{(adjustingUser.walletBalance || 0).toLocaleString('en-IN')}
+src/views/admin/ModuleUsers.tsx:1107:                      ₹{(userToDelete.walletBalance || 0).toLocaleString('en-IN')}
+src/views/admin/ModuleWallets.tsx:304:          <div className="text-2xl font-black text-white mt-1">₹{(totalPlatformLiabilities || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleWallets.tsx:310:          <div className="text-2xl font-black text-blue-300 mt-1">₹{(totalUserDeposits || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleWallets.tsx:322:          <div className="text-2xl font-black text-emerald-300 mt-1">₹{(totalUserWinnings || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleWallets.tsx:452:                          <div className="text-sm font-black text-emerald-400">₹{(dep.amount || 0).toLocaleString('en-IN')}</div>
+src/views/admin/ModuleWallets.tsx:503:                              {dep.requestDate ? new Date(dep.requestDate).toLocaleString('en-IN', {
+src/views/admin/ModuleWallets.tsx:706:                        ₹{(tx.balanceAfter || 0).toLocaleString('en-IN')}
+src/views/admin/ModuleWallets.tsx:764:                      ₹{(u.walletBalance || (u.depositBalance + u.winningBalance + u.referralBalance)).toLocaleString('en-IN')}
+src/views/admin/ModuleWallets.tsx:949:                  ₹{(previewDeposit.amount || 0).toLocaleString('en-IN')}
+src/views/admin/ModuleWallets.tsx:1091:                  ₹{(deletingDeposit.amount || 0).toLocaleString('en-IN')}
+src/views/admin/ModuleWallets.tsx:1104:                    ? new Date(deletingDeposit.requestDate).toLocaleString('en-IN')
+src/views/admin/ModuleWithdrawals.tsx:107:            <strong className="text-amber-300 font-black">₹{totalPendingAmount.toLocaleString('en-IN')}</strong> ({pendingList.length})
+src/views/admin/ModuleWithdrawals.tsx:111:            <strong className="text-emerald-300 font-black">₹{totalApprovedAmount.toLocaleString('en-IN')}</strong>
+src/views/admin/ModuleWithdrawals.tsx:254:                      <span className="text-slate-400 text-xs line-through">₹{req.amount.toLocaleString('en-IN')}</span>
+src/views/admin/ModuleWithdrawals.tsx:255:                      <span className="text-emerald-400 font-black text-sm">₹{reqNet.toLocaleString('en-IN')}</span>

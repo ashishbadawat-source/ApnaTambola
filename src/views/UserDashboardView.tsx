@@ -613,7 +613,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
           {/* Stat 2: Total Won (Gold) */}
           <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-900/80 to-slate-950 border-2 border-amber-400/70 shadow-md">
             <span className="text-[10px] uppercase font-bold text-amber-300 block">🏆 कुल जीती राशि</span>
-            <div className="text-lg font-black text-amber-300 font-mono mt-0.5">₹{totalWinnings.toLocaleString('en-IN')}</div>
+            <div className="text-lg font-black text-amber-300 font-mono mt-0.5">₹{(totalWinnings || 0).toLocaleString('en-IN')}</div>
           </div>
           {/* Stat 3: Active Tickets (Indigo) */}
           <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-900/80 to-slate-950 border-2 border-indigo-400/70 shadow-md">

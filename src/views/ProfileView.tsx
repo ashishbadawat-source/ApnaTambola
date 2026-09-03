@@ -800,7 +800,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     Recipient Gets (प्राप्तकर्ता को मिलेगा)
                   </span>
                   <span className="text-lg sm:text-xl font-black text-emerald-400">
-                    ₹{transferAmount.toLocaleString('en-IN')}
+                    ₹{(transferAmount || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -810,7 +810,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     5% Platform Fee (5% शुल्क)
                   </span>
                   <span className="text-lg sm:text-xl font-black text-amber-400">
-                    +₹{calculatedTransferFee.toLocaleString('en-IN')}
+                    +₹{(calculatedTransferFee || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -820,7 +820,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     Total Deducted (कुल कटेगा)
                   </span>
                   <span className="text-lg sm:text-xl font-black text-amber-300">
-                    ₹{calculatedTotalDeduction.toLocaleString('en-IN')}
+                    ₹{(calculatedTotalDeduction || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
 
@@ -830,9 +830,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     Remaining Balance (बचेगा)
                   </span>
                   <span className={`text-lg sm:text-xl font-black ${
-                    (currentUser?.walletBalance || 0) - calculatedTotalDeduction < 0 ? 'text-red-400' : 'text-slate-200'
+                    (currentUser?.walletBalance || 0) - (calculatedTotalDeduction || 0) < 0 ? 'text-red-400' : 'text-slate-200'
                   }`}>
-                    ₹{Math.max(0, (currentUser?.walletBalance || 0) - calculatedTotalDeduction).toLocaleString('en-IN')}
+                    ₹{(Math.max(0, (currentUser?.walletBalance || 0) - (calculatedTotalDeduction || 0)) || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -1401,19 +1401,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
               <div className="flex justify-between text-slate-300">
                 <span>Fund to Send (भेजने की राशि):</span>
-                <strong className="text-emerald-400 font-mono">₹{transferAmount.toLocaleString('en-IN')}</strong>
+                <strong className="text-emerald-400 font-mono">₹{(transferAmount || 0).toLocaleString('en-IN')}</strong>
               </div>
               <div className="flex justify-between text-slate-300">
                 <span>Platform Fee (5% शुल्क):</span>
-                <strong className="text-amber-400 font-mono">+₹{calculatedTransferFee.toLocaleString('en-IN')}</strong>
+                <strong className="text-amber-400 font-mono">+₹{(calculatedTransferFee || 0).toLocaleString('en-IN')}</strong>
               </div>
               <div className="border-t border-slate-800 pt-2 flex justify-between text-sm font-black text-amber-400">
                 <span>Total Deducted (कुल कटेगा):</span>
-                <span>₹{calculatedTotalDeduction.toLocaleString('en-IN')}</span>
+                <span>₹{(calculatedTotalDeduction || 0).toLocaleString('en-IN')}</span>
               </div>
               <div className="flex justify-between text-[11px] text-emerald-400">
                 <span>Recipient will receive:</span>
-                <span className="font-bold">₹{transferAmount.toLocaleString('en-IN')}</span>
+                <span className="font-bold">₹{(transferAmount || 0).toLocaleString('en-IN')}</span>
               </div>
             </div>
 

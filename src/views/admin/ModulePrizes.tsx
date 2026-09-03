@@ -84,7 +84,7 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
     ];
 
     setPrizesList(newSet);
-    setNotice(`✅ 70% प्राइज पूल (₹${simPrizePool.toLocaleString('en-IN')}) और 30% एडमिन मार्जिन (₹${simAdminMargin.toLocaleString('en-IN')}) का मास्टर प्राइज सेट लोड कर दिया गया है!`);
+    setNotice(`✅ 70% प्राइज पूल (₹${(simPrizePool || 0).toLocaleString('en-IN')}) और 30% एडमिन मार्जिन (₹${(simAdminMargin || 0).toLocaleString('en-IN')}) का मास्टर प्राइज सेट लोड कर दिया गया है!`);
     setTimeout(() => setNotice(null), 5000);
   };
 
@@ -143,7 +143,7 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
         });
       }
     }
-    setNotice(`Master prize template applied to all live & upcoming games! (Total Pool: ₹${totalPrizePool.toLocaleString('en-IN')})`);
+    setNotice(`Master prize template applied to all live & upcoming games! (Total Pool: ₹${(totalPrizePool || 0).toLocaleString('en-IN')})`);
     setTimeout(() => setNotice(null), 5000);
   };
 
@@ -240,7 +240,7 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
 
           <div className="p-3 bg-gradient-to-b from-purple-950/60 to-slate-950 rounded-2xl border border-purple-500/40 space-y-1">
             <label className="text-[11px] text-purple-300 font-bold uppercase block">Total Sales Collection</label>
-            <div className="text-xl font-black text-white font-mono">₹{simCollection.toLocaleString('en-IN')}</div>
+            <div className="text-xl font-black text-white font-mono">₹{(simCollection || 0).toLocaleString('en-IN')}</div>
             <span className="text-[10px] text-purple-300/80 font-bold">100% Gross Intake</span>
           </div>
 
@@ -250,8 +250,8 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
               <span className="text-[11px] text-amber-400 font-bold uppercase">30% Admin</span>
             </div>
             <div className="flex items-baseline justify-between font-mono">
-              <span className="text-lg font-black text-emerald-400">₹{simPrizePool.toLocaleString('en-IN')}</span>
-              <span className="text-sm font-black text-amber-300">₹{simAdminMargin.toLocaleString('en-IN')}</span>
+              <span className="text-lg font-black text-emerald-400">₹{(simPrizePool || 0).toLocaleString('en-IN')}</span>
+              <span className="text-sm font-black text-amber-300">₹{(simAdminMargin || 0).toLocaleString('en-IN')}</span>
             </div>
             <span className="text-[10px] text-slate-400 block">Distributed across 7 prize tiers</span>
           </div>
@@ -295,7 +295,7 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
         <div className="space-y-1">
           <div className="text-xs font-black uppercase tracking-wider text-amber-400">TOTAL MASTER PRIZE POOL</div>
           <div className="text-3xl sm:text-4xl font-black text-white">
-            ₹{totalPrizePool.toLocaleString('en-IN')}
+            ₹{(totalPrizePool || 0).toLocaleString('en-IN')}
           </div>
           <p className="text-xs text-slate-300">
             Across {prizesList.length} defined prize categories • Distributed in real-time upon valid number verification

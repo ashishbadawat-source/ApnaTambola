@@ -535,7 +535,7 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
                     <Trophy className="w-3.5 h-3.5 text-amber-400" />
                     <span>ईनाम बंटवारा (70% Pool / 30% Admin)</span>
                   </span>
-                  <span className="text-amber-400 font-black text-xs">₹{(totalRevenue * 0.7).toLocaleString('en-IN')} Total Pool</span>
+                  <span className="text-amber-400 font-black text-xs">₹{(((totalRevenue || 0) * 0.7) || 0).toLocaleString('en-IN')} Total Pool</span>
                 </div>
 
                 {/* Split Progress Bar */}
@@ -561,7 +561,7 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
 
             {/* Quick Link to Prizes Module */}
             <div className="pt-2 flex items-center justify-between border-t border-pink-500/20">
-              <span className="text-xs text-slate-400">Total Distributed: <strong className="text-pink-300">₹{totalPrizeDistributed.toLocaleString('en-IN')}</strong></span>
+              <span className="text-xs text-slate-400">Total Distributed: <strong className="text-pink-300">₹{(totalPrizeDistributed || 0).toLocaleString('en-IN')}</strong></span>
               <button
                 onClick={() => onNavigateTab('prizes')}
                 className="px-3.5 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-pink-600/20"
@@ -1032,15 +1032,15 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
             <div className="grid grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-950 border border-slate-800 text-center">
               <div>
                 <div className="text-xs text-slate-400">कुल टिकट कलेक्शन (100%)</div>
-                <div className="text-lg font-black text-cyan-300 font-mono">₹{simCalculated.totalCollection.toLocaleString('en-IN')}</div>
+                <div className="text-lg font-black text-cyan-300 font-mono">₹{(simCalculated?.totalCollection || 0).toLocaleString('en-IN')}</div>
               </div>
               <div className="border-x border-slate-800">
                 <div className="text-xs text-slate-400">खिलाड़ियों का ईनाम (70%)</div>
-                <div className="text-lg font-black text-pink-400 font-mono">₹{simCalculated.prizePool.toLocaleString('en-IN')}</div>
+                <div className="text-lg font-black text-pink-400 font-mono">₹{(simCalculated?.prizePool || 0).toLocaleString('en-IN')}</div>
               </div>
               <div>
                 <div className="text-xs text-slate-400">एडमिन मार्जिन (30%)</div>
-                <div className="text-lg font-black text-amber-400 font-mono">₹{simCalculated.adminShare.toLocaleString('en-IN')}</div>
+                <div className="text-lg font-black text-amber-400 font-mono">₹{(simCalculated?.adminShare || 0).toLocaleString('en-IN')}</div>
               </div>
             </div>
 
@@ -1067,7 +1067,7 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
                         {STANDARD_7_PRIZE_CONFIGS[idx]?.collectionPercentage * 100}%
                       </td>
                       <td className="p-2.5 text-right font-black text-emerald-400">
-                        ₹{p.amount.toLocaleString('en-IN')}
+                        ₹{(p?.amount || 0).toLocaleString('en-IN')}
                       </td>
                     </tr>
                   ))}

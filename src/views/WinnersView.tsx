@@ -43,7 +43,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({ winners }) => {
         <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-400/30 text-right self-start sm:self-auto">
           <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Payouts Released</span>
           <span className="text-lg font-black text-amber-400">
-            ₹{totalPrizePaid.toLocaleString('en-IN')}
+            ₹{(totalPrizePaid || 0).toLocaleString('en-IN')}
           </span>
         </div>
       </div>
@@ -109,7 +109,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({ winners }) => {
 
               <div className="text-right">
                 <span className="text-lg font-black text-amber-400 text-glow-gold">
-                  ₹{w.prizeAmount.toLocaleString('en-IN')}
+                  ₹{(w?.prizeAmount || 0).toLocaleString('en-IN')}
                 </span>
                 <span className="text-[10px] text-emerald-400 font-semibold block">
                   ✓ Paid

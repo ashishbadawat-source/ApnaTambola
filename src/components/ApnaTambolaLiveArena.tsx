@@ -147,7 +147,7 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
             </div>
             <div className="flex items-center gap-3 pt-0.5 flex-wrap">
               <span className="text-xs font-black text-amber-300 font-mono">
-                Wallet Balance: ₹{(currentUser?.walletBalance || 1450.75).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                Wallet Balance: ₹{((currentUser?.walletBalance ?? 1450.75) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[11px] font-black text-amber-300">
                 <Coins className="w-3 h-3 text-yellow-400" />

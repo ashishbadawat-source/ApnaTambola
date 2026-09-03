@@ -177,7 +177,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
           <div className="flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-2xl border border-amber-500/30 text-xs">
             <Award className="w-4 h-4 text-amber-400" />
             <span className="text-slate-300">
-              Prize: <strong className="text-amber-300 font-black">₹{game.prizePool.toLocaleString('en-IN')}</strong>
+              Prize: <strong className="text-amber-300 font-black">₹{(game?.prizePool || 0).toLocaleString('en-IN')}</strong>
             </span>
           </div>
 
@@ -400,7 +400,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
                 </h3>
               </div>
               <span className="text-[11px] text-amber-300 font-bold">
-                Pool: ₹{game.prizePool.toLocaleString('en-IN')}
+                Pool: ₹{(game?.prizePool || 0).toLocaleString('en-IN')}
               </span>
             </div>
 
@@ -423,7 +423,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
                         {prize.name}
                       </span>
                       <span className={`font-black ${isClaimed ? 'text-slate-500' : 'text-amber-400'}`}>
-                        ₹{prize.amount.toLocaleString('en-IN')}
+                        ₹{(prize?.amount || 0).toLocaleString('en-IN')}
                       </span>
                     </div>
 

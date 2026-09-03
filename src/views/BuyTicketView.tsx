@@ -261,7 +261,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                             <span>•</span>
                             <span className="text-purple-300 font-semibold">⏰ {g.startTime || '09:00 PM'}</span>
                             <span>•</span>
-                            <span>पूल: <strong className="text-amber-400">₹{g.prizePool.toLocaleString('en-IN')}</strong></span>
+                            <span>पूल: <strong className="text-amber-400">₹{(g.prizePool || 0).toLocaleString('en-IN')}</strong></span>
                           </div>
                         </div>
 
@@ -384,7 +384,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                     <span>टिकट वॉलेट (Deposit Balance):</span>
                   </span>
                   <span className={`font-black ${canAfford ? 'text-emerald-400' : 'text-red-400'}`}>
-                    ₹{currentUser.depositBalance.toLocaleString('en-IN')}
+                    ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-500">
@@ -392,7 +392,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                     <span>💰 विथड्रॉल वॉलेट (Winnings/Bonus):</span>
                   </span>
                   <span className="font-bold text-slate-300">
-                    ₹{currentUser.winningBalance.toLocaleString('en-IN')}
+                    ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -405,7 +405,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                   <span>⚠️ एडमिन से फंड ऐड करना आवश्यक है</span>
                 </div>
                 <p className="text-[11px] text-red-300/90 leading-relaxed">
-                  जब तक एडमिन को पेमेंट करके फंड ऐड (Recharge) नहीं होता, तब तक टिकट नहीं खरीदा जा सकता। टिकट वॉलेट में ₹{totalCost - currentUser.depositBalance} और चाहिए।
+                  जब तक एडमिन को पेमेंट करके फंड ऐड (Recharge) नहीं होता, तब तक टिकट नहीं खरीदा जा सकता। टिकट वॉलेट में ₹{Math.max(0, totalCost - (currentUser?.depositBalance || 0))} और चाहिए।
                 </p>
               </div>
             )}

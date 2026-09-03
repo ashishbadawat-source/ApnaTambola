@@ -111,10 +111,16 @@ export function App() {
       const saved = localStorage.getItem('apna_tambola_auth_user');
       if (saved) {
         const user = JSON.parse(saved);
-        if (user && (user.email === 'ashishbadawat@gmail.com' || user.id === 'admin_master_1')) {
-          user.role = 'admin';
+        if (user) {
+          if (user.email === 'ashishbadawat@gmail.com' || user.id === 'admin_master_1') {
+            user.role = 'admin';
+          }
+          user.walletBalance = Number(user.walletBalance) || 0;
+          user.depositBalance = Number(user.depositBalance) || 0;
+          user.winningBalance = Number(user.winningBalance) || 0;
+          user.referralBalance = Number(user.referralBalance) || 0;
+          return user;
         }
-        return user;
       }
     } catch (e) {
       console.error('Error loading active user session:', e);

@@ -572,7 +572,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                       {/* Wallet Balances */}
                       <td className="px-4 py-3.5 space-y-0.5">
                         <div className="text-amber-300 font-black text-xs">
-                          ₹{(user.walletBalance || (user.depositBalance + user.winningBalance + user.referralBalance)).toLocaleString('en-IN')}
+                          ₹{((user?.walletBalance ?? ((user?.depositBalance || 0) + (user?.winningBalance || 0) + (user?.referralBalance || 0))) || 0).toLocaleString('en-IN')}
                         </div>
                         <div className="text-[10px] text-slate-400 flex items-center gap-2">
                           <span>Dep: ₹{user.depositBalance || 0}</span>

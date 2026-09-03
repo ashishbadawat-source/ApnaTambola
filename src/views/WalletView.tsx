@@ -1128,7 +1128,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                 {/* Gross Amount */}
                 <div className="flex items-center justify-between text-slate-300">
                   <span>Gross Withdrawal Amount (अनुरोधित राशि):</span>
-                  <span className="font-bold text-white font-mono text-sm">₹{withdrawAmount.toLocaleString('en-IN')}</span>
+                  <span className="font-bold text-white font-mono text-sm">₹{(withdrawAmount || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 {/* 10% TDS */}
@@ -1139,7 +1139,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                     </span>
                     <span>सरकारी टैक्स कटौती (Govt TDS):</span>
                   </div>
-                  <span className="font-bold text-red-400 font-mono">-₹{calculatedTdsAmount.toLocaleString('en-IN')}</span>
+                  <span className="font-bold text-red-400 font-mono">-₹{(calculatedTdsAmount || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 {/* 5% Admin Charges */}
@@ -1150,13 +1150,13 @@ export const WalletView: React.FC<WalletViewProps> = ({
                     </span>
                     <span>एडमिन चार्जेस (Platform Handling):</span>
                   </div>
-                  <span className="font-bold text-amber-400 font-mono">-₹{calculatedAdminFee.toLocaleString('en-IN')}</span>
+                  <span className="font-bold text-amber-400 font-mono">-₹{(calculatedAdminFee || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 {/* Total Deductions */}
                 <div className="flex items-center justify-between text-slate-400 pt-1 border-t border-slate-800/80 text-[11px]">
                   <span>Total Deductions (कुल कटौती - 15%):</span>
-                  <span className="font-bold text-red-400 font-mono">-₹{calculatedTotalDeductions.toLocaleString('en-IN')}</span>
+                  <span className="font-bold text-red-400 font-mono">-₹{(calculatedTotalDeductions || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 {/* Net Payout */}
@@ -1170,7 +1170,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
                     </span>
                   </div>
                   <span className="text-lg sm:text-xl font-black text-emerald-300 font-mono">
-                    ₹{calculatedNetPayout.toLocaleString('en-IN')}
+                    ₹{(calculatedNetPayout || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -1408,7 +1408,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
             </div>
 
             {/* Live Calculation Preview */}
-            {convertAmount > 0 && convertAmount <= currentUser.winningBalance && (
+            {convertAmount > 0 && convertAmount <= (currentUser?.winningBalance || 0) && (
               <div className="p-4 rounded-2xl bg-slate-950/80 border border-emerald-500/30 space-y-2 text-xs">
                 <div className="font-bold text-white flex items-center justify-between">
                   <span>ट्रांसफर उपरांत नया बैलेंस (Balance after transfer):</span>
@@ -1416,11 +1416,11 @@ export const WalletView: React.FC<WalletViewProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-slate-300">
                   <span>नया विथड्रॉल वॉलेट:</span>
-                  <strong className="text-emerald-300 font-mono">₹{(currentUser.winningBalance - convertAmount).toLocaleString('en-IN')}</strong>
+                  <strong className="text-emerald-300 font-mono">₹{(Math.max(0, (currentUser?.winningBalance || 0) - convertAmount) || 0).toLocaleString('en-IN')}</strong>
                 </div>
                 <div className="flex items-center justify-between text-slate-300">
                   <span>नया टिकट वॉलेट:</span>
-                  <strong className="text-purple-300 font-mono">₹{(currentUser.depositBalance + convertAmount).toLocaleString('en-IN')}</strong>
+                  <strong className="text-purple-300 font-mono">₹{(((currentUser?.depositBalance || 0) + convertAmount) || 0).toLocaleString('en-IN')}</strong>
                 </div>
               </div>
             )}
@@ -1635,7 +1635,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between text-slate-300">
                   <span>Recipient Receives (प्राप्तकर्ता को मिलेगा):</span>
-                  <span className="font-bold text-emerald-400 font-mono text-sm">₹{transferAmount.toLocaleString('en-IN')}</span>
+                  <span className="font-bold text-emerald-400 font-mono text-sm">₹{(transferAmount || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-amber-300">
@@ -1645,18 +1645,18 @@ export const WalletView: React.FC<WalletViewProps> = ({
                     </span>
                     <span>5% ट्रांसफर शुल्क (Platform Fee):</span>
                   </div>
-                  <span className="font-bold text-amber-400 font-mono">+₹{p2pFeeAmount.toLocaleString('en-IN')}</span>
+                  <span className="font-bold text-amber-400 font-mono">+₹{(p2pFeeAmount || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-amber-300 pt-2 border-t border-slate-800/80">
                   <span className="font-black text-sm">Total Deducted from Your Wallet (कुल कटौती):</span>
-                  <span className="font-black text-base text-amber-400 font-mono">₹{p2pTotalDeduction.toLocaleString('en-IN')}</span>
+                  <span className="font-black text-base text-amber-400 font-mono">₹{(p2pTotalDeduction || 0).toLocaleString('en-IN')}</span>
                 </div>
 
                 <div className="flex items-center justify-between text-slate-400 text-[11px]">
                   <span>Remaining Balance After Transfer (बचा हुआ बैलेंस):</span>
-                  <span className={`font-bold font-mono ${currentUser.walletBalance - p2pTotalDeduction < 0 ? 'text-red-400' : 'text-slate-200'}`}>
-                    ₹{Math.max(0, currentUser.walletBalance - p2pTotalDeduction).toLocaleString('en-IN')}
+                  <span className={`font-bold font-mono ${(currentUser?.walletBalance || 0) - (p2pTotalDeduction || 0) < 0 ? 'text-red-400' : 'text-slate-200'}`}>
+                    ₹{(Math.max(0, (currentUser?.walletBalance || 0) - (p2pTotalDeduction || 0)) || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
