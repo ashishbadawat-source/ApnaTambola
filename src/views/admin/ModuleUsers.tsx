@@ -100,6 +100,13 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   // Local blocked status tracker for optimistic updates
   const [blockedMap, setBlockedMap] = useState<Record<string, boolean>>({});
   const [resetPassMsg, setResetPassMsg] = useState<string | null>(null);
+  const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
+
+  const handleCopyUserId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedUserId(id);
+    setTimeout(() => setCopiedUserId(null), 2000);
+  };
 
   // Helper to check if a user is recently registered (within last 7 days or newly added)
   const isRecentUser = (u: User) => {
@@ -125,16 +132,18 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
       if (filterTab === 'kyc_verified' && u.kycStatus !== 'verified') return false;
       if (filterTab === 'vip' && (u.walletBalance || 0) < 1000) return false;
 
-      // Search query
+      // Search query: Matches User ID, Name, Phone, Email, Referral Code, Sponsor ID
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+        const q = searchQuery.toLowerCase().trim();
         return (
+          (u.id && u.id.toLowerCase().includes(q)) ||
+          ((u as any).user_id && String((u as any).user_id).toLowerCase().includes(q)) ||
           (u.name && u.name.toLowerCase().includes(q)) ||
           (u.email && u.email.toLowerCase().includes(q)) ||
           (u.phone && u.phone.toLowerCase().includes(q)) ||
-          (u.id && u.id.toLowerCase().includes(q)) ||
           (u.referralCode && u.referralCode.toLowerCase().includes(q)) ||
-          (u.referredBy && u.referredBy.toLowerCase().includes(q))
+          (u.referredBy && u.referredBy.toLowerCase().includes(q)) ||
+          (u.referredByUserId && u.referredByUserId.toLowerCase().includes(q))
         );
       }
       return true;
@@ -377,7 +386,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search name, phone, ref..."
+              placeholder="Search by User ID (usr_...), Name, Mobile (+91...), Email, Sponsor ID..."
               className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 transition-colors"
             />
           </div>
@@ -451,6 +460,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                     )}
                   </button>
                 </th>
+                <th className="px-4 py-3.5 whitespace-nowrap text-amber-400">User ID</th>
                 <th className="px-4 py-3.5">User / Player</th>
                 <th className="px-4 py-3.5">Registered Date</th>
                 <th className="px-4 py-3.5">Contact Details</th>
@@ -489,6 +499,28 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                         </button>
                       </td>
 
+                      {/* Dedicated User ID Column */}
+                      <td className="px-4 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-amber-400/40 w-fit font-mono text-xs text-amber-300 shadow-inner">
+                          <span className="font-bold select-all">{user.id}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyUserId(user.id)}
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                            title="Copy User ID"
+                          >
+                            {copiedUserId === user.id ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                        {copiedUserId === user.id && (
+                          <span className="text-[10px] text-emerald-400 font-bold block mt-0.5 animate-in fade-in">✓ ID Copied!</span>
+                        )}
+                      </td>
+
                       {/* User Profile Cell */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-3">
@@ -512,7 +544,17 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] text-slate-400 font-mono">ID: {user.id}</div>
+                            <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                              <span>ID: {user.id}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyUserId(user.id)}
+                                className="text-slate-500 hover:text-amber-400 transition-colors p-0.5"
+                                title="Copy ID"
+                              >
+                                <Copy className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -709,7 +751,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={11} className="px-4 py-8 text-center text-slate-500">
                     कोई यूज़र नहीं मिला (No users matching the selected criteria).
                   </td>
                 </tr>
@@ -958,7 +1000,24 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 />
                 <div>
                   <h3 className="text-lg font-black text-white">{selectedUser.name}</h3>
-                  <p className="text-xs text-slate-400 font-mono">ID: {selectedUser.id}</p>
+                  <div className="flex items-center gap-1.5 mt-1 bg-slate-950 px-2.5 py-1 rounded-lg border border-amber-400/40 w-fit">
+                    <span className="text-xs text-amber-300 font-mono font-bold select-all">ID: {selectedUser.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyUserId(selectedUser.id)}
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                      title="Copy User ID"
+                    >
+                      {copiedUserId === selectedUser.id ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                    {copiedUserId === selectedUser.id && (
+                      <span className="text-[10px] text-emerald-400 font-bold">✓ Copied!</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <button

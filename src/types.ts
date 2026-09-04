@@ -258,6 +258,8 @@ export interface DepositRequest {
   adminRemarks?: string;
   registrationBonus?: number;
   bonusRewardUnlock?: number;
+  timestamp?: string;
+  createdAt?: string;
 }
 
 export interface WithdrawalRequest {

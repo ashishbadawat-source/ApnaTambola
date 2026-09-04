@@ -436,7 +436,17 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="text-[10px] font-mono text-amber-400">ID: {dep.userId}</div>
+                            <div className="text-[10px] font-mono text-amber-400 flex items-center gap-1 mt-0.5">
+                              <span>ID: {dep.userId}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyUtr(dep.userId)}
+                                className="text-slate-500 hover:text-amber-400 transition-colors p-0.5 cursor-pointer"
+                                title="Copy User ID"
+                              >
+                                <Copy className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
                             <div className="text-[10px] text-slate-400">{dep.userPhone || dep.userEmail || '—'}</div>
                             {isDuplicate && (
                               <div className="text-[10px] text-amber-300 font-bold flex items-center gap-1 mt-0.5">
@@ -694,8 +704,21 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                           {tx.type.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-medium text-white max-w-xs truncate">
-                        {tx.description}
+                      <td className="px-4 py-3 font-medium text-white max-w-xs">
+                        <div>{tx.description}</div>
+                        {tx.userId && (
+                          <div className="text-[10px] font-mono text-amber-400/90 flex items-center gap-1 mt-0.5">
+                            <span>User ID: {tx.userId}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyUtr(tx.userId!)}
+                              className="text-slate-500 hover:text-amber-400 p-0.5 cursor-pointer"
+                              title="Copy User ID"
+                            >
+                              <Copy className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-black text-xs">
                         <span className={isCredit ? 'text-emerald-400' : 'text-red-400'}>
@@ -737,6 +760,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950/80 text-slate-400 uppercase font-black text-[10px] tracking-wider border-b border-slate-800">
                 <tr>
+                  <th className="px-4 py-3 whitespace-nowrap text-amber-400">User ID</th>
                   <th className="px-4 py-3">User</th>
                   <th className="px-4 py-3">Deposit Wallet</th>
                   <th className="px-4 py-3">Winning Wallet</th>
@@ -748,6 +772,19 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
               <tbody className="divide-y divide-slate-800/60 text-slate-300">
                 {users.map((u) => (
                   <tr key={u.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-amber-400/40 w-fit font-mono text-xs text-amber-300">
+                        <span className="font-bold select-all">{u.id}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyUtr(u.id)}
+                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer ml-0.5"
+                          title="Copy User ID"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <img src={u.avatar} alt={u.name} className="w-8 h-8 rounded-lg object-cover" />

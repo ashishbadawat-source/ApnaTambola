@@ -19,13 +19,14 @@ import {
   Maximize2,
   Minimize2,
   Zap,
+  Info,
 } from 'lucide-react';
 import { User, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
 
 export interface TreeNodeData {
   user: User;
-  level: number; // 0 for root (currentUser), 1..5 for downline
+  level: number; // 0 for root (currentUser), 1..8 for downline
   ticketsBought: number;
   commissionEarned: number;
   children: TreeNodeData[];
@@ -110,6 +111,39 @@ const LEVEL_CONFIG: Record<
     glow: 'shadow-[0_0_10px_rgba(6,182,212,0.2)]',
     lineColor: 'border-cyan-400/70',
   },
+  6: {
+    name: 'Level 6 (Tier 6)',
+    rate: '0.2%',
+    badgeBg: 'bg-rose-500',
+    badgeText: 'text-white font-black',
+    border: 'border-rose-500/60',
+    gradient: 'from-rose-900/30 via-slate-900 to-slate-950',
+    cardBg: 'bg-rose-950/20',
+    glow: 'shadow-[0_0_10px_rgba(244,63,94,0.2)]',
+    lineColor: 'border-rose-400/70',
+  },
+  7: {
+    name: 'Level 7 (Tier 7)',
+    rate: '0.1%',
+    badgeBg: 'bg-indigo-500',
+    badgeText: 'text-white font-black',
+    border: 'border-indigo-500/60',
+    gradient: 'from-indigo-900/30 via-slate-900 to-slate-950',
+    cardBg: 'bg-indigo-950/20',
+    glow: 'shadow-[0_0_10px_rgba(99,102,241,0.2)]',
+    lineColor: 'border-indigo-400/70',
+  },
+  8: {
+    name: 'Level 8 (Tier 8)',
+    rate: '0.1%',
+    badgeBg: 'bg-teal-500',
+    badgeText: 'text-slate-950 font-black',
+    border: 'border-teal-500/60',
+    gradient: 'from-teal-900/30 via-slate-900 to-slate-950',
+    cardBg: 'bg-teal-950/20',
+    glow: 'shadow-[0_0_10px_rgba(20,184,166,0.2)]',
+    lineColor: 'border-teal-400/70',
+  },
 };
 
 export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
@@ -122,16 +156,16 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [collapsedNodes, setCollapsedNodes] = useState<Record<string, boolean>>({});
-  const [maxDisplayLevel, setMaxDisplayLevel] = useState<number>(5);
+  const [maxDisplayLevel, setMaxDisplayLevel] = useState<number>(8);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // 1. Recursively build the 1-to-5 Level Hierarchy Tree for currentUser
+  // 1. Recursively build the 1-to-8 Level Hierarchy Tree for currentUser
   const downlineTree = useMemo(() => {
     if (!currentUser) return null;
 
     const buildSubtree = (parentNode: User, currentDepth: number, visited: Set<string>): TreeNodeData[] => {
-      // Limit tree depth strictly to Level 5
-      if (currentDepth > 5) return [];
+      // Limit tree depth strictly to Level 8
+      if (currentDepth > 8) return [];
 
       const directChildren = allUsers.filter((u) => !visited.has(u.id) && isDirectChildOf(u, parentNode, commissions));
 
@@ -170,7 +204,7 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
     return rootTreeNode;
   }, [currentUser, allUsers, referralMembers, commissions]);
 
-  // 2. Count statistics for Level 1 through Level 5
+  // 2. Count statistics for Level 1 through Level 8
   const levelMetrics = useMemo(() => {
     const counts: Record<number, { count: number; commission: number; tickets: number }> = {
       1: { count: 0, commission: 0, tickets: 0 },
@@ -178,10 +212,13 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
       3: { count: 0, commission: 0, tickets: 0 },
       4: { count: 0, commission: 0, tickets: 0 },
       5: { count: 0, commission: 0, tickets: 0 },
+      6: { count: 0, commission: 0, tickets: 0 },
+      7: { count: 0, commission: 0, tickets: 0 },
+      8: { count: 0, commission: 0, tickets: 0 },
     };
 
     const traverse = (node: TreeNodeData) => {
-      if (node.level >= 1 && node.level <= 5) {
+      if (node.level >= 1 && node.level <= 8) {
         counts[node.level].count += 1;
         counts[node.level].commission += node.commissionEarned;
         counts[node.level].tickets += node.ticketsBought;
@@ -195,10 +232,10 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
       downlineTree.children.forEach(traverse);
     }
 
-    const totalL1ToL5Members = Object.values(counts).reduce((sum, item) => sum + item.count, 0);
-    const totalL1ToL5Commission = Object.values(counts).reduce((sum, item) => sum + item.commission, 0);
+    const totalL1ToL8Members = Object.values(counts).reduce((sum, item) => sum + item.count, 0);
+    const totalL1ToL8Commission = Object.values(counts).reduce((sum, item) => sum + item.commission, 0);
 
-    return { counts, totalL1ToL5Members, totalL1ToL5Commission };
+    return { counts, totalL1ToL8Members, totalL1ToL8Commission };
   }, [downlineTree]);
 
   // 3. Node collapse / expand handlers
@@ -249,7 +286,7 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* 🌟 Top Header & Hierarchy Metrics Banner (Level 1 down to Level 5) */}
+      {/* 🌟 Top Header & Hierarchy Metrics Banner (Level 1 down to Level 8) */}
       <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-[#170929] via-[#0d162f] to-[#071f24] border-2 border-amber-400/80 shadow-2xl space-y-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-amber-400/20 pb-4">
           <div className="flex items-center gap-3">
@@ -259,14 +296,14 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg sm:text-xl font-black text-white tracking-wide">
-                  5-Level Downline Hierarchy Tree
+                  8-Level Downline Hierarchy Tree
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-black">
-                  Level 1 ➔ Level 5 Live
+                  Level 1 ➔ Level 8 Live
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Hierarchically explore your Level 1 to Level 5 downline network with collapsible nodes and real-time commission stats.
+                Hierarchically explore your Level 1 to Level 8 downline network with collapsible nodes and real-time ticket commission stats.
               </p>
             </div>
           </div>
@@ -296,9 +333,17 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
           </div>
         </div>
 
-        {/* 5-Level Summary Mini-Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[1, 2, 3, 4, 5].map((lvl) => {
+        {/* 📢 Hindi Commission Rule Notice Banner */}
+        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-400/40 flex items-start gap-2.5 text-xs text-amber-200">
+          <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="leading-relaxed">
+            <strong className="text-white">📌 कमीशन नियम (Commission Rules):</strong> फंड डिपॉजिट (Wallet Deposit) पर कोई कमीशन नहीं बनता। कमीशन सिर्फ डायरेक्ट और डाउनलाइन में <strong>लॉटरी टिकट खरीदने (Ticket Purchases)</strong> पर ही <strong>8 लेवल तक</strong> मिलता है (L1: 2.0%, L2: 1.0%, L3: 0.5%, L4: 0.4%, L5: 0.3%, L6: 0.2%, L7: 0.1%, L8: 0.1%)।
+          </div>
+        </div>
+
+        {/* 8-Level Summary Mini-Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((lvl) => {
             const config = LEVEL_CONFIG[lvl];
             const data = levelMetrics.counts[lvl];
             const isActiveFilter = maxDisplayLevel >= lvl;
@@ -306,21 +351,20 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
             return (
               <div
                 key={lvl}
-                className={`p-3.5 rounded-2xl border transition-all ${
+                className={`p-3 rounded-2xl border transition-all ${
                   isActiveFilter ? `${config.cardBg} ${config.border} shadow-lg` : 'bg-slate-950/40 border-slate-800 opacity-60'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${config.badgeBg} ${config.badgeText}`}>
+                  <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${config.badgeBg} ${config.badgeText}`}>
                     L{lvl} • {config.rate}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">{config.name.split(' ')[0]}</span>
                 </div>
                 <div className="mt-2 flex items-baseline justify-between">
-                  <div className="text-lg font-black text-white font-mono">{data.count} <span className="text-[10px] text-slate-400 font-normal">users</span></div>
-                  <div className="text-xs font-black text-amber-400 font-mono">+₹{data.commission.toFixed(1)}</div>
+                  <div className="text-base font-black text-white font-mono">{data.count} <span className="text-[9px] text-slate-400 font-normal">users</span></div>
                 </div>
-                <div className="mt-1 text-[10px] text-slate-400 flex items-center justify-between border-t border-slate-800/80 pt-1">
+                <div className="text-xs font-black text-amber-400 font-mono mt-0.5">+₹{data.commission.toFixed(1)}</div>
+                <div className="mt-1 text-[9px] text-slate-400 flex items-center justify-between border-t border-slate-800/80 pt-1">
                   <span>Tickets:</span>
                   <span className="font-bold text-slate-300">{data.tickets}</span>
                 </div>
@@ -359,11 +403,11 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
             <span className="text-[10px] text-slate-400 px-2 font-bold uppercase flex items-center gap-1">
               <Filter className="w-3 h-3 text-amber-400" /> Max Depth:
             </span>
-            {[1, 2, 3, 4, 5].map((lvl) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((lvl) => (
               <button
                 key={lvl}
                 onClick={() => setMaxDisplayLevel(lvl)}
-                className={`px-2.5 py-1 rounded-lg font-black text-xs transition-colors cursor-pointer ${
+                className={`px-2 py-1 rounded-lg font-black text-xs transition-colors cursor-pointer ${
                   maxDisplayLevel === lvl
                     ? 'bg-amber-400 text-slate-950 shadow'
                     : 'text-slate-400 hover:text-white'
@@ -380,7 +424,7 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
               type="button"
               onClick={handleExpandAll}
               className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-              title="Expand all Level 1 to Level 5 branches"
+              title="Expand all Level 1 to Level 8 branches"
             >
               <Maximize2 className="w-3.5 h-3.5 text-amber-400" />
               <span>Expand All</span>
@@ -461,21 +505,21 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
               <strong className="text-amber-300 font-black text-sm">{downlineTree?.children?.length || 0} Members ⚡</strong>
             </div>
             <div className="p-2 rounded-xl bg-purple-950/40 border border-purple-800/40">
-              <span className="text-[10px] text-purple-300 font-bold block">L1-L5 Downline</span>
-              <strong className="text-purple-300 font-black text-sm">{levelMetrics.totalL1ToL5Members} Total</strong>
+              <span className="text-[10px] text-purple-300 font-bold block">L1-L8 Downline</span>
+              <strong className="text-purple-300 font-black text-sm">{levelMetrics.totalL1ToL8Members} Total</strong>
             </div>
             <div className="p-2 rounded-xl bg-emerald-950/40 border border-emerald-800/40">
               <span className="text-[10px] text-emerald-300 font-bold block">Total Commission</span>
-              <strong className="text-emerald-400 font-black text-sm">₹{levelMetrics.totalL1ToL5Commission.toFixed(2)}</strong>
+              <strong className="text-emerald-400 font-black text-sm">₹{levelMetrics.totalL1ToL8Commission.toFixed(2)}</strong>
             </div>
             <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800">
               <span className="text-[10px] text-slate-400 font-bold block">Hierarchy Depth</span>
-              <strong className="text-cyan-300 font-black text-sm">5 Active Levels</strong>
+              <strong className="text-cyan-300 font-black text-sm">8 Active Levels</strong>
             </div>
           </div>
         </div>
 
-        {/* 🌿 Level 1 down to Level 5 Branches */}
+        {/* 🌿 Level 1 down to Level 8 Branches */}
         {downlineTree?.children && downlineTree.children.length > 0 ? (
           <div className="relative pl-3 sm:pl-6 border-l-2 border-amber-400/80 space-y-3 pt-2">
             {downlineTree.children.map((childNode) => (

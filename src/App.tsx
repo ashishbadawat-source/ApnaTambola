@@ -344,12 +344,27 @@ export function App() {
               map.set(u.id, { ...(existing || {}), ...u });
             });
 
-            return Array.from(map.values()).sort((a, b) => {
+            const merged = Array.from(map.values()).sort((a, b) => {
               const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
               const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
               return timeB - timeA;
             });
+
+            try {
+              localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
+            } catch (e) {}
+
+            return merged;
           });
+
+          // Sync Firestore users to backend server so admin and all devices have all user IDs
+          if (firestoreUsers.length > 0) {
+            fetch('/api/users/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ users: firestoreUsers }),
+            }).catch(() => {});
+          }
 
           // If current logged-in user is updated or deleted in Firestore, keep currentUser state live
           setCurrentUser((prevUser) => {
@@ -747,6 +762,13 @@ export function App() {
                 } catch {}
                 return merged;
               });
+
+              // Forward Firestore users to backend server so server and admin always have all user IDs
+              fetch('/api/users/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ users: fsUsers }),
+              }).catch(() => {});
             }
           }
 
