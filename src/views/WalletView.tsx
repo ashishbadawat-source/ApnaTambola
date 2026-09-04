@@ -28,13 +28,16 @@ import {
   Camera,
   X,
   FileText,
+  Eye,
+  RefreshCw,
 } from 'lucide-react';
-import { User, WalletTransaction, WithdrawalRequest, SiteSettings } from '../types';
+import { User, WalletTransaction, WithdrawalRequest, SiteSettings, DepositRequest } from '../types';
 
 interface WalletViewProps {
   currentUser: User;
   transactions: WalletTransaction[];
   withdrawals: WithdrawalRequest[];
+  deposits?: DepositRequest[];
   settings?: SiteSettings;
   users?: User[];
   onDeposit: (amount: number, method: string, utrNumber?: string, proofUrl?: string) => Promise<boolean>;
@@ -56,6 +59,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
   currentUser,
   transactions,
   withdrawals,
+  deposits = [],
   settings,
   users = [],
   onDeposit,
@@ -83,6 +87,19 @@ export const WalletView: React.FC<WalletViewProps> = ({
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositSuccess, setDepositSuccess] = useState<string | null>(null);
   const [depositError, setDepositError] = useState<string | null>(null);
+
+  // Single Upload & Lightbox state for deposits
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
+  const [isRefreshingDeposit, setIsRefreshingDeposit] = useState<boolean>(false);
+  const [copiedPendingUtr, setCopiedPendingUtr] = useState<boolean>(false);
+
+  // Find active pending deposit request for current user (if any)
+  const userPendingDeposit = (deposits || []).find(
+    (d) =>
+      d.status === 'pending' &&
+      (d.userId === currentUser.id ||
+        (currentUser.phone && d.userPhone && currentUser.phone.replace(/\D/g, '').endsWith(d.userPhone.replace(/\D/g, '').slice(-10))))
+  );
 
   // P2P Transfer Form State
   const [transferRecipient, setTransferRecipient] = useState('');
@@ -200,6 +217,14 @@ export const WalletView: React.FC<WalletViewProps> = ({
     e.preventDefault();
     setDepositError(null);
     setDepositSuccess(null);
+
+    // Rule: User can only upload 1 deposit screenshot/UTR at a time until admin acts
+    if (userPendingDeposit) {
+      setDepositError(
+        `⚠️ आपका पिछला डिपॉजिट अनुरोध (राशि: ₹${userPendingDeposit.amount}, UTR: ${userPendingDeposit.utrNumber}) पहले से एडमिन वेरिफिकेशन के लिए पेंडिंग है। एडमिन द्वारा इसे अप्रूव या रिमूव करने के बाद ही आप नया UTR व स्क्रीनशॉट अपलोड कर सकेंगे।`
+      );
+      return;
+    }
 
     if (depositAmount < minDepositLimit) {
       setDepositError(`न्यूनतम डिपोजिट राशि ₹${minDepositLimit} है। (Minimum deposit is ₹${minDepositLimit})`);
@@ -642,6 +667,223 @@ export const WalletView: React.FC<WalletViewProps> = ({
             </span>
           </div>
 
+          {/* SINGLE-UPLOAD RULE: If user already has a pending deposit, lock re-upload until admin approves or removes it */}
+          {userPendingDeposit ? (
+            <div className="p-5 sm:p-7 rounded-3xl bg-gradient-to-b from-amber-950/40 via-slate-900 to-slate-950 border-2 border-amber-500/50 shadow-2xl space-y-6 animate-in fade-in">
+              {/* Header with pulsating badge */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-amber-500/30 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-inner relative">
+                    <Clock className="w-6 h-6" />
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full animate-ping" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base sm:text-lg font-black text-white">
+                        डिपॉजिट अनुरोध समीक्षाधीन है
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/25 text-amber-300 text-[10px] font-black border border-amber-500/40 animate-pulse">
+                        ⏳ एडमिन अप्रूवल पेंडिंग
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      आपका पेमेंट स्क्रीनशॉट व UTR एडमिन वेरिफिकेशन कतार में है
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRefreshingDeposit(true);
+                    setTimeout(() => setIsRefreshingDeposit(false), 900);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition-all active:scale-95"
+                  title="ताज़ा स्थिति जांचें"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isRefreshingDeposit ? 'animate-spin' : ''}`} />
+                  <span>रिफ्रेश</span>
+                </button>
+              </div>
+
+              {/* 🛡️ Single Upload Policy Guidance Banner */}
+              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-2">
+                <div className="flex items-start gap-2.5">
+                  <ShieldCheck className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="text-xs sm:text-sm font-black text-amber-200">
+                      स्क्रीनशॉट व UTR अपलोड नियम (Single Upload Policy)
+                    </h4>
+                    <p className="text-xs text-amber-100/90 leading-relaxed">
+                      एक समय में केवल <strong>एक ही पेमेंट स्क्रीनशॉट व UTR</strong> अपलोड किया जा सकता है। जब एडमिन द्वारा आपका यह स्क्रीनशॉट <strong>स्वीकृत (Approve)</strong> या <strong>रिमूव (Remove / Delete)</strong> कर दिया जाएगा, उसके बाद ही आप दोबारा नया स्क्रीनशॉट और UTR अपलोड कर सकेंगे।
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pending Deposit Details Box */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-4 shadow-inner">
+                <div className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                  <span>जमा अनुरोध विवरण (Submitted Deposit Slip)</span>
+                  <span className="text-[10px] text-amber-400 font-mono">Ref ID: {userPendingDeposit.id}</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                    <span className="text-slate-400 font-medium">जमा राशि (Deposit Amount):</span>
+                    <span className="text-emerald-400 font-black text-base">₹{userPendingDeposit.amount.toLocaleString('en-IN')}</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                    <span className="text-slate-400 font-medium">12-Digit UTR:</span>
+                    <div className="flex items-center gap-1.5 font-mono text-amber-300 font-bold">
+                      <span>{userPendingDeposit.utrNumber}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard?.writeText(userPendingDeposit.utrNumber);
+                          setCopiedPendingUtr(true);
+                          setTimeout(() => setCopiedPendingUtr(false), 2000);
+                        }}
+                        className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                        title="Copy UTR"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                    <span className="text-slate-400 font-medium">सबमिशन समय (Time):</span>
+                    <span className="text-slate-200 font-bold">
+                      {userPendingDeposit.requestDate ? new Date(userPendingDeposit.requestDate).toLocaleString('hi-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }) : 'Recent'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                    <span className="text-slate-400 font-medium">भुगतान माध्यम (Mode):</span>
+                    <span className="text-slate-200 font-bold">{userPendingDeposit.paymentMethod || 'UPI Instant'}</span>
+                  </div>
+                </div>
+
+                {copiedPendingUtr && (
+                  <div className="text-[11px] text-emerald-400 font-bold text-center">
+                    ✓ UTR क्लिपबोर्ड में कॉपी हो गया!
+                  </div>
+                )}
+
+                {/* Uploaded Screenshot Preview */}
+                <div className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-300 font-bold flex items-center gap-1.5">
+                      <Camera className="w-3.5 h-3.5 text-amber-400" />
+                      <span>अपलोड किया गया स्क्रीनशॉट (Uploaded Payment Proof)</span>
+                    </span>
+                    {userPendingDeposit.proofImageUrl && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                        संलग्न है
+                      </span>
+                    )}
+                  </div>
+
+                  {userPendingDeposit.proofImageUrl ? (
+                    <div className="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          onClick={() => setLightboxImageUrl(userPendingDeposit.proofImageUrl || null)}
+                          className="w-16 h-16 rounded-xl overflow-hidden bg-slate-900 border border-amber-400/40 shrink-0 cursor-pointer relative group"
+                          title="क्लिक करके बड़ा देखें"
+                        >
+                          <img
+                            src={userPendingDeposit.proofImageUrl}
+                            alt="Proof Slip"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <Eye className="w-4 h-4 text-white" />
+                          </div>
+                        </div>
+                        <div className="space-y-1 min-w-0">
+                          <div className="text-xs font-bold text-emerald-300 truncate">
+                            पेमेंट रसीद / स्क्रीनशॉट
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            एडमिन इस रसीद का मिलान अपने बैंक खाते से कर रहे हैं
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setLightboxImageUrl(userPendingDeposit.proofImageUrl || null)}
+                        className="px-3 py-1.5 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 text-xs font-bold border border-amber-400/40 flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>बड़ा देखें</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3 text-center rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+                      स्क्रीनशॉट संलग्न नहीं है (केवल UTR नंबर दर्ज किया गया है)
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Verification Timeline / Steps */}
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <span className="text-[11px] font-black uppercase text-slate-400 block tracking-wider">
+                  वेरिफिकेशन प्रगति (Verification Progress)
+                </span>
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
+                    <div className="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs mx-auto flex items-center justify-center">
+                      ✓
+                    </div>
+                    <span className="font-bold text-emerald-300 block">1. अनुरोध दर्ज</span>
+                    <span className="text-[10px] text-slate-400 block">स्क्रीनशॉट व UTR भेजा</span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/40 space-y-1">
+                    <div className="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs mx-auto flex items-center justify-center animate-pulse">
+                      ⏳
+                    </div>
+                    <span className="font-bold text-amber-300 block">2. एडमिन रिव्यू</span>
+                    <span className="text-[10px] text-amber-200/80 block">बैंक में UTR मिलान जारी</span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1 opacity-70">
+                    <div className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 font-black text-xs mx-auto flex items-center justify-center">
+                      3
+                    </div>
+                    <span className="font-bold text-slate-300 block">3. वॉलेट क्रेडिट</span>
+                    <span className="text-[10px] text-slate-500 block">अप्रूव होते ही स्वतः</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Helpful Navigation */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentTab('transactions')}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white text-xs font-bold border border-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                >
+                  <FileText className="w-4 h-4 text-amber-400" />
+                  <span>सभी ट्रांजैक्शन देखें (View History)</span>
+                </button>
+
+                <div className="text-[11px] text-slate-400 text-center sm:text-right">
+                  <span>एडमिन द्वारा अप्रूव या रिमूव होते ही नया अपलोड स्वतः अनलॉक हो जाएगा।</span>
+                </div>
+              </div>
+            </div>
+          ) : (
           <form onSubmit={handleDepositSubmit} className="space-y-6">
             {/* Quick Amount Chips (Multiples of 100) */}
             <div className="space-y-2">
@@ -828,7 +1070,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
                   <Camera className="w-3.5 h-3.5 text-amber-400" />
-                  <span>4. Payment Screenshot / Proof (स्क्रीनशॉट अपलोड करें - ऐच्छिक/अनुशंसित)</span>
+                  <span>4. Payment Screenshot / Proof (स्क्रीनशॉट अपलोड करें)</span>
                 </label>
                 {proofImage && (
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30 flex items-center gap-1">
@@ -836,6 +1078,14 @@ export const WalletView: React.FC<WalletViewProps> = ({
                     <span>संलग्न है</span>
                   </span>
                 )}
+              </div>
+
+              {/* Upload Rule Hint Strip */}
+              <div className="p-2.5 rounded-xl bg-slate-950/80 border border-amber-500/25 text-[11px] text-amber-200/90 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  <strong>एकल अपलोड नियम:</strong> एक समय पर केवल 1 स्क्रीनशॉट और UTR अपलोड कर सकते हैं। एडमिन द्वारा इसे अप्रूव या रिमूव करने के बाद ही आप अगला स्क्रीनशॉट अपलोड कर सकेंगे।
+                </span>
               </div>
 
               {!proofImage ? (
@@ -978,6 +1228,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               </span>
             </button>
           </form>
+          )}
         </div>
       )}
 
@@ -1865,6 +2116,52 @@ export const WalletView: React.FC<WalletViewProps> = ({
             ))}
           </div>
         </section>
+      )}
+
+      {/* 📸 Screenshot Fullscreen Lightbox Modal */}
+      {lightboxImageUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setLightboxImageUrl(null)}
+        >
+          <div
+            className="relative max-w-2xl w-full bg-slate-950 border-2 border-amber-500/50 rounded-3xl overflow-hidden shadow-2xl space-y-3 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-slate-100 font-bold text-sm">
+                <Camera className="w-4 h-4 text-amber-400" />
+                <span>अपलोड की गई पेमेंट रसीद / स्क्रीनशॉट (Payment Proof)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxImageUrl(null)}
+                className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-auto rounded-2xl bg-black/60 flex items-center justify-center p-2 border border-slate-800">
+              <img
+                src={lightboxImageUrl}
+                alt="Payment Receipt"
+                className="max-h-[65vh] w-auto object-contain rounded-xl shadow-lg"
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+              <span>एडमिन इसी रसीद व UTR का बैंक खाते से मिलान कर रहे हैं</span>
+              <button
+                type="button"
+                onClick={() => setLightboxImageUrl(null)}
+                className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold cursor-pointer"
+              >
+                बंद करें (Close)
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

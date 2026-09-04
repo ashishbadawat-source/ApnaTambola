@@ -2359,6 +2359,21 @@ export function App() {
       return false;
     }
 
+    // Single Upload Rule: Check if user already has an active pending deposit request
+    const existingPending = deposits.find(
+      (d) =>
+        d.status === 'pending' &&
+        (d.userId === currentUser.id ||
+          (currentUser.phone && d.userPhone && currentUser.phone.replace(/\D/g, '').endsWith(d.userPhone.replace(/\D/g, '').slice(-10))))
+    );
+
+    if (existingPending) {
+      alert(
+        `⚠️ आपका एक पिछला डिपॉजिट अनुरोध (राशि: ₹${existingPending.amount}, UTR: ${existingPending.utrNumber}) पहले से एडमिन वेरिफिकेशन के लिए पेंडिंग है।\n\nनियम अनुसार: एडमिन द्वारा इस स्क्रीनशॉट को अप्रूव (स्वीकृत) या रिमूव (हटा) देने के बाद ही आप नया स्क्रीनशॉट और UTR अपलोड कर सकेंगे।`
+      );
+      return false;
+    }
+
     const cleanUtr = (utrNumber || '').trim();
 
     // 1. One-time ₹10 Registration Bonus rule on 1st deposit:
@@ -2731,6 +2746,35 @@ export function App() {
           body: JSON.stringify({ depositId }),
         });
       } catch (e) {}
+
+      // 5. Update transaction state so user sees it is removed/cleared
+      setTransactions((prev) =>
+        prev.map((t) => {
+          if (
+            t.referenceId === depositId ||
+            (t.utrNumber && deposit.utrNumber && t.utrNumber === deposit.utrNumber && t.userId === deposit.userId)
+          ) {
+            return {
+              ...t,
+              status: 'failed' as const,
+              description: `डिपॉजिट अनुरोध हटाया गया (UTR: ${deposit.utrNumber}) - एडमिन द्वारा स्लिप रिमूव की गई`,
+            };
+          }
+          return t;
+        })
+      );
+
+      // 6. Send notification to user so they know they can re-upload now
+      const removeNotif: UserNotificationItem = {
+        id: `un_dep_rem_${Date.now()}`,
+        category: 'wallet_credit',
+        title: `ℹ️ डिपॉजिट अनुरोध रिमूव किया गया`,
+        message: `एडमिन द्वारा आपका पिछला डिपॉजिट अनुरोध (UTR: ${deposit.utrNumber || 'N/A'}) रिमूव कर दिया गया है। अब आप नया UTR और सही पेमेंट स्क्रीनशॉट पुनः अपलोड कर सकते हैं।`,
+        timestamp: 'Just now',
+        read: false,
+        actionTab: 'wallet',
+      };
+      setUserNotifications((prev) => [removeNotif, ...prev]);
 
       return true;
     } catch (err) {
@@ -3924,6 +3968,7 @@ export function App() {
               currentUser={currentUser}
               transactions={transactions}
               withdrawals={withdrawals}
+              deposits={deposits}
               settings={siteSettings}
               users={users}
               onDeposit={handleDeposit}
