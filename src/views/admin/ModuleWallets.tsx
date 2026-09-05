@@ -41,6 +41,8 @@ interface ModuleWalletsProps {
   onApproveDeposit?: (depositId: string, remarks?: string) => Promise<boolean>;
   onRejectDeposit?: (depositId: string, reason?: string) => Promise<boolean>;
   onDeleteDeposit?: (depositId: string) => Promise<boolean>;
+  onForceRefresh?: () => Promise<void> | void;
+  isSyncing?: boolean;
 }
 
 export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
@@ -51,6 +53,8 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   onApproveDeposit,
   onRejectDeposit,
   onDeleteDeposit,
+  onForceRefresh,
+  isSyncing,
 }) => {
   const [activeTab, setActiveTab] = useState<'deposits' | 'transactions' | 'balances'>('deposits');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -247,46 +251,61 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-start sm:self-auto overflow-x-auto max-w-full">
-          <button
-            onClick={() => setActiveTab('deposits')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-              activeTab === 'deposits'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            <QrCode className="w-4 h-4" />
-            <span>📥 UTR Deposit Requests</span>
-            {pendingDepositsCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white font-black text-[10px] animate-pulse">
-                {pendingDepositsCount}
-              </span>
-            )}
-          </button>
+        {/* Tab Switcher & Real-Time Sync Action */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onForceRefresh && (
+            <button
+              type="button"
+              onClick={onForceRefresh}
+              disabled={isSyncing}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/60 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+              title="सभी डिवाइस व बैंक से तुरंत लाइव डिपॉजिट और पेमेंट रीफ्रेश करें"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+              <span>{isSyncing ? 'डिपॉजिट सिंक हो रहा है...' : '🔄 लाइव सिंक (Sync Now)'}</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setActiveTab('transactions')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'transactions'
-                ? 'bg-amber-400 text-slate-950 font-black'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            Transactions Ledger
-          </button>
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-start sm:self-auto overflow-x-auto max-w-full">
+            <button
+              onClick={() => setActiveTab('deposits')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'deposits'
+                  ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <QrCode className="w-4 h-4" />
+              <span>📥 UTR Deposit Requests</span>
+              {pendingDepositsCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white font-black text-[10px] animate-pulse">
+                  {pendingDepositsCount}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab('balances')}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeTab === 'balances'
-                ? 'bg-amber-400 text-slate-950 font-black'
-                : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-            }`}
-          >
-            User Balances Overview
-          </button>
+            <button
+              onClick={() => setActiveTab('transactions')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'transactions'
+                  ? 'bg-amber-400 text-slate-950 font-black'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              Transactions Ledger
+            </button>
+
+            <button
+              onClick={() => setActiveTab('balances')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'balances'
+                  ? 'bg-amber-400 text-slate-950 font-black'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              User Balances Overview
+            </button>
+          </div>
         </div>
       </div>
 
@@ -356,15 +375,29 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
               ))}
             </div>
 
-            <div className="relative w-full md:w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search UTR, User Name, Phone, ID..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
-              />
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="relative flex-1 md:w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search UTR, User Name, Phone, ID..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+              {onForceRefresh && (
+                <button
+                  type="button"
+                  onClick={onForceRefresh}
+                  disabled={isSyncing}
+                  className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  title="ताज़ा डिपॉजिट तुरंत लोड करें"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
+                  <span className="hidden sm:inline">{isSyncing ? 'सिंक...' : 'रीफ्रेश'}</span>
+                </button>
+              )}
             </div>
           </div>
 

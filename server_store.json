@@ -492,7 +492,7 @@
       "registeredPlayers": 185,
       "totalTicketsSold": 314,
       "prizePool": 10920,
-      "status": "live",
+      "status": "completed",
       "isGameEnabled": true,
       "isBookingOpen": true,
       "ticketColorTheme": "multi",
@@ -578,17 +578,25 @@
         71,
         30,
         60,
-        72
+        72,
+        28,
+        33,
+        53,
+        39,
+        75,
+        9,
+        85,
+        58
       ],
-      "currentNumber": 72,
+      "currentNumber": 58,
       "previousNumbers": [
-        60,
-        30,
-        71,
-        62,
-        44
+        85,
+        9,
+        75,
+        39,
+        53
       ],
-      "autoCalling": true,
+      "autoCalling": false,
       "callIntervalSeconds": 6,
       "rules": "Standard 7-Prize 90-ball Tambola. Dynamic 70% Prize Pool (30% Admin Margin). If multiple users win on the same ball, prizes are split equally!",
       "createdAt": "2026-08-14T18:00:00.000Z",
@@ -1428,6 +1436,20 @@
   ],
   "transactions": [
     {
+      "id": "txn_1788591583173",
+      "userId": "usr_ashish_101",
+      "type": "deposit",
+      "amount": 100,
+      "balanceAfter": 1920,
+      "description": "डिपॉजिट अनुरोध (UTR: UPI987654321000) — एडमिन सत्यापन लंबित (Pending Verification)",
+      "paymentMethod": "UPI",
+      "referenceId": "UPI987654321000",
+      "utrNumber": "UPI987654321000",
+      "proofImageUrl": "",
+      "timestamp": "06:59 AM, Today",
+      "status": "pending"
+    },
+    {
       "id": "txn_reg_1788428234430",
       "userId": "usr_ashish_101",
       "type": "signup_bonus",
@@ -1671,5 +1693,5 @@
     "adminUsername": "admin@tambolalive.com",
     "adminPassword": "admin"
   },
-  "updatedAt": "2026-09-03T09:37:14.430Z"
+  "updatedAt": "2026-09-05T06:59:43.184Z"
 }

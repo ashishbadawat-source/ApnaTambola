@@ -548,7 +548,7 @@ export function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // 1. BroadcastChannel for instant local tab sync
+    // 1. BroadcastChannel for instant local tab sync (0ms latency across tabs)
     let bc: BroadcastChannel | null = null;
     try {
       if ('BroadcastChannel' in window) {
@@ -557,9 +557,48 @@ export function App() {
           if (event.data?.type === 'NEW_USER_REGISTERED' && event.data.user) {
             const newUser: User = event.data.user;
             setUsers((prev) => {
-              if (prev.some((u) => u.id === newUser.id)) return prev;
+              const exists = prev.some((u) => u.id === newUser.id);
+              if (exists) {
+                return prev.map((u) => (u.id === newUser.id ? { ...u, ...newUser } : u));
+              }
               return [newUser, ...prev];
             });
+            try {
+              localStorage.setItem('apna_tambola_registered_users', JSON.stringify([newUser, ...users.filter(u => u.id !== newUser.id)]));
+            } catch (e) {}
+          } else if (event.data?.type === 'NEW_DEPOSIT_REQUEST' && event.data.deposit) {
+            const newDep: DepositRequest = event.data.deposit;
+            setDeposits((prev) => {
+              const exists = prev.some((d) => d.id === newDep.id || (d.utrNumber && d.utrNumber === newDep.utrNumber));
+              if (exists) {
+                return prev.map((d) => (d.id === newDep.id || (d.utrNumber && d.utrNumber === newDep.utrNumber) ? { ...d, ...newDep } : d));
+              }
+              return [newDep, ...prev];
+            });
+            if (event.data.transaction) {
+              const newTxn: WalletTransaction = event.data.transaction;
+              setTransactions((prev) => {
+                if (prev.some((t) => t.id === newTxn.id)) return prev;
+                return [newTxn, ...prev];
+              });
+            }
+          } else if (event.data?.type === 'DEPOSIT_APPROVED' && event.data.depositId) {
+            const { depositId, user } = event.data;
+            setDeposits((prev) =>
+              prev.map((d) => (d.id === depositId ? { ...d, status: 'approved' as const, approvedAt: new Date().toISOString() } : d))
+            );
+            if (user) {
+              setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, ...user } : u)));
+              setCurrentUser((prev) => (prev && prev.id === user.id ? { ...prev, ...user } : prev));
+            }
+          } else if (event.data?.type === 'DEPOSIT_REJECTED' && event.data.depositId) {
+            const { depositId } = event.data;
+            setDeposits((prev) =>
+              prev.map((d) => (d.id === depositId ? { ...d, status: 'rejected' as const } : d))
+            );
+          } else if (event.data?.type === 'DEPOSIT_DELETED' && event.data.depositId) {
+            const { depositId } = event.data;
+            setDeposits((prev) => prev.filter((d) => d.id !== depositId));
           } else if (event.data?.type === 'TICKET_STATUS_TOGGLED') {
             const { ticketId, isActive } = event.data;
             setTickets((prev) =>
@@ -604,8 +643,41 @@ export function App() {
               const map = new Map<string, User>();
               prev.forEach((u) => map.set(u.id, u));
               parsed.forEach((u) => map.set(u.id, u));
-              return Array.from(map.values());
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+              });
             });
+          }
+        } catch (err) {}
+      } else if (e.key === 'apna_tambola_deposits' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            let deletedIds = new Set<string>();
+            try {
+              const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_deposit_ids') || '[]');
+              if (Array.isArray(arr)) deletedIds = new Set(arr);
+            } catch (err) {}
+
+            setDeposits((prev) => {
+              const map = new Map<string, DepositRequest>();
+              prev.forEach((d) => { if (!deletedIds.has(d.id)) map.set(d.id, d); });
+              parsed.forEach((d) => { if (!deletedIds.has(d.id)) map.set(d.id, d); });
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return timeB - timeA;
+              });
+            });
+          }
+        } catch (err) {}
+      } else if (e.key === 'apna_tambola_auth_user' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed && parsed.id) {
+            setCurrentUser(parsed);
           }
         } catch (err) {}
       } else if (e.key === 'apna_tambola_tickets' && e.newValue) {
@@ -654,14 +726,18 @@ export function App() {
               return merged;
             });
 
-            // Also sync active currentUser if updated remotely (e.g. referral bonus credited on another device)
+            // Also sync active currentUser if updated remotely (e.g. deposit approved or referral bonus credited)
             setCurrentUser((prev) => {
               if (!prev) return null;
               const remote = data.users.find(
                 (u: User) => u.id === prev.id || (prev.phone && u.phone && u.phone.replace(/\D/g, '') === prev.phone.replace(/\D/g, ''))
               );
               if (remote) {
-                return { ...prev, ...remote };
+                const updated = { ...prev, ...remote };
+                try {
+                  localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+                } catch (e) {}
+                return updated;
               }
               return prev;
             });
@@ -685,13 +761,42 @@ export function App() {
             });
           }
           if (Array.isArray(data.deposits) && data.deposits.length > 0) {
+            let deletedIds = new Set<string>();
+            try {
+              const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_deposit_ids') || '[]');
+              if (Array.isArray(arr)) deletedIds = new Set(arr);
+            } catch (err) {}
+
             setDeposits((prev) => {
               const map = new Map<string, DepositRequest>();
-              prev.forEach((d) => map.set(d.id, d));
-              data.deposits.forEach((d: DepositRequest) => map.set(d.id, d));
-              return Array.from(map.values()).sort((a, b) => {
+              prev.forEach((d) => { if (!deletedIds.has(d.id)) map.set(d.id, d); });
+              data.deposits.forEach((d: DepositRequest) => {
+                if (d && d.id && !deletedIds.has(d.id)) {
+                  const existing = map.get(d.id);
+                  map.set(d.id, { ...(existing || {}), ...d });
+                }
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
                 const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
                 const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return timeB - timeA;
+              });
+              try {
+                localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+          if (Array.isArray(data.transactions) && data.transactions.length > 0) {
+            setTransactions((prev) => {
+              const map = new Map<string, WalletTransaction>();
+              prev.forEach((t) => map.set(t.id, t));
+              data.transactions.forEach((t: WalletTransaction) => {
+                if (t && t.id) map.set(t.id, t);
+              });
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
                 return timeB - timeA;
               });
             });
@@ -739,11 +844,12 @@ export function App() {
       // 1. Force fetch from Firestore collections
       if (db) {
         try {
-          const [usersSnap, gamesSnap, ticketsSnap, commsSnap, settingsSnap] = await Promise.all([
+          const [usersSnap, gamesSnap, ticketsSnap, commsSnap, depositsSnap, settingsSnap] = await Promise.all([
             getDocs(collection(db, 'users')).catch(() => null),
             getDocs(collection(db, 'games')).catch(() => null),
             getDocs(collection(db, 'tickets')).catch(() => null),
             getDocs(collection(db, 'commissions')).catch(() => null),
+            getDocs(collection(db, 'deposits')).catch(() => null),
             getDoc(doc(db, 'system', 'site_settings')).catch(() => null),
           ]);
 
@@ -833,6 +939,37 @@ export function App() {
             }
           }
 
+          if (depositsSnap && !depositsSnap.empty) {
+            let deletedIds = new Set<string>();
+            try {
+              const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_deposit_ids') || '[]');
+              if (Array.isArray(arr)) deletedIds = new Set(arr);
+            } catch (e) {}
+
+            const fsDeps: DepositRequest[] = [];
+            depositsSnap.forEach((d) => {
+              if (!deletedIds.has(d.id)) {
+                fsDeps.push({ ...(d.data() as DepositRequest), id: d.id });
+              }
+            });
+            if (fsDeps.length > 0) {
+              setDeposits((prev) => {
+                const map = new Map<string, DepositRequest>();
+                prev.forEach((d) => { if (!deletedIds.has(d.id)) map.set(d.id, d); });
+                fsDeps.forEach((d) => { if (!deletedIds.has(d.id)) map.set(d.id, d); });
+                const merged = Array.from(map.values()).sort((a, b) => {
+                  const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                  const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                  return timeB - timeA;
+                });
+                try {
+                  localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+            }
+          }
+
           if (settingsSnap && settingsSnap.exists()) {
             const data = settingsSnap.data() as Partial<SiteSettings>;
             setSiteSettings((prev) => {
@@ -898,6 +1035,47 @@ export function App() {
                 localStorage.setItem('apna_tambola_tickets', JSON.stringify(merged));
               } catch {}
               return merged;
+            });
+          }
+          if (Array.isArray(data.deposits) && data.deposits.length > 0) {
+            let deletedIds = new Set<string>();
+            try {
+              const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_deposit_ids') || '[]');
+              if (Array.isArray(arr)) deletedIds = new Set(arr);
+            } catch (e) {}
+
+            setDeposits((prev) => {
+              const map = new Map<string, DepositRequest>();
+              prev.forEach((d) => { if (!deletedIds.has(d.id)) map.set(d.id, d); });
+              data.deposits.forEach((d: DepositRequest) => {
+                if (d && d.id && !deletedIds.has(d.id)) {
+                  const existing = map.get(d.id);
+                  map.set(d.id, { ...(existing || {}), ...d });
+                }
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return timeB - timeA;
+              });
+              try {
+                localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+          if (Array.isArray(data.transactions) && data.transactions.length > 0) {
+            setTransactions((prev) => {
+              const map = new Map<string, WalletTransaction>();
+              prev.forEach((t) => map.set(t.id, t));
+              data.transactions.forEach((t: WalletTransaction) => {
+                if (t && t.id) map.set(t.id, t);
+              });
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+                const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+                return timeB - timeA;
+              });
             });
           }
         }
@@ -1277,6 +1455,26 @@ export function App() {
 
   const handleRegisterUser = async (newUser: User) => {
     console.log(`[REGISTRATION] User registration started for: ${newUser.name} (${newUser.phone || newUser.id})`);
+
+    // 0. Immediate optimistic update (0ms latency so admin & user see the new registration instantly)
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === newUser.id);
+      const nextUsers = exists ? prev.map((u) => (u.id === newUser.id ? { ...u, ...newUser } : u)) : [newUser, ...prev];
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
+      } catch (e) {}
+      return nextUsers;
+    });
+
+    // Broadcast across tabs instantly
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'NEW_USER_REGISTERED', user: newUser });
+        bc.close();
+      }
+    } catch (e) {}
+
     // 1. Comprehensive case-insensitive upline identification from inputs & URL params
     const rawRefCode = (
       newUser.referrer_id ||
@@ -2464,6 +2662,15 @@ export function App() {
     };
     setTransactions((prev) => [pendingTxn, ...prev]);
 
+    // Broadcast deposit request across tabs immediately
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'NEW_DEPOSIT_REQUEST', deposit: newDepositReq, transaction: pendingTxn });
+        bc.close();
+      }
+    } catch (e) {}
+
     // Send user real-time notification
     const depNotif: UserNotificationItem = {
       id: `un_dep_${Date.now()}`,
@@ -2634,6 +2841,15 @@ export function App() {
     };
     setUserNotifications((prev) => [successNotif, ...prev]);
 
+    // Broadcast deposit approval across tabs immediately
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'DEPOSIT_APPROVED', depositId, user: updatedTargetUser });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 
@@ -2726,6 +2942,15 @@ export function App() {
     };
     setUserNotifications((prev) => [blockNotif, ...prev]);
 
+    // Broadcast deposit rejection across tabs immediately
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'DEPOSIT_REJECTED', depositId });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 
@@ -2797,6 +3022,15 @@ export function App() {
         actionTab: 'wallet',
       };
       setUserNotifications((prev) => [removeNotif, ...prev]);
+
+      // Broadcast deposit deletion across tabs immediately
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'DEPOSIT_DELETED', depositId });
+          bc.close();
+        }
+      } catch (e) {}
 
       return true;
     } catch (err) {

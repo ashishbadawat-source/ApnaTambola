@@ -800,6 +800,7 @@ async function startServer() {
   app.post('/api/deposits/request', (req: Request, res: Response) => {
     try {
       const {
+        id,
         userId,
         userName,
         userPhone,
@@ -810,6 +811,7 @@ async function startServer() {
         proofImageUrl,
         registrationBonus,
         bonusRewardUnlock,
+        requestDate,
       } = req.body;
 
       const numAmount = Number(amount) || 0;
@@ -817,47 +819,102 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Minimum deposit amount is ₹10.' });
       }
 
-      const user = users.find((u) => u.id === userId);
+      const cleanUtr = (utrNumber || '').trim();
+      const depositId = id || `dep_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // Check if this deposit already exists
+      let existingDep = deposits.find(
+        (d) => d.id === depositId || (cleanUtr && d.utrNumber && d.utrNumber.trim() === cleanUtr)
+      );
+
+      // Find or link user
+      let user = users.find((u) => u.id === userId);
+      if (!user && userPhone) {
+        const cleanPhone = userPhone.replace(/\D/g, '').slice(-10);
+        user = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+      }
+      if (!user && userEmail) {
+        user = users.find((u) => u.email && u.email.toLowerCase() === userEmail.toLowerCase());
+      }
+      if (!user && userName) {
+        user = users.find((u) => u.name && u.name.trim().toLowerCase() === userName.trim().toLowerCase());
+      }
+
+      // If user does not yet exist in server list, auto-create so Admin sees user instantly
+      if (!user && (userId || userName || userPhone)) {
+        user = {
+          id: userId || `usr_${Date.now()}`,
+          name: userName || 'Player',
+          email: userEmail || `${(userName || 'player').toLowerCase().replace(/\s+/g, '')}@tambolalive.com`,
+          phone: userPhone || '+91 9999999999',
+          role: 'user',
+          status: 'active',
+          isBlocked: false,
+          walletBalance: 0,
+          depositBalance: 0,
+          winningBalance: 0,
+          referralBalance: 0,
+          bonusRewardBalance: 0,
+          firstDepositBonusClaimed: false,
+          hasDeposited: false,
+          referralCode: `REF-${(userName || 'PLY').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+          kycStatus: 'verified',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+          createdAt: requestDate || new Date().toISOString(),
+        };
+        users.unshift(user);
+      }
+
       const newDeposit: DepositRequest = {
-        id: `dep_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
+        id: depositId,
         userId: userId || (user ? user.id : 'usr_anon'),
         userName: userName || (user ? user.name : 'Unknown User'),
         userPhone: userPhone || (user ? user.phone : ''),
         userEmail: userEmail || (user ? user.email : ''),
         amount: numAmount,
         paymentMethod: paymentMethod || 'UPI',
-        utrNumber: utrNumber || `UPI${Date.now()}`,
+        utrNumber: cleanUtr || `UPI${Date.now()}`,
         proofImageUrl: proofImageUrl || '',
-        status: 'pending',
-        requestDate: new Date().toISOString(),
+        status: existingDep ? existingDep.status : 'pending',
+        requestDate: requestDate || (existingDep ? existingDep.requestDate : new Date().toISOString()),
         registrationBonus: registrationBonus !== undefined ? registrationBonus : (user && !user.hasDeposited && !user.firstDepositBonusClaimed ? 10 : 0),
         bonusRewardUnlock: Number(bonusRewardUnlock) || 0,
       };
 
-      deposits.unshift(newDeposit);
+      if (existingDep) {
+        Object.assign(existingDep, newDeposit);
+      } else {
+        deposits.unshift(newDeposit);
+      }
 
-      // Create a pending wallet transaction
-      const pendingTxn: WalletTransaction = {
-        id: `txn_${Date.now()}`,
-        userId: newDeposit.userId,
-        type: 'deposit',
-        amount: numAmount,
-        balanceAfter: user ? user.walletBalance : 0,
-        description: `डिपॉजिट अनुरोध (UTR: ${newDeposit.utrNumber}) — एडमिन सत्यापन लंबित (Pending Verification)`,
-        paymentMethod: newDeposit.paymentMethod,
-        referenceId: newDeposit.utrNumber,
-        utrNumber: newDeposit.utrNumber,
-        proofImageUrl: newDeposit.proofImageUrl,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
-        status: 'pending',
-      };
-      transactions.unshift(pendingTxn);
+      // Create a pending wallet transaction if not existing
+      let pendingTxn = transactions.find(
+        (t) => (cleanUtr && t.utrNumber === cleanUtr) || (cleanUtr && t.referenceId === cleanUtr) || t.referenceId === newDeposit.id
+      );
+
+      if (!pendingTxn) {
+        pendingTxn = {
+          id: `txn_${Date.now()}`,
+          userId: newDeposit.userId,
+          type: 'deposit',
+          amount: numAmount,
+          balanceAfter: user ? user.walletBalance : 0,
+          description: `डिपॉजिट अनुरोध (UTR: ${newDeposit.utrNumber}) — एडमिन सत्यापन लंबित (Pending Verification)`,
+          paymentMethod: newDeposit.paymentMethod,
+          referenceId: newDeposit.utrNumber,
+          utrNumber: newDeposit.utrNumber,
+          proofImageUrl: newDeposit.proofImageUrl,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          status: 'pending',
+        };
+        transactions.unshift(pendingTxn);
+      }
 
       saveStateToDisk();
 
       res.json({
         success: true,
-        deposit: newDeposit,
+        deposit: existingDep || newDeposit,
         transaction: pendingTxn,
         message: 'Deposit request submitted. Balance will be added once Admin verifies UTR.',
       });

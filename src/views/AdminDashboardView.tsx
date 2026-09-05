@@ -371,6 +371,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onApproveDeposit={onApproveDeposit}
             onRejectDeposit={onRejectDeposit}
             onDeleteDeposit={onDeleteDeposit}
+            onForceRefresh={onForceRefresh}
+            isSyncing={isSyncing}
           />
         )}
 
