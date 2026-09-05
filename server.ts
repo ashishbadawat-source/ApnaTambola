@@ -652,7 +652,7 @@ async function startServer() {
 
   app.post('/api/users/wallet-adjust', (req: Request, res: Response) => {
     try {
-      const { userId, amount, type, phone, email } = req.body;
+      const { userId, amount, type, phone, email, transaction, updatedUser } = req.body;
       let targetUser = users.find((u) => u.id === userId);
       if (!targetUser && (phone || userId)) {
         const queryPhone = (phone || userId).replace(/\D/g, '').slice(-10);
@@ -662,6 +662,11 @@ async function startServer() {
       }
       if (!targetUser && email) {
         targetUser = users.find((u) => u.email && u.email.toLowerCase() === email.toLowerCase());
+      }
+
+      if (!targetUser && updatedUser && updatedUser.id) {
+        targetUser = { ...updatedUser };
+        users.push(targetUser);
       }
 
       if (targetUser) {
@@ -674,6 +679,16 @@ async function startServer() {
           targetUser.walletBalance = Math.max(0, (targetUser.walletBalance || 0) - num);
           targetUser.depositBalance = Math.max(0, (targetUser.depositBalance || 0) - num);
         }
+
+        if (transaction && transaction.id) {
+          const existingTxnIndex = transactions.findIndex((t) => t.id === transaction.id);
+          if (existingTxnIndex >= 0) {
+            transactions[existingTxnIndex] = transaction;
+          } else {
+            transactions.unshift(transaction);
+          }
+        }
+
         saveStateToDisk();
         return res.json({ success: true, user: targetUser });
       }
@@ -1204,7 +1219,138 @@ async function startServer() {
         updatedCount++;
       }
     });
+    saveStateToDisk();
     res.json({ success: true, updatedCount, totalTickets: tickets.length });
+  });
+
+  // Admin Delete / Remove Ticket with optional user wallet refund
+  app.post('/api/tickets/delete', (req: Request, res: Response) => {
+    try {
+      const { ticketId, refundUser } = req.body;
+      if (!ticketId) {
+        return res.status(400).json({ success: false, error: 'Ticket ID is required' });
+      }
+      const targetTkt = tickets.find((t) => t.id === ticketId || t.ticketId === ticketId);
+      if (!targetTkt) {
+        return res.status(404).json({ success: false, error: 'Ticket not found' });
+      }
+
+      // Optional refund to user wallet
+      if (refundUser && targetTkt.userId && (targetTkt.price || 0) > 0) {
+        const refundAmt = Number(targetTkt.price);
+        const buyer = users.find((u) => u.id === targetTkt.userId);
+        if (buyer) {
+          buyer.walletBalance = (buyer.walletBalance || 0) + refundAmt;
+          buyer.depositBalance = (buyer.depositBalance || 0) + refundAmt;
+
+          transactions.unshift({
+            id: `txn_ref_${Date.now()}`,
+            userId: buyer.id,
+            type: 'deposit',
+            amount: refundAmt,
+            balanceAfter: buyer.walletBalance,
+            description: `टिकट रिफंड (Refund): ${targetTkt.ticketId} - एडमिन द्वारा टिकट रिमूव किया गया`,
+            paymentMethod: 'Admin Refund',
+            referenceId: targetTkt.ticketId,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'completed',
+          });
+        }
+      }
+
+      // Decrement game totalTicketsSold counter
+      if (targetTkt.gameId) {
+        const game = games.find((g) => g.id === targetTkt.gameId);
+        if (game && game.totalTicketsSold > 0) {
+          game.totalTicketsSold = Math.max(0, game.totalTicketsSold - 1);
+        }
+      }
+
+      const beforeCount = tickets.length;
+      tickets = tickets.filter((t) => t.id !== ticketId && t.ticketId !== ticketId);
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        message: `टिकट ${targetTkt.ticketId || ticketId} सफलतापूर्वक रिमूव कर दिया गया है।`,
+        deletedId: ticketId,
+        remainingTickets: tickets.length,
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  // Admin Batch Delete Tickets
+  app.post('/api/tickets/batch-delete', (req: Request, res: Response) => {
+    try {
+      const { ticketIds = [], refundUser } = req.body;
+      if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'ticketIds array is required' });
+      }
+      const idSet = new Set(ticketIds);
+      const targetTkts = tickets.filter((t) => idSet.has(t.id) || idSet.has(t.ticketId));
+
+      if (refundUser) {
+        targetTkts.forEach((t) => {
+          if (t.userId && (t.price || 0) > 0) {
+            const refundAmt = Number(t.price);
+            const buyer = users.find((u) => u.id === t.userId);
+            if (buyer) {
+              buyer.walletBalance = (buyer.walletBalance || 0) + refundAmt;
+              buyer.depositBalance = (buyer.depositBalance || 0) + refundAmt;
+
+              transactions.unshift({
+                id: `txn_ref_${Date.now()}_${t.id}`,
+                userId: buyer.id,
+                type: 'deposit',
+                amount: refundAmt,
+                balanceAfter: buyer.walletBalance,
+                description: `बैच टिकट रिफंड: ${t.ticketId} - एडमिन द्वारा टिकट रिमूव`,
+                paymentMethod: 'Admin Refund',
+                referenceId: t.ticketId,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+                status: 'completed',
+              });
+            }
+          }
+        });
+      }
+
+      // Decrement game counters
+      targetTkts.forEach((t) => {
+        if (t.gameId) {
+          const game = games.find((g) => g.id === t.gameId);
+          if (game && game.totalTicketsSold > 0) {
+            game.totalTicketsSold = Math.max(0, game.totalTicketsSold - 1);
+          }
+        }
+      });
+
+      const beforeCount = tickets.length;
+      tickets = tickets.filter((t) => !idSet.has(t.id) && !idSet.has(t.ticketId));
+      saveStateToDisk();
+
+      res.json({
+        success: true,
+        message: `${targetTkts.length} टिकट सफलतापूर्वक रिमूव कर दिए गए हैं।`,
+        countRemoved: targetTkts.length,
+        remainingTickets: tickets.length,
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete('/api/tickets/:id', (req: Request, res: Response) => {
+    try {
+      const ticketId = req.params.id;
+      tickets = tickets.filter((t) => t.id !== ticketId && t.ticketId !== ticketId);
+      saveStateToDisk();
+      res.json({ success: true, message: 'Ticket deleted', deletedId: ticketId });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   // 2. Games API

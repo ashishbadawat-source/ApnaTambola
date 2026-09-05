@@ -1,6 +1,6 @@
 {
   "name": "Apna Tambola - अपना तंबोला",
-  "description": "Modern, premium online Tambola / Housie multiplayer platform with 5 luxury design templates (Royal Gold, Festive Mela, Cyber Neon, Vintage Club, Kohinoor Diamond), authentic perforated tickets with holograms, live auto-calling, 5-level referral engine, wallet management, and dual user/admin portals.",
+  "description": "Modern, premium online Tambola / Housie multiplayer platform with 5 luxury design templates, ticket sales history & metrics, buyer breakdown, ticket removal with wallet refund, authentic perforated tickets with holograms, live auto-calling, 5-level referral engine, wallet management, and dual user/admin portals.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -91,6 +91,8 @@ interface AdminDashboardViewProps {
   onAdminGenerateTickets?: (gameId: string, count: number, colorTheme?: TicketColorThemeId) => Promise<boolean>;
   onAdminToggleTicketStatus?: (ticketId: string, isActive: boolean) => Promise<boolean>;
   onAdminBatchToggleTickets?: (ticketIds: string[], isActive: boolean) => Promise<boolean>;
+  onDeleteTicket?: (ticketId: string, refundUser?: boolean) => Promise<boolean>;
+  onBatchDeleteTickets?: (ticketIds: string[], refundUser?: boolean) => Promise<boolean>;
   onApproveCommission?: (commissionId: string) => void;
   onReverseCommission?: (commissionId: string) => void;
   onSendNotification?: (notification: Omit<AdminNotification, 'id' | 'sentAt'>) => Promise<boolean>;
@@ -102,6 +104,7 @@ interface AdminDashboardViewProps {
   onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
   onForceRefresh?: () => void;
   isSyncing?: boolean;
+  onViewUserWallet?: (user: User) => void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -141,6 +144,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onAdminGenerateTickets,
   onAdminToggleTicketStatus,
   onAdminBatchToggleTickets,
+  onDeleteTicket,
+  onBatchDeleteTickets,
   onApproveCommission,
   onReverseCommission,
   onSendNotification,
@@ -152,6 +157,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onBatchDeleteUsers,
   onForceRefresh,
   isSyncing,
+  onViewUserWallet,
 }) => {
   const [internalTab, setInternalTab] = useState<string>('dashboard');
   const activeTab = activeModule || internalTab;
@@ -296,6 +302,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onBatchDeleteUsers={onBatchDeleteUsers}
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
+            onViewUserWallet={onViewUserWallet}
           />
         )}
 
@@ -327,9 +334,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           <ModuleTickets
             tickets={tickets}
             games={games}
+            users={users}
             onAdminGenerateTickets={onAdminGenerateTickets}
             onAdminToggleTicketStatus={onAdminToggleTicketStatus}
             onAdminBatchToggleTickets={onAdminBatchToggleTickets}
+            onDeleteTicket={onDeleteTicket}
+            onBatchDeleteTickets={onBatchDeleteTickets}
+            onForceRefresh={onForceRefresh}
+            isSyncing={isSyncing}
           />
         )}
 
@@ -373,6 +385,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onDeleteDeposit={onDeleteDeposit}
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
+            onViewUserWallet={onViewUserWallet}
           />
         )}
 

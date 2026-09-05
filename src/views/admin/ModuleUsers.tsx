@@ -48,6 +48,7 @@ interface ModuleUsersProps {
   transactions?: WalletTransaction[];
   onForceRefresh?: () => void;
   isSyncing?: boolean;
+  onViewUserWallet?: (user: User) => void;
 }
 
 export const ModuleUsers: React.FC<ModuleUsersProps> = ({
@@ -62,6 +63,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   transactions = [],
   onForceRefresh,
   isSyncing = false,
+  onViewUserWallet,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'newest' | 'active' | 'inactive' | 'blocked' | 'kyc_pending' | 'kyc_verified' | 'vip'>('all');

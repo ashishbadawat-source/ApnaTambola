@@ -152,14 +152,22 @@ export function App() {
   });
 
   const [tickets, setTickets] = useState<TambolaTicket[]>(() => {
+    let deletedTicketIds = new Set<string>();
+    try {
+      const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+      if (Array.isArray(arr)) deletedTicketIds = new Set(arr);
+    } catch (e) {}
+
     try {
       const saved = localStorage.getItem('apna_tambola_tickets');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((t: TambolaTicket) => !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId));
+        }
       }
     } catch (e) {}
-    return INITIAL_TICKETS;
+    return INITIAL_TICKETS.filter((t) => !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId));
   });
 
   const [winners, setWinners] = useState<GameWinner[]>(() => {
@@ -369,20 +377,29 @@ export function App() {
           // If current logged-in user is updated or deleted in Firestore, keep currentUser state live
           setCurrentUser((prevUser) => {
             if (!prevUser) return null;
-            const updated = firestoreUsers.find(
-              (u) => u.id === prevUser.id || (prevUser.phone && u.phone === prevUser.phone) || (prevUser.email && u.email === prevUser.email)
-            );
+            const cleanPrevPhone = prevUser.phone ? prevUser.phone.replace(/\D/g, '').slice(-10) : '';
+            const updated = firestoreUsers.find((u) => {
+              if (u.id === prevUser.id) return true;
+              const cleanUPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
+              if (cleanPrevPhone && cleanUPhone && cleanPrevPhone === cleanUPhone) return true;
+              if (prevUser.email && u.email && prevUser.email.toLowerCase() === u.email.toLowerCase()) return true;
+              return false;
+            });
             if (!updated) return prevUser;
             const isMasterAdmin =
               prevUser.role === 'admin' ||
               prevUser.email === 'ashishbadawat@gmail.com' ||
               prevUser.email?.includes('admin') ||
               prevUser.id === 'admin_master_1';
-            return {
+            const merged = {
               ...prevUser,
               ...updated,
               role: isMasterAdmin ? 'admin' : (updated.role || prevUser.role || 'user'),
             };
+            try {
+              localStorage.setItem('apna_tambola_auth_user', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
           });
         },
         (error) => {
@@ -468,15 +485,27 @@ export function App() {
       const unsubscribeTickets = onSnapshot(
         collection(db, 'tickets'),
         (snapshot) => {
+          let deletedTicketIds = new Set<string>();
+          try {
+            const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+            if (Array.isArray(arr)) deletedTicketIds = new Set(arr);
+          } catch (e) {}
+
           if (!snapshot.empty) {
             const firestoreTickets: TambolaTicket[] = [];
             snapshot.forEach((docSnap) => {
-              firestoreTickets.push({ ...(docSnap.data() as TambolaTicket), id: docSnap.id });
+              if (!deletedTicketIds.has(docSnap.id)) {
+                firestoreTickets.push({ ...(docSnap.data() as TambolaTicket), id: docSnap.id });
+              }
             });
             setTickets((prev) => {
               const map = new Map<string, TambolaTicket>();
-              prev.forEach((t) => map.set(t.id, t));
-              firestoreTickets.forEach((t) => map.set(t.id, t));
+              prev.forEach((t) => {
+                if (!deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId)) map.set(t.id, t);
+              });
+              firestoreTickets.forEach((t) => {
+                if (!deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId)) map.set(t.id, t);
+              });
               const merged = Array.from(map.values());
               try {
                 localStorage.setItem('apna_tambola_tickets', JSON.stringify(merged));
@@ -583,13 +612,82 @@ export function App() {
               });
             }
           } else if (event.data?.type === 'DEPOSIT_APPROVED' && event.data.depositId) {
-            const { depositId, user } = event.data;
+            const { depositId, user, transaction, notification } = event.data;
             setDeposits((prev) =>
               prev.map((d) => (d.id === depositId ? { ...d, status: 'approved' as const, approvedAt: new Date().toISOString() } : d))
             );
             if (user) {
-              setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, ...user } : u)));
-              setCurrentUser((prev) => (prev && prev.id === user.id ? { ...prev, ...user } : prev));
+              setUsers((prev) =>
+                prev.map((u) => {
+                  const match =
+                    u.id === user.id ||
+                    (u.phone && user.phone && u.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                    (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase());
+                  return match ? { ...u, ...user } : u;
+                })
+              );
+              setCurrentUser((prev) => {
+                if (!prev) return null;
+                const match =
+                  prev.id === user.id ||
+                  (prev.phone && user.phone && prev.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                  (prev.email && user.email && prev.email.toLowerCase() === user.email.toLowerCase());
+                if (match) {
+                  const merged = { ...prev, ...user };
+                  try {
+                    localStorage.setItem('apna_tambola_auth_user', JSON.stringify(merged));
+                  } catch (e) {}
+                  return merged;
+                }
+                return prev;
+              });
+            }
+            if (transaction) {
+              setTransactions((prev) => [transaction, ...prev.filter((t) => t.id !== transaction.id)]);
+            } else {
+              setTransactions((prev) =>
+                prev.map((t) => {
+                  if (t.referenceId === depositId || (user && t.userId === user.id && t.type === 'deposit' && t.status === 'pending')) {
+                    return { ...t, status: 'completed' as const, balanceAfter: user ? user.walletBalance : t.balanceAfter };
+                  }
+                  return t;
+                })
+              );
+            }
+            if (notification) {
+              setUserNotifications((prev) => [notification, ...prev]);
+            }
+          } else if (event.data?.type === 'ADMIN_WALLET_ADJUSTED' && event.data.user) {
+            const { user, transaction, notification } = event.data;
+            setUsers((prev) =>
+              prev.map((u) => {
+                const match =
+                  u.id === user.id ||
+                  (u.phone && user.phone && u.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                  (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase());
+                return match ? { ...u, ...user } : u;
+              })
+            );
+            setCurrentUser((prev) => {
+              if (!prev) return null;
+              const match =
+                prev.id === user.id ||
+                (prev.phone && user.phone && prev.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                (prev.email && user.email && prev.email.toLowerCase() === user.email.toLowerCase());
+              if (match) {
+                const merged = { ...prev, ...user };
+                try {
+                  localStorage.setItem('apna_tambola_auth_user', JSON.stringify(merged));
+                } catch (e) {}
+                return merged;
+              }
+              return prev;
+            });
+            if (transaction) {
+              setTransactions((prev) => [transaction, ...prev.filter((t) => t.id !== transaction.id)]);
+            }
+            if (notification) {
+              setUserNotifications((prev) => [notification, ...prev]);
             }
           } else if (event.data?.type === 'DEPOSIT_REJECTED' && event.data.depositId) {
             const { depositId } = event.data;
@@ -628,6 +726,12 @@ export function App() {
                   : t
               )
             );
+          } else if (event.data?.type === 'TICKET_DELETED' && event.data.ticketId) {
+            const { ticketId } = event.data;
+            setTickets((prev) => prev.filter((t) => t.id !== ticketId && t.ticketId !== ticketId));
+          } else if (event.data?.type === 'TICKETS_BATCH_DELETED' && event.data.ticketIds) {
+            const idSet = new Set(event.data.ticketIds || []);
+            setTickets((prev) => prev.filter((t) => !idSet.has(t.id) && !idSet.has(t.ticketId)));
           }
         };
       }
@@ -743,11 +847,19 @@ export function App() {
             });
           }
           if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+            let deletedTicketIds = new Set<string>();
+            try {
+              const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+              if (Array.isArray(arr)) deletedTicketIds = new Set(arr);
+            } catch (err) {}
+
             setTickets((prev) => {
               const map = new Map<string, TambolaTicket>();
-              prev.forEach((t) => map.set(t.id, t));
+              prev.forEach((t) => {
+                if (!deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId)) map.set(t.id, t);
+              });
               data.tickets.forEach((t: TambolaTicket) => {
-                if (t && t.id) map.set(t.id, t);
+                if (t && t.id && !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId)) map.set(t.id, t);
               });
               return Array.from(map.values());
             });
@@ -910,13 +1022,27 @@ export function App() {
           }
 
           if (ticketsSnap && !ticketsSnap.empty) {
+            let deletedTicketIds = new Set<string>();
+            try {
+              const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+              if (Array.isArray(arr)) deletedTicketIds = new Set(arr);
+            } catch (err) {}
+
             const fsTickets: TambolaTicket[] = [];
-            ticketsSnap.forEach((d) => fsTickets.push({ ...(d.data() as TambolaTicket), id: d.id }));
+            ticketsSnap.forEach((d) => {
+              if (!deletedTicketIds.has(d.id)) {
+                fsTickets.push({ ...(d.data() as TambolaTicket), id: d.id });
+              }
+            });
             if (fsTickets.length > 0) {
               setTickets((prev) => {
                 const map = new Map<string, TambolaTicket>();
-                prev.forEach((t) => map.set(t.id, t));
-                fsTickets.forEach((t) => map.set(t.id, t));
+                prev.forEach((t) => {
+                  if (!deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId)) map.set(t.id, t);
+                });
+                fsTickets.forEach((t) => {
+                  if (!deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId)) map.set(t.id, t);
+                });
                 const merged = Array.from(map.values());
                 try {
                   localStorage.setItem('apna_tambola_tickets', JSON.stringify(merged));
@@ -2026,19 +2152,8 @@ export function App() {
   };
 
   // Delete Individual Ticket (Allowed for Completed/Finished Games)
-  const handleDeleteTicket = (ticketId: string) => {
-    setTickets((prev) => prev.filter((t) => t && t.id !== ticketId && t.ticketId !== ticketId));
-    setUserNotifications((prev) => [
-      {
-        id: `un_del_${Date.now()}`,
-        category: 'system',
-        title: '🗑️ टिकट हटाया गया (Ticket Removed)',
-        message: `टिकट ID ${ticketId} को सफलतापूर्वक हटा दिया गया है और स्टोरेज मेमोरी फ्री हो गई है।`,
-        timestamp: 'Just now',
-        read: false,
-      },
-      ...prev,
-    ]);
+  const handleUserRemoveTicket = (ticketId: string) => {
+    handleDeleteTicket(ticketId, false);
   };
 
   // Bulk Delete All Completed / Finished Game Tickets to Free Memory
@@ -2781,8 +2896,29 @@ export function App() {
         (currentUser.email && updatedTargetUser.email && currentUser.email.toLowerCase() === updatedTargetUser.email.toLowerCase()));
 
     if (isCurrentActiveUser) {
-      setCurrentUser(updatedTargetUser);
+      const mergedCurrent = {
+        ...currentUser,
+        ...updatedTargetUser,
+      };
+      setCurrentUser(mergedCurrent);
+      try {
+        localStorage.setItem('apna_tambola_auth_user', JSON.stringify(mergedCurrent));
+      } catch (e) {}
     }
+
+    const approvedTxn: WalletTransaction = {
+      id: `txn_dep_app_${Date.now()}`,
+      userId: updatedTargetUser.id,
+      type: 'deposit',
+      amount: deposit.amount,
+      balanceAfter: newTotalWallet,
+      description: `डिपॉजिट स्वीकृत (UTR: ${deposit.utrNumber}) - एडमिन द्वारा OK किया गया`,
+      paymentMethod: deposit.paymentMethod || 'UPI / QR Deposit',
+      referenceId: depositId,
+      utrNumber: deposit.utrNumber,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
 
     // Update Firestore & Server API
     try {
@@ -2798,7 +2934,10 @@ export function App() {
         depositBalance: updatedTargetUser.depositBalance,
         bonusRewardBalance: updatedTargetUser.bonusRewardBalance,
         walletBalance: updatedTargetUser.walletBalance,
+        updatedAt: new Date().toISOString(),
       }, { merge: true }).catch(() => {});
+
+      setDoc(doc(db, 'transactions', approvedTxn.id), approvedTxn, { merge: true }).catch(() => {});
 
       fetch('/api/deposits/approve', {
         method: 'POST',
@@ -2808,14 +2947,17 @@ export function App() {
           remarks,
           deposit,
           updatedUser: updatedTargetUser,
+          transaction: approvedTxn,
         }),
       }).catch(() => {});
     } catch (e) {}
 
     // Update transaction status
     setTransactions((prev) => {
+      let found = false;
       const updated = prev.map((t) => {
         if (t.referenceId === depositId || (t.utrNumber && t.utrNumber === deposit.utrNumber && t.userId === deposit.userId)) {
+          found = true;
           return {
             ...t,
             status: 'completed' as const,
@@ -2825,6 +2967,9 @@ export function App() {
         }
         return t;
       });
+      if (!found) {
+        return [approvedTxn, ...updated];
+      }
       return updated;
     });
 
@@ -2845,7 +2990,13 @@ export function App() {
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         const bc = new BroadcastChannel('apna_tambola_sync');
-        bc.postMessage({ type: 'DEPOSIT_APPROVED', depositId, user: updatedTargetUser });
+        bc.postMessage({
+          type: 'DEPOSIT_APPROVED',
+          depositId,
+          user: updatedTargetUser,
+          transaction: approvedTxn,
+          notification: successNotif,
+        });
         bc.close();
       }
     } catch (e) {}
@@ -3642,73 +3793,421 @@ export function App() {
     return true;
   };
 
-  // 15. Admin Update User Wallet
-  const handleUpdateWalletBalance = async (userId: string, amount: number, type: 'credit' | 'debit'): Promise<boolean> => {
-    const delta = type === 'credit' ? amount : -amount;
-    let targetUser: User | undefined;
+  // 14d. Admin Delete Single Ticket (रिमूव टिकट) with optional user wallet refund
+  const handleDeleteTicket = async (ticketId: string, refundUser = false): Promise<boolean> => {
+    try {
+      const targetTkt = tickets.find((t) => t.id === ticketId || t.ticketId === ticketId);
+      if (!targetTkt) return false;
 
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === userId) {
-          const nextWallet = Math.max(0, (u.walletBalance || 0) + delta);
-          const nextDeposit = Math.max(0, (u.depositBalance || 0) + delta);
-          targetUser = { ...u, walletBalance: nextWallet, depositBalance: nextDeposit };
-          return targetUser;
+      // 1. Record in deleted ticket IDs in localStorage to prevent re-hydration
+      try {
+        const deletedArr: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+        if (!deletedArr.includes(targetTkt.id)) deletedArr.push(targetTkt.id);
+        if (targetTkt.ticketId && !deletedArr.includes(targetTkt.ticketId)) deletedArr.push(targetTkt.ticketId);
+        localStorage.setItem('apna_tambola_deleted_ticket_ids', JSON.stringify(deletedArr));
+      } catch (e) {}
+
+      // 2. Remove from local tickets state
+      setTickets((prev) => {
+        const next = prev.filter((t) => t.id !== targetTkt.id && t.ticketId !== targetTkt.ticketId);
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 3. Update game ticket sales counter if applicable
+      if (targetTkt.gameId) {
+        setGames((prev) =>
+          prev.map((g) =>
+            g.id === targetTkt.gameId
+              ? { ...g, totalTicketsSold: Math.max(0, (g.totalTicketsSold || 1) - 1) }
+              : g
+          )
+        );
+      }
+
+      // 4. If refund requested, credit user wallet and add refund transaction
+      if (refundUser && targetTkt.userId && (targetTkt.price || 0) > 0) {
+        const refundAmt = Number(targetTkt.price);
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.id === targetTkt.userId) {
+              return {
+                ...u,
+                walletBalance: (u.walletBalance || 0) + refundAmt,
+                depositBalance: (u.depositBalance || 0) + refundAmt,
+              };
+            }
+            return u;
+          })
+        );
+
+        setCurrentUser((prev) => {
+          if (prev && prev.id === targetTkt.userId) {
+            const updated = {
+              ...prev,
+              walletBalance: (prev.walletBalance || 0) + refundAmt,
+              depositBalance: (prev.depositBalance || 0) + refundAmt,
+            };
+            try {
+              localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
+          }
+          return prev;
+        });
+
+        // Add refund transaction record
+        const refundTxn: WalletTransaction = {
+          id: `txn_ref_${Date.now()}`,
+          userId: targetTkt.userId,
+          type: 'deposit',
+          amount: refundAmt,
+          balanceAfter: refundAmt,
+          description: `टिकट रिफंड (Refund): ${targetTkt.ticketId} - एडमिन द्वारा टिकट रिमूव किया गया`,
+          paymentMethod: 'Admin Refund',
+          referenceId: targetTkt.ticketId,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          status: 'completed',
+        };
+        setTransactions((prev) => [refundTxn, ...prev]);
+
+        // Push in-app notification to the user
+        const refNotif: UserNotificationItem = {
+          id: `un_ref_${Date.now()}`,
+          category: 'wallet_credit',
+          title: `💰 टिकट रिफंड: ₹${refundAmt} वापस जमा हुआ`,
+          message: `आपका टिकट (${targetTkt.ticketId} - ${targetTkt.gameTitle}) एडमिन द्वारा रिमूव कर दिया गया है एवं ₹${refundAmt} आपके वॉलेट में वापस जमा कर दिए गए हैं।`,
+          timestamp: 'Just now',
+          read: false,
+          actionTab: 'wallet',
+          amount: refundAmt,
+        };
+        setUserNotifications((prev) => [refNotif, ...prev]);
+      }
+
+      // 5. Delete from Firestore
+      try {
+        deleteDoc(doc(db, 'tickets', targetTkt.id)).catch(() => {});
+      } catch (e) {}
+
+      // 6. Delete from Backend Server REST API
+      try {
+        fetch('/api/tickets/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticketId: targetTkt.id, refundUser }),
+        }).catch(() => {});
+      } catch (e) {}
+
+      // 7. Broadcast across tabs
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'TICKET_DELETED', ticketId: targetTkt.id, refundUser });
+          bc.close();
         }
-        return u;
-      })
+      } catch (e) {}
+
+      return true;
+    } catch (err) {
+      console.error('Error deleting ticket:', err);
+      return false;
+    }
+  };
+
+  // 14e. Admin Batch Delete Tickets (चयनित टिकट रिमूव करें)
+  const handleBatchDeleteTickets = async (ticketIds: string[], refundUser = false): Promise<boolean> => {
+    try {
+      if (!Array.isArray(ticketIds) || ticketIds.length === 0) return false;
+      const idSet = new Set(ticketIds);
+      const targetTkts = tickets.filter((t) => idSet.has(t.id) || idSet.has(t.ticketId));
+      if (targetTkts.length === 0) return false;
+
+      // 1. Record in deleted ticket IDs
+      try {
+        const deletedArr: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+        targetTkts.forEach((t) => {
+          if (!deletedArr.includes(t.id)) deletedArr.push(t.id);
+          if (t.ticketId && !deletedArr.includes(t.ticketId)) deletedArr.push(t.ticketId);
+        });
+        localStorage.setItem('apna_tambola_deleted_ticket_ids', JSON.stringify(deletedArr));
+      } catch (e) {}
+
+      // 2. Remove from local tickets state
+      setTickets((prev) => {
+        const next = prev.filter((t) => !idSet.has(t.id) && !idSet.has(t.ticketId));
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 3. Decrement game sales counters
+      const gameTicketCounts: Record<string, number> = {};
+      targetTkts.forEach((t) => {
+        if (t.gameId) {
+          gameTicketCounts[t.gameId] = (gameTicketCounts[t.gameId] || 0) + 1;
+        }
+      });
+      setGames((prev) =>
+        prev.map((g) => {
+          const count = gameTicketCounts[g.id];
+          if (count) {
+            return { ...g, totalTicketsSold: Math.max(0, (g.totalTicketsSold || 0) - count) };
+          }
+          return g;
+        })
+      );
+
+      // 4. Process refunds if requested
+      if (refundUser) {
+        const userRefundMap: Record<string, number> = {};
+        targetTkts.forEach((t) => {
+          if (t.userId && (t.price || 0) > 0) {
+            userRefundMap[t.userId] = (userRefundMap[t.userId] || 0) + Number(t.price);
+          }
+        });
+
+        Object.entries(userRefundMap).forEach(([userId, refundTotal]) => {
+          setUsers((prev) =>
+            prev.map((u) => {
+              if (u.id === userId) {
+                return {
+                  ...u,
+                  walletBalance: (u.walletBalance || 0) + refundTotal,
+                  depositBalance: (u.depositBalance || 0) + refundTotal,
+                };
+              }
+              return u;
+            })
+          );
+
+          setCurrentUser((prev) => {
+            if (prev && prev.id === userId) {
+              const updated = {
+                ...prev,
+                walletBalance: (prev.walletBalance || 0) + refundTotal,
+                depositBalance: (prev.depositBalance || 0) + refundTotal,
+              };
+              try {
+                localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+              } catch (e) {}
+              return updated;
+            }
+            return prev;
+          });
+
+          // Add transaction
+          const refundTxn: WalletTransaction = {
+            id: `txn_ref_${Date.now()}_${userId}`,
+            userId: userId,
+            type: 'deposit',
+            amount: refundTotal,
+            balanceAfter: refundTotal,
+            description: `बैच टिकट रिफंड (Batch Refund): एडमिन द्वारा टिकट रिमूव किए गए`,
+            paymentMethod: 'Admin Refund',
+            referenceId: `REF-${Date.now().toString().slice(-6)}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'completed',
+          };
+          setTransactions((prev) => [refundTxn, ...prev]);
+        });
+      }
+
+      // 5. Delete from Firestore
+      for (const t of targetTkts) {
+        try {
+          deleteDoc(doc(db, 'tickets', t.id)).catch(() => {});
+        } catch (e) {}
+      }
+
+      // 6. Delete from Backend Server REST API
+      try {
+        fetch('/api/tickets/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticketIds: Array.from(idSet), refundUser }),
+        }).catch(() => {});
+      } catch (e) {}
+
+      // 7. Broadcast across tabs
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'TICKETS_BATCH_DELETED', ticketIds: Array.from(idSet), refundUser });
+          bc.close();
+        }
+      } catch (e) {}
+
+      return true;
+    } catch (err) {
+      console.error('Error batch deleting tickets:', err);
+      return false;
+    }
+  };
+
+  // 15. Admin Update User Wallet
+  const handleUpdateWalletBalance = async (
+    userId: string,
+    amount: number,
+    type: 'credit' | 'debit',
+    reason?: string
+  ): Promise<boolean> => {
+    const cleanAmount = Math.max(0, Number(amount) || 0);
+    if (cleanAmount <= 0) return false;
+    const delta = type === 'credit' ? cleanAmount : -cleanAmount;
+
+    // 1. Locate target user reliably
+    let targetUser = users.find(
+      (u) =>
+        u.id === userId ||
+        (u.phone && userId && u.phone.replace(/\D/g, '').endsWith(userId.replace(/\D/g, '').slice(-10))) ||
+        (u.email && userId && u.email.toLowerCase() === userId.toLowerCase())
     );
 
-    // Update local state & storage
-    let updatedUsers: User[] = [];
-    setUsers((prev) => {
-      updatedUsers = prev.map((u) => {
-        if (u.id === userId) {
-          return targetUser;
-        }
-        return u;
-      });
+    if (!targetUser) {
       try {
-        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updatedUsers));
+        const savedUsers: User[] = JSON.parse(localStorage.getItem('apna_tambola_registered_users') || '[]');
+        targetUser = savedUsers.find(
+          (u) =>
+            u.id === userId ||
+            (u.phone && userId && u.phone.replace(/\D/g, '').endsWith(userId.replace(/\D/g, '').slice(-10))) ||
+            (u.email && userId && u.email.toLowerCase() === userId.toLowerCase())
+        );
       } catch (e) {}
-      return updatedUsers;
+    }
+
+    if (!targetUser) {
+      console.warn('Target user not found for wallet adjustment:', userId);
+      return false;
+    }
+
+    const currentWallet = targetUser.walletBalance ?? ((targetUser.depositBalance || 0) + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0));
+    const currentDeposit = targetUser.depositBalance || 0;
+    const nextWallet = Math.max(0, currentWallet + delta);
+    const nextDeposit = Math.max(0, currentDeposit + delta);
+
+    const updatedUser: User = {
+      ...targetUser,
+      walletBalance: nextWallet,
+      depositBalance: nextDeposit,
+      hasDeposited: type === 'credit' ? true : targetUser.hasDeposited,
+    };
+
+    // 2. Update users list in state and localStorage
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === updatedUser.id);
+      const nextList = exists
+        ? prev.map((u) => (u.id === updatedUser.id ? updatedUser : u))
+        : [updatedUser, ...prev];
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextList));
+      } catch (e) {}
+      return nextList;
     });
 
-    if (currentUser?.id === userId) {
+    // 3. Update currently active user if matches target user
+    const isCurrentActive =
+      currentUser &&
+      (currentUser.id === updatedUser.id ||
+        (currentUser.phone && updatedUser.phone && currentUser.phone.replace(/\D/g, '').endsWith(updatedUser.phone.replace(/\D/g, '').slice(-10))) ||
+        (currentUser.email && updatedUser.email && currentUser.email.toLowerCase() === updatedUser.email.toLowerCase()));
+
+    if (isCurrentActive) {
       setCurrentUser((prev) => {
         if (!prev) return null;
-        const updated = {
+        const merged = {
           ...prev,
-          walletBalance: Math.max(0, prev.walletBalance + delta),
-          depositBalance: Math.max(0, prev.depositBalance + delta),
+          walletBalance: nextWallet,
+          depositBalance: nextDeposit,
+          hasDeposited: type === 'credit' ? true : prev.hasDeposited,
         };
         try {
-          localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+          localStorage.setItem('apna_tambola_auth_user', JSON.stringify(merged));
         } catch (e) {}
-        return updated;
+        return merged;
       });
     }
 
+    // 4. Create authoritative passbook transaction
+    const adjustTxn: WalletTransaction = {
+      id: `txn_adj_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`,
+      userId: updatedUser.id,
+      type: type === 'credit' ? 'deposit' : 'withdrawal',
+      amount: cleanAmount,
+      balanceAfter: nextWallet,
+      description: type === 'credit'
+        ? `एडमिन द्वारा वॉलेट में जमा: ₹${cleanAmount} | ${reason || 'एडमिन पेमेंट क्रेडिट'}`
+        : `एडमिन द्वारा वॉलेट से कटौती: ₹${cleanAmount} | ${reason || 'एडमिन एडजस्टमेंट'}`,
+      paymentMethod: 'Admin Direct Adjustment (एडमिन बैलेंस)',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      status: 'completed',
+    };
+    setTransactions((prev) => [adjustTxn, ...prev]);
+
+    // 5. Send notification to target user
+    const notifItem: UserNotificationItem = {
+      id: `un_adj_${Date.now()}`,
+      category: 'wallet_credit',
+      title: type === 'credit' ? `💰 एडमिन पेमेंट जमा: ₹${cleanAmount}` : `⚠️ एडमिन वॉलेट कटौती: ₹${cleanAmount}`,
+      message: type === 'credit'
+        ? `एडमिन ने आपके वॉलेट में ₹${cleanAmount} सफलतापूर्वक जोड़ दिए हैं। आपका नया कुल वॉलेट बैलेंस ₹${nextWallet.toLocaleString('en-IN')} है। (${reason || 'पेमेंट क्रेडिट'})`
+        : `एडमिन द्वारा आपके वॉलेट से ₹${cleanAmount} काटे गए हैं। आपका नया कुल वॉलेट बैलेंस ₹${nextWallet.toLocaleString('en-IN')} है। (${reason || 'डेबिट'})`,
+      timestamp: 'Just now',
+      read: false,
+      actionTab: 'wallet',
+      amount: cleanAmount,
+    };
+    setUserNotifications((prev) => [notifItem, ...prev]);
+
+    // 6. Sync to Server REST API
     try {
       fetch('/api/users/wallet-adjust', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, amount, type }),
+        body: JSON.stringify({
+          userId: updatedUser.id,
+          amount: cleanAmount,
+          type,
+          reason,
+          transaction: adjustTxn,
+          updatedUser,
+        }),
       }).catch(() => {});
     } catch (e) {}
 
+    // 7. Sync to Firestore
     try {
-      if (targetUser) {
-        const userRef = doc(db, 'users', userId);
-        await setDoc(userRef, {
-          walletBalance: targetUser.walletBalance,
-          depositBalance: targetUser.depositBalance,
-          updatedAt: new Date().toISOString(),
-        }, { merge: true });
-      }
+      const userRef = doc(db, 'users', updatedUser.id);
+      setDoc(userRef, {
+        ...updatedUser,
+        walletBalance: nextWallet,
+        depositBalance: nextDeposit,
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+
+      setDoc(doc(db, 'transactions', adjustTxn.id), adjustTxn, { merge: true }).catch(() => {});
     } catch (e) {
       console.warn('Firestore update wallet balance notice:', e);
     }
+
+    // 8. Broadcast across tabs immediately
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({
+          type: 'ADMIN_WALLET_ADJUSTED',
+          userId: updatedUser.id,
+          user: updatedUser,
+          transaction: adjustTxn,
+          notification: notifItem,
+        });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 
@@ -4339,6 +4838,8 @@ export function App() {
             onAdminGenerateTickets={handleAdminGenerateTickets}
             onAdminToggleTicketStatus={handleAdminToggleTicketStatus}
             onAdminBatchToggleTickets={handleAdminBatchToggleTickets}
+            onDeleteTicket={handleDeleteTicket}
+            onBatchDeleteTickets={handleBatchDeleteTickets}
             onApproveCommission={handleApproveCommission}
             onReverseCommission={handleReverseCommission}
             onSendNotification={handleSendNotification}

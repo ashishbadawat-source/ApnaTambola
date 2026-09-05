@@ -43,6 +43,7 @@ interface ModuleWalletsProps {
   onDeleteDeposit?: (depositId: string) => Promise<boolean>;
   onForceRefresh?: () => Promise<void> | void;
   isSyncing?: boolean;
+  onViewUserWallet?: (user: User) => void;
 }
 
 export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
@@ -55,6 +56,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   onDeleteDeposit,
   onForceRefresh,
   isSyncing,
+  onViewUserWallet,
 }) => {
   const [activeTab, setActiveTab] = useState<'deposits' | 'transactions' | 'balances'>('deposits');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -63,6 +65,7 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedUtr, setCopiedUtr] = useState<string | null>(null);
   const [previewDeposit, setPreviewDeposit] = useState<DepositRequest | null>(null);
+  const [lastUpdatedUserForWallet, setLastUpdatedUserForWallet] = useState<User | null>(null);
 
   // Reject / Block Confirmation Modal
   const [rejectingDeposit, setRejectingDeposit] = useState<DepositRequest | null>(null);
@@ -188,8 +191,14 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
     const success = await onApproveDeposit(dep.id, 'UTR Verified & Payment Received - Approved');
     setActionLoading(false);
     if (success) {
-      setActionNotice(`✓ डिपॉजिट ₹${dep.amount} स्वीकृत कर दिया गया और ${dep.userName} के वॉलेट में फंड जमा हो गया!`);
-      setTimeout(() => setActionNotice(null), 4000);
+      const u = users.find(
+        (user) =>
+          user.id === dep.userId ||
+          (user.phone && dep.userPhone && user.phone.replace(/\D/g, '').slice(-10) === dep.userPhone.replace(/\D/g, '').slice(-10))
+      );
+      if (u) setLastUpdatedUserForWallet(u);
+      setActionNotice(`✓ डिपॉजिट ₹${dep.amount} स्वीकृत कर दिया गया और ${dep.userName} के वॉलेट में फंड तुरंत जमा हो गया!`);
+      setTimeout(() => setActionNotice(null), 8000);
     }
   };
 
@@ -230,11 +239,12 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
     e.preventDefault();
     if (!selectedUser || adjustAmount <= 0) return;
     await onUpdateWalletBalance(selectedUser.id, adjustAmount, adjustType);
-    setAdjustNotice(`Successfully ${adjustType === 'credit' ? 'credited' : 'debited'} ₹${adjustAmount} for ${selectedUser.name}`);
+    setLastUpdatedUserForWallet(selectedUser);
+    setAdjustNotice(`✓ ₹${adjustAmount} ${adjustType === 'credit' ? 'सफलतापूर्वक जोड़ा गया (Credited)' : 'काटा गया (Debited)'} - ${selectedUser.name} के वॉलेट में तुरंत अपडेट हो गया!`);
     setTimeout(() => {
       setAdjustNotice(null);
       setSelectedUser(null);
-    }, 1500);
+    }, 4000);
   };
 
   return (
@@ -310,9 +320,21 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
       </div>
 
       {actionNotice && (
-        <div className="p-4 rounded-2xl bg-emerald-950/90 border-2 border-emerald-500 text-emerald-300 text-xs font-bold flex items-center gap-2.5 shadow-xl animate-in fade-in">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span>{actionNotice}</span>
+        <div className="p-4 rounded-2xl bg-emerald-950/90 border-2 border-emerald-500 text-emerald-300 text-xs font-bold flex items-center justify-between gap-3 shadow-xl animate-in fade-in flex-wrap">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <span>{actionNotice}</span>
+          </div>
+          {onViewUserWallet && lastUpdatedUserForWallet && (
+            <button
+              type="button"
+              onClick={() => onViewUserWallet(lastUpdatedUserForWallet)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>👉 {lastUpdatedUserForWallet.name || 'प्लेयर'} का लाइव वॉलेट देखें (Live View)</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -632,6 +654,25 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                               </>
                             )}
 
+                            {onViewUserWallet && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const u = users.find(
+                                    (user) =>
+                                      user.id === dep.userId ||
+                                      (user.phone && dep.userPhone && user.phone.replace(/\D/g, '').slice(-10) === dep.userPhone.replace(/\D/g, '').slice(-10))
+                                  );
+                                  if (u) onViewUserWallet(u);
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/40 text-xs font-bold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                                title="इस यूजर का लाइव वॉलेट देखें"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>वॉलेट</span>
+                              </button>
+                            )}
+
                             {/* 🗑️ Remove / Delete Duplicate or Unwanted Deposit Slip */}
                             <button
                               type="button"
@@ -834,12 +875,26 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                       ₹{((u?.walletBalance ?? ((u?.depositBalance || 0) + (u?.winningBalance || 0) + (u?.referralBalance || 0))) || 0).toLocaleString('en-IN')}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setSelectedUser(u)}
-                        className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/30 text-xs font-bold cursor-pointer"
-                      >
-                        Adjust Balance
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {onViewUserWallet && (
+                          <button
+                            type="button"
+                            onClick={() => onViewUserWallet(u)}
+                            className="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/40 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                            title="इस यूजर का लाइव वॉलेट देखें"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>वॉलेट देखें</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedUser(u)}
+                          className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/30 text-xs font-bold cursor-pointer"
+                        >
+                          Adjust Balance
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -960,8 +1015,22 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
               </div>
 
               {adjustNotice && (
-                <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-bold">
-                  {adjustNotice}
+                <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold space-y-2">
+                  <div>{adjustNotice}</div>
+                  {onViewUserWallet && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const u = selectedUser;
+                        setSelectedUser(null);
+                        onViewUserWallet(u);
+                      }}
+                      className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>👉 {selectedUser.name} का लाइव वॉलेट देखें (Live View)</span>
+                    </button>
+                  )}
                 </div>
               )}
 
