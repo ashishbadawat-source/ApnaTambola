@@ -149,12 +149,36 @@
         "timestamp": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "userId", "level", "commissionAmount", "timestamp"]
+    },
+    "Franchise": {
+      "title": "Franchise",
+      "description": "Admin Fund Franchise partner accounts and allocated fund balance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "franchiseId": { "type": "string", "maxLength": 64 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "userName": { "type": "string", "maxLength": 100 },
+        "userPhone": { "type": "string", "maxLength": 20 },
+        "franchiseName": { "type": "string", "maxLength": 150 },
+        "city": { "type": "string", "maxLength": 100 },
+        "tier": { "type": "string", "enum": ["bronze", "silver", "gold", "master"] },
+        "allocatedFund": { "type": "number" },
+        "commissionRate": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected", "suspended"] },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "franchiseId", "userId", "userName", "userPhone", "allocatedFund", "status", "createdAt"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "Stores user profiles, roles, and balances"
+    },
+    "/franchises/{franchiseId}": {
+      "schema": "Franchise",
+      "description": "Stores admin fund franchise partners and allocated fund"
     },
     "/commissions/{commissionId}": {
       "schema": "ReferralCommission",

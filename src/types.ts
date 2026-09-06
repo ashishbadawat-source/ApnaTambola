@@ -17,6 +17,10 @@ export interface User {
   bonusRewardBalance?: number; // 🎁 Daily Spin / Scratch / Check-in Rewards Wallet (Unlocks 10% on Admin Recharge)
   firstDepositBonusClaimed?: boolean; // 🎁 ₹10 Registration Bonus added automatically upon 1st deposit
   hasDeposited?: boolean;
+  isFranchise?: boolean; // 🏢 Admin Fund Franchise Partner
+  franchiseId?: string; // 👑 Designated Franchise ID (e.g. FRN-1001)
+  franchiseStatus?: 'pending' | 'approved' | 'rejected' | 'suspended';
+  franchiseBalance?: number; // Available franchise allocated fund for recharging players
   kycStatus: 'verified' | 'pending' | 'rejected' | 'unverified';
   isKycVerified?: boolean;
   level?: number;
@@ -500,3 +504,50 @@ export interface OfferPopup {
   priority?: number;
   createdAt: string;
 }
+
+// 🏢 Admin Fund Franchise System Types
+export type FranchiseTier = 'bronze' | 'silver' | 'gold' | 'master';
+
+export interface Franchise {
+  id: string; // Internal database ID e.g. "frn_123456"
+  franchiseId: string; // Public Unique Franchise ID e.g. "FRN-1001" or "FRN-JAIPUR-01"
+  userId: string; // Associated User account ID
+  userName: string; // Franchisee/Owner Name
+  userPhone: string; // Mobile / WhatsApp number
+  userEmail?: string;
+  franchiseName: string; // Business / Counter / Shop Name
+  city: string;
+  state?: string;
+  tier: FranchiseTier;
+  securityDeposit: number; // Initial investment / deposit amount (e.g. ₹2000, ₹5000, ₹10000)
+  allocatedFund: number; // Current available franchise fund balance for recharging players
+  totalFundAdded: number; // Total cumulative fund assigned/recharged by admin
+  totalDistributed: number; // Total cumulative fund transferred to players
+  commissionRate: number; // Commission percentage, e.g. 3.0, 4.0, 5.0, 7.0
+  totalCommissionEarned: number; // Lifetime commission earned
+  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  utrNumber?: string;
+  paymentProofUrl?: string;
+  adminRemarks?: string;
+  membersServed?: number; // Total unique players served
+  createdAt: string;
+  approvedAt?: string;
+}
+
+export interface FranchiseTransferRecord {
+  id: string;
+  franchiseId: string;
+  franchiseUserId: string;
+  franchiseName: string;
+  recipientUserId: string;
+  recipientName: string;
+  recipientPhone: string;
+  amount: number;
+  commissionRate: number;
+  commissionEarned: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  note?: string;
+  timestamp: string;
+}
+
