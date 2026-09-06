@@ -192,3 +192,35 @@ export function speakNumberCall(
     console.warn('Speech synthesis error', err);
   }
 }
+
+/**
+ * Pleasant alert chime when a new user registers or a new ID is synced
+ */
+export function playUserRegisteredSound(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Upward 3-note chime: C5 -> E5 -> G5
+    const notes = [523.25, 659.25, 783.99];
+    notes.forEach((freq, i) => {
+      const noteTime = now + i * 0.1;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, noteTime);
+
+      gain.gain.setValueAtTime(0.01, noteTime);
+      gain.gain.linearRampToValueAtTime(0.2, noteTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(noteTime);
+      osc.stop(noteTime + 0.35);
+    });
+  } catch {}
+}

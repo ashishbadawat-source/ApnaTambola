@@ -18,6 +18,9 @@ import {
   Mail,
   TrendingUp,
   Gift,
+  Copy,
+  Check,
+  X,
 } from 'lucide-react';
 import {
   AdminStats,
@@ -105,6 +108,8 @@ interface AdminDashboardViewProps {
   onForceRefresh?: () => void;
   isSyncing?: boolean;
   onViewUserWallet?: (user: User) => void;
+  latestRegisteredUser?: User | null;
+  onClearLatestUser?: () => void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -121,6 +126,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   loginHistory = [],
   siteSettings = INITIAL_SITE_SETTINGS,
   offers = [],
+  latestRegisteredUser,
+  onClearLatestUser,
   onSaveOffer,
   onDeleteOffer,
   onToggleOfferStatus,
@@ -160,7 +167,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onViewUserWallet,
 }) => {
   const [internalTab, setInternalTab] = useState<string>('dashboard');
+  const [copiedLatestId, setCopiedLatestId] = useState<boolean>(false);
   const activeTab = activeModule || internalTab;
+
+  const handleCopyLatestUserId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedLatestId(true);
+    setTimeout(() => setCopiedLatestId(false), 2000);
+  };
 
   const handleSetActiveTab = (tab: string) => {
     setInternalTab(tab);
@@ -236,6 +250,77 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Real-Time Live Registration Alert Banner */}
+      {latestRegisteredUser && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-[#0a2319] via-[#09182a] to-[#24121a] border-2 border-emerald-400 text-white shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in slide-in-from-top-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-400 shrink-0">
+              <Sparkles className="w-6 h-6 animate-pulse text-emerald-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-emerald-400 uppercase tracking-wider">
+                  🎉 नया यूजर ID तुरंत रजिस्टर हुआ (Live Instant Sync)!
+                </span>
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+              </div>
+              <div className="text-xs sm:text-sm font-bold text-white flex items-center gap-2 flex-wrap mt-0.5">
+                <span>यूजर ID:</span>
+                <span className="font-mono bg-slate-950 px-2.5 py-0.5 rounded-lg text-amber-300 border border-amber-400/40 select-all font-black text-xs">
+                  {latestRegisteredUser.id}
+                </span>
+                <span>• नाम: <strong className="text-white">{latestRegisteredUser.name}</strong></span>
+                <span>• मोबाइल: <strong className="text-slate-300">{latestRegisteredUser.phone}</strong></span>
+                <span>• वॉलेट: <strong className="text-emerald-400 font-black">₹{latestRegisteredUser.walletBalance || 0}</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={() => handleCopyLatestUserId(latestRegisteredUser.id)}
+              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold flex items-center gap-1.5 border border-amber-400/40 cursor-pointer transition-colors"
+            >
+              {copiedLatestId ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400">कॉपी हो गया!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>ID कॉपी करें</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSetActiveTab('users')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>यूजर लिस्ट में देखें</span>
+            </button>
+
+            {onClearLatestUser && (
+              <button
+                type="button"
+                onClick={onClearLatestUser}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg cursor-pointer transition-colors"
+                title="हटाएं (Dismiss)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Container: Sticky Horizontal Module Navigator */}
       <div className="p-2 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl overflow-x-auto">

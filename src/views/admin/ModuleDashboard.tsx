@@ -35,6 +35,7 @@ import {
   Check,
   X,
   AlertTriangle,
+  Copy,
 } from 'lucide-react';
 import {
   AdminStats,
@@ -47,6 +48,11 @@ import {
   WalletTransaction,
   SiteSettings,
 } from '../../types';
+import {
+  sortUsersNewestFirst,
+  isUserRegisteredJustNow,
+  formatUserRegistrationTime,
+} from '../../utils/userUtils';
 import {
   calculateTambolaDynamicPrizes,
   STANDARD_7_PRIZE_CONFIGS,
@@ -90,6 +96,15 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
   const isMasterBookingOpen = siteSettings?.globalTicketBookingEnabled !== false;
   const [toggleLoading, setToggleLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [copiedDashboardUserId, setCopiedDashboardUserId] = useState<string | null>(null);
+
+  const handleCopyDashboardUserId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    setCopiedDashboardUserId(id);
+    setTimeout(() => setCopiedDashboardUserId(null), 2000);
+  };
+
+  const recentLiveUsers = useMemo(() => sortUsersNewestFirst(users).slice(0, 4), [users]);
 
   // Dynamic Prize Pool Simulator State (70% distribution formula)
   const [simTicketsCount, setSimTicketsCount] = useState<number>(100);
@@ -319,6 +334,109 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
 
         {/* 3. MAIN DASHBOARD GRID: 4 KEY QUADRANTS AS IN IMAGE */}
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+          {/* ========================================================================= */}
+          {/* ⚡ REAL-TIME INSTANT USER REGISTRATION RADAR (नया ID तुरंत एडमिन में सिंक) */}
+          {/* ========================================================================= */}
+          <div className="lg:col-span-12 rounded-3xl bg-gradient-to-r from-[#18112e] via-[#0d162b] to-[#1d1028] border-2 border-amber-400/50 p-5 space-y-4 shadow-2xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-amber-500/20 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-amber-400" />
+                    <span>तुरंत लाइव रजिस्टर्ड यूज़र आईडी (Instant Live Registered IDs)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    जैसे ही नया खिलाड़ी साइन-अप करता है, उसकी यूजर ID यहाँ और User Management में बिना देरी 0ms में दिखाई देती है।
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-black border border-emerald-400/40">
+                  ⚡ 0ms AUTO-SYNC
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('users')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>सभी {users.length} यूज़र देखें</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Cards for latest 4 users */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {recentLiveUsers.length > 0 ? (
+                recentLiveUsers.map((u) => {
+                  const isJustNow = isUserRegisteredJustNow(u);
+                  return (
+                    <div
+                      key={u.id}
+                      className={`relative rounded-2xl p-3.5 bg-slate-900/90 border transition-all ${
+                        isJustNow
+                          ? 'border-emerald-400 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-400/30'
+                          : 'border-slate-800 hover:border-amber-400/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 mb-2">
+                        <div className="font-mono text-xs font-bold text-amber-300 bg-slate-950 px-2 py-1 rounded-lg border border-amber-400/30 select-all truncate">
+                          {u.id}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyDashboardUserId(u.id)}
+                          className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                          title="User ID कॉपी करें"
+                        >
+                          {copiedDashboardUserId === u.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-black text-white truncate">{u.name}</span>
+                        {isJustNow && (
+                          <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black animate-pulse shrink-0">
+                            NEW
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-[11px] text-slate-400 mb-2">
+                        <span>{u.phone || 'No phone'}</span>
+                        <div className="text-amber-300/80 text-[10px] mt-0.5">{formatUserRegistrationTime(u)}</div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                        <span className="text-slate-400">बैलेंस: <strong className="text-emerald-400 font-bold">₹{u.walletBalance || 0}</strong></span>
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTab('users')}
+                          className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                        >
+                          मैनेज करें →
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-span-full py-3 text-center text-slate-500 text-xs">
+                  कोई नया खिलाड़ी डेटा मौजूद नहीं है
+                </div>
+              )}
+            </div>
+          </div>
           
           {/* ========================================================================= */}
           {/* QUADRANT 1: TOP-LEFT - LIVE GAMES & REGIONAL TRAFFIC MAP */}

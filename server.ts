@@ -737,7 +737,25 @@ async function startServer() {
       }
     });
 
-    users = Array.from(map.values());
+    users = Array.from(map.values()).sort((a, b) => {
+      const getT = (u: any) => {
+        if (!u) return 0;
+        const raw = u.createdAt || u.created_at || u.timestamp || u.regDate;
+        if (raw) {
+          const t = new Date(raw).getTime();
+          if (!isNaN(t) && t > 0) return t;
+        }
+        if (u.id && typeof u.id === 'string') {
+          const m = u.id.match(/^usr_(\d{10,13})/);
+          if (m && m[1]) {
+            const p = parseInt(m[1].length === 10 ? m[1] + '000' : m[1], 10);
+            if (!isNaN(p) && p > 1e11) return p;
+          }
+        }
+        return 0;
+      };
+      return getT(b) - getT(a);
+    });
     saveStateToDisk();
     res.json({ success: true, totalUsers: users.length, users });
   });
@@ -764,7 +782,7 @@ async function startServer() {
     const userIds = new Set(users.map((u) => u.id));
     deposits.forEach((dep) => {
       if (dep.userId && !userIds.has(dep.userId)) {
-        users.push({
+        users.unshift({
           id: dep.userId,
           name: dep.userName || `Player ${dep.userId.slice(-4)}`,
           email: dep.userEmail || `${dep.userId}@tambolalive.com`,
@@ -792,8 +810,28 @@ async function startServer() {
       saveStateToDisk();
     }
 
+    const sortedUsers = [...users].sort((a, b) => {
+      const getT = (u: any) => {
+        if (!u) return 0;
+        const raw = u.createdAt || u.created_at || u.timestamp || u.regDate;
+        if (raw) {
+          const t = new Date(raw).getTime();
+          if (!isNaN(t) && t > 0) return t;
+        }
+        if (u.id && typeof u.id === 'string') {
+          const m = u.id.match(/^usr_(\d{10,13})/);
+          if (m && m[1]) {
+            const p = parseInt(m[1].length === 10 ? m[1] + '000' : m[1], 10);
+            if (!isNaN(p) && p > 1e11) return p;
+          }
+        }
+        return 0;
+      };
+      return getT(b) - getT(a);
+    });
+
     res.json({
-      users,
+      users: sortedUsers,
       commissions,
       games,
       tickets,

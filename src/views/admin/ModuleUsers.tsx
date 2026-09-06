@@ -35,6 +35,13 @@ import {
   Copy,
 } from 'lucide-react';
 import { User, WalletTransaction } from '../../types';
+import {
+  getUserRegistrationTimestamp,
+  isUserRecentlyRegistered,
+  isUserRegisteredJustNow,
+  formatUserRegistrationTime,
+  sortUsersNewestFirst,
+} from '../../utils/userUtils';
 
 interface ModuleUsersProps {
   users: User[];
@@ -111,15 +118,10 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   };
 
   // Helper to check if a user is recently registered (within last 7 days or newly added)
-  const isRecentUser = (u: User) => {
-    if (!u.createdAt) return false;
-    const regTime = new Date(u.createdAt).getTime();
-    if (isNaN(regTime)) return false;
-    const now = Date.now();
-    return now - regTime < 7 * 24 * 60 * 60 * 1000;
-  };
+  const isRecentUser = (u: User) => isUserRecentlyRegistered(u);
 
   const newUsersCount = users.filter(isRecentUser).length;
+  const recentRegistrations = sortUsersNewestFirst(users).slice(0, 4);
 
   const filteredUsers = users
     .filter((u) => {
@@ -152,14 +154,10 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
     })
     .sort((a, b) => {
       if (sortBy === 'newest') {
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeB - timeA;
+        return getUserRegistrationTimestamp(b) - getUserRegistrationTimestamp(a);
       }
       if (sortBy === 'oldest') {
-        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return timeA - timeB;
+        return getUserRegistrationTimestamp(a) - getUserRegistrationTimestamp(b);
       }
       if (sortBy === 'balance_desc') {
         return (b.walletBalance || 0) - (a.walletBalance || 0);
@@ -443,6 +441,98 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
         </div>
       )}
 
+      {/* ⚡ Instant Live User IDs Quick Radar (हाल ही में जुड़े नए यूज़र आईडी तुरंत) */}
+      <div className="rounded-2xl bg-gradient-to-r from-[#18112e] via-[#0d1527] to-[#1a1122] border-2 border-amber-400/40 p-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>तुरंत नए जुड़े यूज़र आईडी (Instant Live User IDs)</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-400/40">
+              0ms LIVE SYNC
+            </span>
+          </div>
+          <div className="text-[11px] text-slate-400">
+            जैसे ही कोई खिलाड़ी नया ID बनाता है, वह तुरंत यहाँ और नीचे टेबल में सबसे ऊपर आ जाता है।
+          </div>
+        </div>
+
+        {/* Quick User ID Cards Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {recentRegistrations.length > 0 ? (
+            recentRegistrations.map((u) => {
+              const isJustNow = isUserRegisteredJustNow(u);
+              return (
+                <div
+                  key={u.id}
+                  className={`relative rounded-xl p-3 bg-slate-900/90 border transition-all ${
+                    isJustNow
+                      ? 'border-emerald-400/70 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-400/30'
+                      : 'border-slate-800 hover:border-amber-400/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex items-center gap-1 font-mono text-xs font-bold text-amber-300 bg-slate-950 px-2 py-1 rounded-lg border border-amber-400/30 select-all truncate">
+                      <span>{u.id}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyUserId(u.id)}
+                      className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                      title="User ID कॉपी करें"
+                    >
+                      {copiedUserId === u.id ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-black text-white truncate">{u.name}</span>
+                    {isJustNow && (
+                      <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-black animate-pulse shrink-0">
+                        NOW
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-400">
+                    <span>{u.phone || 'No phone'}</span>
+                    <span className="text-amber-300/90 font-medium">{formatUserRegistrationTime(u)}</span>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">वॉलेट: <strong className="text-emerald-400 font-bold">₹{u.walletBalance || 0}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdjustingUser(u);
+                        setAdjustAmount(100);
+                        setAdjustType('credit');
+                      }}
+                      className="text-[10px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                    >
+                      एडिट बैलेंस
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="col-span-full py-4 text-center text-slate-500 text-xs">
+              कोई नया यूजर अभी दर्ज नहीं हुआ है
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Users Master Table */}
       <div className="rounded-2xl bg-slate-900/90 border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
@@ -479,12 +569,13 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 filteredUsers.map((user) => {
                   const isBlocked = blockedMap[user.id] ?? (user.status === 'blocked' || user.isBlocked);
                   const isRecent = isRecentUser(user);
+                  const isJustNow = isUserRegisteredJustNow(user);
                   const isSelected = selectedUserIds.includes(user.id);
                   return (
                     <tr
                       key={user.id}
                       className={`hover:bg-slate-800/40 transition-colors ${
-                        isSelected ? 'bg-red-950/20' : ''
+                        isSelected ? 'bg-red-950/20' : isJustNow ? 'bg-emerald-950/20' : ''
                       }`}
                     >
                       {/* Selection Checkbox */}
@@ -503,7 +594,9 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
 
                       {/* Dedicated User ID Column */}
                       <td className="px-4 py-3.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-amber-400/40 w-fit font-mono text-xs text-amber-300 shadow-inner">
+                        <div className={`flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border w-fit font-mono text-xs shadow-inner ${
+                          isJustNow ? 'border-emerald-400 text-emerald-300 shadow-emerald-500/10' : 'border-amber-400/40 text-amber-300'
+                        }`}>
                           <span className="font-bold select-all">{user.id}</span>
                           <button
                             type="button"
@@ -520,6 +613,9 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                         </div>
                         {copiedUserId === user.id && (
                           <span className="text-[10px] text-emerald-400 font-bold block mt-0.5 animate-in fade-in">✓ ID Copied!</span>
+                        )}
+                        {isJustNow && (
+                          <span className="text-[10px] text-emerald-400 font-bold block mt-0.5 animate-pulse">⚡ LIVE NEW ID</span>
                         )}
                       </td>
 
@@ -539,12 +635,17 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                                   ADMIN
                                 </span>
                               )}
-                              {isRecent && (
-                                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-400/50 animate-pulse flex items-center gap-0.5">
+                              {isJustNow ? (
+                                <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-black border border-emerald-400/50 animate-pulse flex items-center gap-0.5">
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  🔥 अभी जुड़ा (Just Now)
+                                </span>
+                              ) : isRecent ? (
+                                <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-400/50 flex items-center gap-0.5">
                                   <Sparkles className="w-2.5 h-2.5" />
                                   NEW
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
                               <span>ID: {user.id}</span>
@@ -565,13 +666,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                       <td className="px-4 py-3.5">
                         <div className="text-white font-medium text-xs flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-amber-400 shrink-0" />
-                          <span>
-                            {user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-IN', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric',
-                            }) : 'Earlier'}
-                          </span>
+                          <span>{formatUserRegistrationTime(user)}</span>
                         </div>
                         {user.createdAt && (
                           <div className="text-[10px] text-slate-400">

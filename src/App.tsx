@@ -69,8 +69,13 @@ import { checkAndAutoTrackWinners } from './utils/autoWinnerTracker';
 import { LiveWinnerFlashTicker, FlashWinnerItem } from './components/LiveWinnerFlashTicker';
 import { WinnerFlashData } from './components/WinnerCelebrationModal';
 import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
-import { playWinningFanfare, playNumberCallSound } from './utils/audio';
+import { playWinningFanfare, playNumberCallSound, playUserRegisteredSound } from './utils/audio';
 import { calculateTambolaDynamicPrizes, calculateSplitWinning } from './utils/prizePoolCalculator';
+import {
+  getUserRegistrationTimestamp,
+  isUserRecentlyRegistered,
+  sortUsersNewestFirst,
+} from './utils/userUtils';
 import { db } from './lib/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, query, where } from 'firebase/firestore';
 
@@ -233,6 +238,64 @@ export function App() {
   });
   const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>(INITIAL_USER_NOTIFICATIONS);
   const [showNotificationsDrawer, setShowNotificationsDrawer] = useState<boolean>(false);
+
+  // Real-Time Registration Radar State for Instant Admin Discovery
+  const [latestRegisteredUser, setLatestRegisteredUser] = useState<User | null>(null);
+  const knownUserIdsRef = useRef<Set<string>>(new Set(INITIAL_USERS.map((u) => u.id)));
+
+  const handleDetectNewUsers = (incomingList: User[]) => {
+    if (!Array.isArray(incomingList) || incomingList.length === 0) return;
+    let newestDiscovered: User | null = null;
+    incomingList.forEach((u) => {
+      if (u && u.id && !knownUserIdsRef.current.has(u.id)) {
+        knownUserIdsRef.current.add(u.id);
+        if (!newestDiscovered || getUserRegistrationTimestamp(u) > getUserRegistrationTimestamp(newestDiscovered)) {
+          newestDiscovered = u;
+        }
+      }
+    });
+
+    if (newestDiscovered) {
+      const nu = newestDiscovered as User;
+      setLatestRegisteredUser(nu);
+      playUserRegisteredSound();
+
+      // Automatically add to Activity Log for Admin
+      setActivityLogs((prev) => [
+        {
+          id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          timestamp: 'Just now',
+          action: `🆕 नया यूज़र ID लाइव रजिस्टर हुआ: ${nu.name} (ID: ${nu.id})`,
+          adminName: 'System Live Sync',
+          category: 'user' as const,
+          ipAddress: '127.0.0.1',
+          device: 'Realtime Radar',
+          status: 'success' as const,
+          details: `Phone: ${nu.phone || 'N/A'} | Sponsor: ${nu.referredBy || nu.referredByUserId || 'Direct'}`,
+        },
+        ...prev,
+      ]);
+
+      // Automatically add to Notifications for Admin
+      setNotifications((prev) => [
+        {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title: '🆕 नया यूज़र ID तुरंत सिंक हुआ',
+          message: `खिलाड़ी: ${nu.name} | User ID: ${nu.id} | मोबाइल: ${nu.phone || 'N/A'}`,
+          type: 'info',
+          sentAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          targetAudience: 'all',
+        },
+        ...prev,
+      ]);
+
+      // Update adminStats
+      setAdminStats((prev) => ({
+        ...prev,
+        totalUsers: (prev.totalUsers || 0) + 1,
+      }));
+    }
+  };
   const [adminActiveModule, setAdminActiveModule] = useState<string>('dashboard');
   const [showAllOptionsModal, setShowAllOptionsModal] = useState<boolean>(false);
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
@@ -352,11 +415,7 @@ export function App() {
               map.set(u.id, { ...(existing || {}), ...u });
             });
 
-            const merged = Array.from(map.values()).sort((a, b) => {
-              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return timeB - timeA;
-            });
+            const merged = sortUsersNewestFirst(Array.from(map.values()));
 
             try {
               localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
@@ -364,6 +423,9 @@ export function App() {
 
             return merged;
           });
+
+          // Detect any newly registered user IDs instantly
+          handleDetectNewUsers(firestoreUsers);
 
           // Sync Firestore users to backend server so admin and all devices have all user IDs
           if (firestoreUsers.length > 0) {
@@ -587,14 +649,15 @@ export function App() {
             const newUser: User = event.data.user;
             setUsers((prev) => {
               const exists = prev.some((u) => u.id === newUser.id);
-              if (exists) {
-                return prev.map((u) => (u.id === newUser.id ? { ...u, ...newUser } : u));
-              }
-              return [newUser, ...prev];
+              const nextUsers = exists
+                ? sortUsersNewestFirst(prev.map((u) => (u.id === newUser.id ? { ...u, ...newUser } : u)))
+                : sortUsersNewestFirst([newUser, ...prev]);
+              try {
+                localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
+              } catch (e) {}
+              return nextUsers;
             });
-            try {
-              localStorage.setItem('apna_tambola_registered_users', JSON.stringify([newUser, ...users.filter(u => u.id !== newUser.id)]));
-            } catch (e) {}
+            handleDetectNewUsers([newUser]);
           } else if (event.data?.type === 'NEW_DEPOSIT_REQUEST' && event.data.deposit) {
             const newDep: DepositRequest = event.data.deposit;
             setDeposits((prev) => {
@@ -819,16 +882,15 @@ export function App() {
                   map.set(u.id, { ...(existing || {}), ...u });
                 }
               });
-              const merged = Array.from(map.values()).sort((a, b) => {
-                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-                return timeB - timeA;
-              });
+              const merged = sortUsersNewestFirst(Array.from(map.values()));
               try {
                 localStorage.setItem('apna_tambola_registered_users', JSON.stringify(merged));
               } catch (e) {}
               return merged;
             });
+
+            // Detect newly registered user IDs instantly
+            handleDetectNewUsers(data.users);
 
             // Also sync active currentUser if updated remotely (e.g. deposit approved or referral bonus credited)
             setCurrentUser((prev) => {
@@ -1585,12 +1647,16 @@ export function App() {
     // 0. Immediate optimistic update (0ms latency so admin & user see the new registration instantly)
     setUsers((prev) => {
       const exists = prev.some((u) => u.id === newUser.id);
-      const nextUsers = exists ? prev.map((u) => (u.id === newUser.id ? { ...u, ...newUser } : u)) : [newUser, ...prev];
+      const nextUsers = exists
+        ? sortUsersNewestFirst(prev.map((u) => (u.id === newUser.id ? { ...u, ...newUser } : u)))
+        : sortUsersNewestFirst([newUser, ...prev]);
       try {
         localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
       } catch (e) {}
       return nextUsers;
     });
+
+    handleDetectNewUsers([newUser]);
 
     // Broadcast across tabs instantly
     try {
@@ -4809,6 +4875,8 @@ export function App() {
             stats={adminStats}
             games={games}
             users={users}
+            latestRegisteredUser={latestRegisteredUser}
+            onClearLatestUser={() => setLatestRegisteredUser(null)}
             withdrawals={withdrawals}
             deposits={deposits}
             commissions={commissions}
