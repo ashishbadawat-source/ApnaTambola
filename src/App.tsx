@@ -618,6 +618,42 @@ export function App() {
             } catch (e) {}
             return merged;
           });
+
+          // Instantly sync active currentUser wallet if any deposit has been approved
+          setCurrentUser((prevUser) => {
+            if (!prevUser) return null;
+            const cleanPrevPhone = prevUser.phone ? prevUser.phone.replace(/\D/g, '').slice(-10) : '';
+            const myApprovedDeps = firestoreDeps.filter((d) => {
+              if (d.status !== 'approved') return false;
+              if (d.userId === prevUser.id) return true;
+              const cleanDPhone = d.userPhone ? d.userPhone.replace(/\D/g, '').slice(-10) : '';
+              if (cleanPrevPhone && cleanDPhone && cleanPrevPhone === cleanDPhone) return true;
+              if (prevUser.email && d.userEmail && prevUser.email.toLowerCase() === d.userEmail.toLowerCase()) return true;
+              return false;
+            });
+
+            if (myApprovedDeps.length > 0) {
+              let totalApprovedDeposit = 0;
+              myApprovedDeps.forEach((d) => {
+                totalApprovedDeposit += (d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0));
+              });
+
+              if ((prevUser.depositBalance || 0) < totalApprovedDeposit) {
+                const updated = {
+                  ...prevUser,
+                  depositBalance: totalApprovedDeposit,
+                  hasDeposited: true,
+                  firstDepositBonusClaimed: true,
+                  walletBalance: totalApprovedDeposit + (prevUser.winningBalance || 0) + (prevUser.referralBalance || 0),
+                };
+                try {
+                  localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+                } catch (e) {}
+                return updated;
+              }
+            }
+            return prevUser;
+          });
         },
         (err) => console.warn('Firestore deposits listener:', err)
       );
@@ -680,20 +716,23 @@ export function App() {
               prev.map((d) => (d.id === depositId ? { ...d, status: 'approved' as const, approvedAt: new Date().toISOString() } : d))
             );
             if (user) {
+              const cleanUserPhone = user.phone ? user.phone.replace(/\D/g, '').slice(-10) : '';
               setUsers((prev) =>
                 prev.map((u) => {
+                  const cleanUPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
                   const match =
                     u.id === user.id ||
-                    (u.phone && user.phone && u.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                    (cleanUPhone && cleanUserPhone && cleanUPhone === cleanUserPhone) ||
                     (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase());
                   return match ? { ...u, ...user } : u;
                 })
               );
               setCurrentUser((prev) => {
                 if (!prev) return null;
+                const cleanPrevPhone = prev.phone ? prev.phone.replace(/\D/g, '').slice(-10) : '';
                 const match =
                   prev.id === user.id ||
-                  (prev.phone && user.phone && prev.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                  (cleanPrevPhone && cleanUserPhone && cleanPrevPhone === cleanUserPhone) ||
                   (prev.email && user.email && prev.email.toLowerCase() === user.email.toLowerCase());
                 if (match) {
                   const merged = { ...prev, ...user };
@@ -722,20 +761,23 @@ export function App() {
             }
           } else if (event.data?.type === 'ADMIN_WALLET_ADJUSTED' && event.data.user) {
             const { user, transaction, notification } = event.data;
+            const cleanUserPhone = user.phone ? user.phone.replace(/\D/g, '').slice(-10) : '';
             setUsers((prev) =>
               prev.map((u) => {
+                const cleanUPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
                 const match =
                   u.id === user.id ||
-                  (u.phone && user.phone && u.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                  (cleanUPhone && cleanUserPhone && cleanUPhone === cleanUserPhone) ||
                   (u.email && user.email && u.email.toLowerCase() === user.email.toLowerCase());
                 return match ? { ...u, ...user } : u;
               })
             );
             setCurrentUser((prev) => {
               if (!prev) return null;
+              const cleanPrevPhone = prev.phone ? prev.phone.replace(/\D/g, '').slice(-10) : '';
               const match =
                 prev.id === user.id ||
-                (prev.phone && user.phone && prev.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, '').slice(-10))) ||
+                (cleanPrevPhone && cleanUserPhone && cleanPrevPhone === cleanUserPhone) ||
                 (prev.email && user.email && prev.email.toLowerCase() === user.email.toLowerCase());
               if (match) {
                 const merged = { ...prev, ...user };
@@ -895,11 +937,25 @@ export function App() {
             // Also sync active currentUser if updated remotely (e.g. deposit approved or referral bonus credited)
             setCurrentUser((prev) => {
               if (!prev) return null;
-              const remote = data.users.find(
-                (u: User) => u.id === prev.id || (prev.phone && u.phone && u.phone.replace(/\D/g, '') === prev.phone.replace(/\D/g, ''))
-              );
+              const cleanPrevPhone = prev.phone ? prev.phone.replace(/\D/g, '').slice(-10) : '';
+              const remote = data.users.find((u: User) => {
+                if (!u) return false;
+                if (u.id === prev.id) return true;
+                const cleanUPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
+                if (cleanPrevPhone && cleanUPhone && cleanPrevPhone === cleanUPhone) return true;
+                if (prev.email && u.email && prev.email.toLowerCase() === u.email.toLowerCase()) return true;
+                return false;
+              });
               if (remote) {
-                const updated = { ...prev, ...remote };
+                const updated = {
+                  ...prev,
+                  ...remote,
+                  // Ensure balances never drop unexpectedly
+                  depositBalance: Math.max(prev.depositBalance || 0, remote.depositBalance || 0),
+                  winningBalance: Math.max(prev.winningBalance || 0, remote.winningBalance || 0),
+                  referralBalance: Math.max(prev.referralBalance || 0, remote.referralBalance || 0),
+                  walletBalance: Math.max(prev.walletBalance || 0, remote.walletBalance || 0),
+                };
                 try {
                   localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
                 } catch (e) {}
@@ -958,6 +1014,42 @@ export function App() {
               try {
                 localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
               } catch (e) {}
+
+              // Also check if currentUser has any approved deposit and update depositBalance immediately
+              setCurrentUser((prevUser) => {
+                if (!prevUser) return null;
+                const cleanPrevPhone = prevUser.phone ? prevUser.phone.replace(/\D/g, '').slice(-10) : '';
+                const myApproved = merged.filter((d) => {
+                  if (d.status !== 'approved') return false;
+                  if (d.userId === prevUser.id) return true;
+                  const cleanDPhone = d.userPhone ? d.userPhone.replace(/\D/g, '').slice(-10) : '';
+                  if (cleanPrevPhone && cleanDPhone && cleanPrevPhone === cleanDPhone) return true;
+                  if (prevUser.email && d.userEmail && prevUser.email.toLowerCase() === d.userEmail.toLowerCase()) return true;
+                  return false;
+                });
+
+                if (myApproved.length > 0) {
+                  let totalApproved = 0;
+                  myApproved.forEach((d) => {
+                    totalApproved += (d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0));
+                  });
+                  if ((prevUser.depositBalance || 0) < totalApproved) {
+                    const updated = {
+                      ...prevUser,
+                      depositBalance: totalApproved,
+                      hasDeposited: true,
+                      firstDepositBonusClaimed: true,
+                      walletBalance: totalApproved + (prevUser.winningBalance || 0) + (prevUser.referralBalance || 0),
+                    };
+                    try {
+                      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+                    } catch (e) {}
+                    return updated;
+                  }
+                }
+                return prevUser;
+              });
+
               return merged;
             });
           }
@@ -1611,24 +1703,67 @@ export function App() {
   };
 
   const handleUserLogin = (user: User) => {
-    // Preserve any existing user state properties (like referredBy and referredByUserId)
-    let mergedUser: User = user;
+    // Preserve any existing user state properties (like balances, referredBy and referredByUserId)
+    const cleanUserPhone = user.phone ? user.phone.replace(/\D/g, '').slice(-10) : '';
+    let mergedUser: User = { ...user };
+
     setUsers((prev) => {
       let updated: User[];
-      const existing = prev.find((u) => u.id === user.id || (u.phone && user.phone && u.phone.replace(/\D/g, '').endsWith(user.phone.replace(/\D/g, ''))));
+      const existing = prev.find((u) => {
+        if (!u) return false;
+        if (u.id === user.id) return true;
+        const cleanUPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
+        if (cleanUserPhone && cleanUPhone && cleanUserPhone === cleanUPhone) return true;
+        if (user.email && u.email && user.email.toLowerCase() === u.email.toLowerCase()) return true;
+        return false;
+      });
+
       if (existing) {
         mergedUser = {
           ...existing,
           ...user,
+          // CRITICAL: Preserve higher balances so approved deposit funds are NEVER wiped out
+          depositBalance: Math.max(existing.depositBalance || 0, user.depositBalance || 0),
+          winningBalance: Math.max(existing.winningBalance || 0, user.winningBalance || 0),
+          referralBalance: Math.max(existing.referralBalance || 0, user.referralBalance || 0),
+          bonusRewardBalance: user.bonusRewardBalance !== undefined ? user.bonusRewardBalance : (existing.bonusRewardBalance || 0),
+          hasDeposited: existing.hasDeposited || user.hasDeposited || false,
+          firstDepositBonusClaimed: existing.firstDepositBonusClaimed || user.firstDepositBonusClaimed || false,
           referredBy: user.referredBy || existing.referredBy || '',
           referredByUserId: user.referredByUserId || existing.referredByUserId || '',
           referralCode: user.referralCode || existing.referralCode,
           role: user.role || existing.role || 'user',
         };
+        mergedUser.walletBalance = (mergedUser.depositBalance || 0) + (mergedUser.winningBalance || 0) + (mergedUser.referralBalance || 0);
         updated = prev.map((u) => (u.id === existing.id ? mergedUser : u));
       } else {
-        updated = [user, ...prev];
+        updated = [mergedUser, ...prev];
       }
+
+      // Check if user has any approved deposits in deposits state and ensure funds are credited
+      const userApprovedDeps = (deposits || []).filter((d) => {
+        if (d.status !== 'approved') return false;
+        if (d.userId === mergedUser.id) return true;
+        const cleanDPhone = d.userPhone ? d.userPhone.replace(/\D/g, '').slice(-10) : '';
+        if (cleanUserPhone && cleanDPhone && cleanUserPhone === cleanDPhone) return true;
+        if (mergedUser.email && d.userEmail && mergedUser.email.toLowerCase() === d.userEmail.toLowerCase()) return true;
+        return false;
+      });
+
+      if (userApprovedDeps.length > 0) {
+        let totalApprovedDeposit = 0;
+        userApprovedDeps.forEach((d) => {
+          totalApprovedDeposit += (d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0));
+        });
+        if ((mergedUser.depositBalance || 0) < totalApprovedDeposit) {
+          mergedUser.depositBalance = totalApprovedDeposit;
+          mergedUser.hasDeposited = true;
+          mergedUser.firstDepositBonusClaimed = true;
+          mergedUser.walletBalance = totalApprovedDeposit + (mergedUser.winningBalance || 0) + (mergedUser.referralBalance || 0);
+          updated = updated.map((u) => (u.id === mergedUser.id ? mergedUser : u));
+        }
+      }
+
       try {
         localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updated));
       } catch (e) {}
@@ -1639,6 +1774,13 @@ export function App() {
     try {
       localStorage.setItem('apna_tambola_auth_user', JSON.stringify(mergedUser));
     } catch (e) {}
+
+    // Also sync with server database so backend knows user is online and active
+    fetch('/api/users/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ users: [mergedUser] }),
+    }).catch(() => {});
   };
 
   const handleRegisterUser = async (newUser: User) => {
@@ -2761,11 +2903,12 @@ export function App() {
     }
 
     // Single Upload Rule: Check if user already has an active pending deposit request
+    const cleanCurrentPhone = currentUser.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '';
     const existingPending = deposits.find(
       (d) =>
         d.status === 'pending' &&
         (d.userId === currentUser.id ||
-          (currentUser.phone && d.userPhone && currentUser.phone.replace(/\D/g, '').endsWith(d.userPhone.replace(/\D/g, '').slice(-10))))
+          (cleanCurrentPhone && d.userPhone && cleanCurrentPhone === d.userPhone.replace(/\D/g, '').slice(-10)))
     );
 
     if (existingPending) {
@@ -2875,9 +3018,9 @@ export function App() {
 
     // Multi-factor target user lookup
     let targetUser = users.find((u) => u.id === deposit.userId);
-    if (!targetUser && deposit.userPhone) {
-      const cleanPhone = deposit.userPhone.replace(/\D/g, '').slice(-10);
-      targetUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+    const cleanDepositPhone = deposit.userPhone ? deposit.userPhone.replace(/\D/g, '').slice(-10) : '';
+    if (!targetUser && cleanDepositPhone) {
+      targetUser = users.find((u) => u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanDepositPhone);
     }
     if (!targetUser && deposit.userEmail) {
       targetUser = users.find((u) => u.email && u.email.toLowerCase() === deposit.userEmail?.toLowerCase());
@@ -2887,12 +3030,33 @@ export function App() {
     }
 
     if (!targetUser) {
+      // Check localStorage for registered users
+      try {
+        const stored = localStorage.getItem('apna_tambola_registered_users');
+        if (stored) {
+          const list: User[] = JSON.parse(stored);
+          if (Array.isArray(list)) {
+            targetUser = list.find((u) => {
+              if (u.id === deposit.userId) return true;
+              const uCleanPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
+              if (cleanDepositPhone && uCleanPhone && uCleanPhone === cleanDepositPhone) return true;
+              if (deposit.userEmail && u.email && u.email.toLowerCase() === deposit.userEmail.toLowerCase()) return true;
+              if (deposit.userName && u.name && u.name.trim().toLowerCase() === deposit.userName.trim().toLowerCase()) return true;
+              return false;
+            });
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!targetUser) {
       // Auto-construct user object so payment funds are never lost!
       targetUser = {
         id: deposit.userId || `usr_${Date.now()}`,
         name: deposit.userName || 'Player',
         email: deposit.userEmail || `${(deposit.userName || 'player').toLowerCase().replace(/\s+/g, '')}@tambolalive.com`,
         phone: deposit.userPhone || '+91 9999999999',
+        password: 'password123',
         role: 'user',
         status: 'active',
         isBlocked: false,
@@ -2943,11 +3107,21 @@ export function App() {
       return next;
     });
 
+    const cleanUpdPhone = updatedTargetUser.phone ? updatedTargetUser.phone.replace(/\D/g, '').slice(-10) : '';
+
     // Update users state
     setUsers((prev) => {
-      const exists = prev.some((u) => u.id === updatedTargetUser.id);
+      const exists = prev.some((u) => {
+        if (u.id === updatedTargetUser.id) return true;
+        const uPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
+        return cleanUpdPhone && uPhone && uPhone === cleanUpdPhone;
+      });
       const nextUsers = exists
-        ? prev.map((u) => (u.id === updatedTargetUser.id ? updatedTargetUser : u))
+        ? prev.map((u) => {
+            const uPhone = u.phone ? u.phone.replace(/\D/g, '').slice(-10) : '';
+            const match = u.id === updatedTargetUser.id || (cleanUpdPhone && uPhone && uPhone === cleanUpdPhone);
+            return match ? { ...u, ...updatedTargetUser } : u;
+          })
         : [updatedTargetUser, ...prev];
       try {
         localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
@@ -2955,10 +3129,11 @@ export function App() {
       return nextUsers;
     });
 
+    const cleanCurrPhone = currentUser?.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '';
     const isCurrentActiveUser =
       currentUser &&
       (currentUser.id === updatedTargetUser.id ||
-        (currentUser.phone && updatedTargetUser.phone && currentUser.phone.replace(/\D/g, '').endsWith(updatedTargetUser.phone.replace(/\D/g, '').slice(-10))) ||
+        (cleanCurrPhone && cleanUpdPhone && cleanCurrPhone === cleanUpdPhone) ||
         (currentUser.email && updatedTargetUser.email && currentUser.email.toLowerCase() === updatedTargetUser.email.toLowerCase()));
 
     if (isCurrentActiveUser) {
@@ -3422,14 +3597,14 @@ export function App() {
     }
 
     const clean = recipientQuery.trim().toLowerCase();
-    const cleanPhone = clean.replace(/[\s+-]/g, '');
+    const cleanPhoneDigits = clean.replace(/\D/g, '').slice(-10);
 
     // Search recipient in registered users
     const foundUser = users.find(
       (u) =>
         (u.id && u.id.toLowerCase() === clean) ||
         (u.email && u.email.toLowerCase() === clean) ||
-        (u.phone && u.phone.replace(/[\s+-]/g, '') === cleanPhone) ||
+        (cleanPhoneDigits.length === 10 && u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanPhoneDigits) ||
         (u.referralCode && u.referralCode.toLowerCase() === clean) ||
         (u.name && u.name.toLowerCase() === clean)
     );
@@ -4126,10 +4301,11 @@ export function App() {
     const delta = type === 'credit' ? cleanAmount : -cleanAmount;
 
     // 1. Locate target user reliably
+    const cleanQueryPhone = (userId || '').replace(/\D/g, '').slice(-10);
     let targetUser = users.find(
       (u) =>
         u.id === userId ||
-        (u.phone && userId && u.phone.replace(/\D/g, '').endsWith(userId.replace(/\D/g, '').slice(-10))) ||
+        (cleanQueryPhone.length === 10 && u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanQueryPhone) ||
         (u.email && userId && u.email.toLowerCase() === userId.toLowerCase())
     );
 
@@ -4139,7 +4315,7 @@ export function App() {
         targetUser = savedUsers.find(
           (u) =>
             u.id === userId ||
-            (u.phone && userId && u.phone.replace(/\D/g, '').endsWith(userId.replace(/\D/g, '').slice(-10))) ||
+            (cleanQueryPhone.length === 10 && u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanQueryPhone) ||
             (u.email && userId && u.email.toLowerCase() === userId.toLowerCase())
         );
       } catch (e) {}
@@ -4175,10 +4351,12 @@ export function App() {
     });
 
     // 3. Update currently active user if matches target user
+    const cleanCurrPhone = currentUser?.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '';
+    const cleanUpdPhone = updatedUser.phone ? updatedUser.phone.replace(/\D/g, '').slice(-10) : '';
     const isCurrentActive =
       currentUser &&
       (currentUser.id === updatedUser.id ||
-        (currentUser.phone && updatedUser.phone && currentUser.phone.replace(/\D/g, '').endsWith(updatedUser.phone.replace(/\D/g, '').slice(-10))) ||
+        (cleanCurrPhone && cleanUpdPhone && cleanCurrPhone === cleanUpdPhone) ||
         (currentUser.email && updatedUser.email && currentUser.email.toLowerCase() === updatedUser.email.toLowerCase()));
 
     if (isCurrentActive) {

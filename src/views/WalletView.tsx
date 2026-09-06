@@ -93,12 +93,34 @@ export const WalletView: React.FC<WalletViewProps> = ({
   const [isRefreshingDeposit, setIsRefreshingDeposit] = useState<boolean>(false);
   const [copiedPendingUtr, setCopiedPendingUtr] = useState<boolean>(false);
 
+  const cleanUserPhone = currentUser?.phone ? currentUser.phone.replace(/\D/g, '').slice(-10) : '';
+
   // Find active pending deposit request for current user (if any)
   const userPendingDeposit = (deposits || []).find(
     (d) =>
       d.status === 'pending' &&
       (d.userId === currentUser.id ||
-        (currentUser.phone && d.userPhone && currentUser.phone.replace(/\D/g, '').endsWith(d.userPhone.replace(/\D/g, '').slice(-10))))
+        (cleanUserPhone && d.userPhone && cleanUserPhone === d.userPhone.replace(/\D/g, '').slice(-10)) ||
+        (currentUser.email && d.userEmail && currentUser.email.toLowerCase() === d.userEmail.toLowerCase()))
+  );
+
+  // Find all approved deposit requests for current user
+  const userApprovedDeposits = (deposits || []).filter(
+    (d) =>
+      d.status === 'approved' &&
+      (d.userId === currentUser.id ||
+        (cleanUserPhone && d.userPhone && cleanUserPhone === d.userPhone.replace(/\D/g, '').slice(-10)) ||
+        (currentUser.email && d.userEmail && currentUser.email.toLowerCase() === d.userEmail.toLowerCase()))
+  ).sort((a, b) => {
+    const tA = a.approvedAt ? new Date(a.approvedAt).getTime() : (a.requestDate ? new Date(a.requestDate).getTime() : 0);
+    const tB = b.approvedAt ? new Date(b.approvedAt).getTime() : (b.requestDate ? new Date(b.requestDate).getTime() : 0);
+    return tB - tA;
+  });
+
+  const latestApprovedDeposit = userApprovedDeposits[0];
+  const totalApprovedDepositAmount = userApprovedDeposits.reduce(
+    (sum, d) => sum + d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0),
+    0
   );
 
   // P2P Transfer Form State
@@ -116,13 +138,15 @@ export const WalletView: React.FC<WalletViewProps> = ({
   const hasP2PBalance = currentUser.walletBalance >= p2pTotalDeduction;
 
   const availableUsers = users.filter((u) => u && u.id !== currentUser.id);
+  const cleanTransferRecipient = transferRecipient.trim().toLowerCase();
+  const cleanTransferDigits = cleanTransferRecipient.replace(/\D/g, '').slice(-10);
   const matchedRecipient = availableUsers.find(
     (u) =>
-      (u.id && u.id.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
-      (u.email && u.email.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
-      (u.phone && u.phone.replace(/[\s+-]/g, '') === transferRecipient.trim().replace(/[\s+-]/g, '')) ||
-      (u.referralCode && u.referralCode.toLowerCase() === transferRecipient.trim().toLowerCase()) ||
-      (u.name && u.name.toLowerCase() === transferRecipient.trim().toLowerCase())
+      (u.id && u.id.toLowerCase() === cleanTransferRecipient) ||
+      (u.email && u.email.toLowerCase() === cleanTransferRecipient) ||
+      (cleanTransferDigits.length === 10 && u.phone && u.phone.replace(/\D/g, '').slice(-10) === cleanTransferDigits) ||
+      (u.referralCode && u.referralCode.toLowerCase() === cleanTransferRecipient) ||
+      (u.name && u.name.toLowerCase() === cleanTransferRecipient)
   );
 
   // Admin Configs (with robust defaults)
@@ -393,14 +417,24 @@ export const WalletView: React.FC<WalletViewProps> = ({
               DEPOSIT
             </span>
           </div>
-          <div className="text-2xl sm:text-3xl font-black text-purple-300 drop-shadow">
-            ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+          <div className="text-2xl sm:text-3xl font-black text-purple-300 drop-shadow flex items-center justify-between">
+            <span>₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}</span>
+            {latestApprovedDeposit && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                <span>✓</span> <span>फंड अप्रूव्ड</span>
+              </span>
+            )}
           </div>
           <p className="text-[10px] text-purple-200/90 font-medium leading-tight">
             एडमिन रिचार्ज + ₹10 1st डिपॉजिट बोनस — <strong>केवल टिकट खरीदने हेतु</strong>
           </p>
-          <div className="pt-1 flex items-center gap-1 text-[10px] text-slate-400 border-t border-purple-500/20">
-            <span>🔒 नो-विथड्रॉल (Non-withdrawable)</span>
+          <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400 border-t border-purple-500/20">
+            <span>🔒 नो-विथड्रॉल</span>
+            {latestApprovedDeposit && (
+              <span className="text-emerald-400 font-bold">
+                +₹{latestApprovedDeposit.amount} हाल ही में जमा
+              </span>
+            )}
           </div>
         </div>
 
@@ -884,7 +918,86 @@ export const WalletView: React.FC<WalletViewProps> = ({
               </div>
             </div>
           ) : (
-          <form onSubmit={handleDepositSubmit} className="space-y-6">
+          <div className="space-y-6">
+            {/* ✅ Prominent Admin-Approved Deposit Fund Display Banner */}
+            {latestApprovedDeposit && (
+              <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-emerald-950/80 via-slate-900 to-teal-950/80 border-2 border-emerald-500/60 space-y-4 shadow-2xl animate-in fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40 shadow-inner shrink-0">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-base sm:text-lg font-black text-emerald-300">
+                          ✅ एडमिन स्वीकृत डिपॉजिट फंड (Deposit Approved &amp; Credited)
+                        </h4>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black border border-emerald-500/40 flex items-center gap-1">
+                          <span>✓ APPROVED</span>
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300">
+                        एडमिन द्वारा आपका डिपॉजिट फंड स्वीकृत कर दिया गया है और यह आपके टिकट वॉलेट में उपलब्ध है!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/80 border border-emerald-500/30 px-4 py-2 rounded-2xl text-right shrink-0">
+                    <span className="text-[10px] text-slate-400 block font-bold">उपलब्ध टिकट वॉलेट बैलेंस:</span>
+                    <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono">
+                      ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="p-3 rounded-2xl bg-slate-950/90 border border-emerald-500/30">
+                    <span className="text-[10px] text-slate-400 block font-bold">स्वीकृत राशि:</span>
+                    <span className="text-emerald-400 font-black text-lg">₹{latestApprovedDeposit.amount.toLocaleString('en-IN')}</span>
+                  </div>
+                  {latestApprovedDeposit.registrationBonus ? (
+                    <div className="p-3 rounded-2xl bg-slate-950/90 border border-amber-500/30">
+                      <span className="text-[10px] text-amber-400 block font-bold">1st डिपॉजिट बोनस:</span>
+                      <span className="text-amber-300 font-black text-lg">+₹{latestApprovedDeposit.registrationBonus}</span>
+                    </div>
+                  ) : null}
+                  {latestApprovedDeposit.bonusRewardUnlock ? (
+                    <div className="p-3 rounded-2xl bg-slate-950/90 border border-purple-500/30">
+                      <span className="text-[10px] text-purple-400 block font-bold">रिवार्ड अनलॉक:</span>
+                      <span className="text-purple-300 font-black text-lg">+₹{latestApprovedDeposit.bonusRewardUnlock}</span>
+                    </div>
+                  ) : null}
+                  <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-bold">स्वीकृत UTR नंबर:</span>
+                    <span className="font-mono text-amber-300 font-bold text-xs truncate block mt-0.5" title={latestApprovedDeposit.utrNumber}>
+                      {latestApprovedDeposit.utrNumber}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-bold">स्वीकृति का समय:</span>
+                    <span className="text-slate-300 text-xs truncate block mt-0.5">
+                      {latestApprovedDeposit.approvedAt
+                        ? new Date(latestApprovedDeposit.approvedAt).toLocaleDateString('hi-IN') + ' ' + new Date(latestApprovedDeposit.approvedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : 'हाल ही में (Recently)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 flex items-center justify-between gap-3 text-xs text-emerald-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🎟️</span>
+                    <span className="font-semibold">
+                      यह फंड लाइव तंबोला गेम के टिकट खरीदने के लिए तैयार है। यदि आप और फंड जोड़ना चाहते हैं, तो नीचे दिए गए फॉर्म से पुनः डिपॉजिट कर सकते हैं।
+                    </span>
+                  </div>
+                  <span className="text-[10px] px-2.5 py-1 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold shrink-0">
+                    0% अतिरिक्त शुल्क
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleDepositSubmit} className="space-y-6">
             {/* Quick Amount Chips (Multiples of 100) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -1228,6 +1341,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
               </span>
             </button>
           </form>
+          </div>
           )}
         </div>
       )}
