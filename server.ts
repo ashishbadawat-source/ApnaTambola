@@ -1399,10 +1399,10 @@ async function startServer() {
     res.json({ success: true, updatedCount, totalTickets: tickets.length });
   });
 
-  // Admin Delete / Remove Ticket with optional user wallet refund
+  // Admin Delete / Remove Ticket with automatic user wallet refund
   app.post('/api/tickets/delete', (req: Request, res: Response) => {
     try {
-      const { ticketId, refundUser } = req.body;
+      const { ticketId, refundUser = true } = req.body;
       if (!ticketId) {
         return res.status(400).json({ success: false, error: 'Ticket ID is required' });
       }
@@ -1411,7 +1411,7 @@ async function startServer() {
         return res.status(404).json({ success: false, error: 'Ticket not found' });
       }
 
-      // Optional refund to user wallet
+      // Automatic refund to user wallet
       if (refundUser && targetTkt.userId && (targetTkt.price || 0) > 0) {
         const refundAmt = Number(targetTkt.price);
         const buyer = users.find((u) => u.id === targetTkt.userId);
@@ -1420,14 +1420,14 @@ async function startServer() {
           buyer.depositBalance = (buyer.depositBalance || 0) + refundAmt;
 
           transactions.unshift({
-            id: `txn_ref_${Date.now()}`,
+            id: `txn_ref_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
             userId: buyer.id,
             type: 'deposit',
             amount: refundAmt,
             balanceAfter: buyer.walletBalance,
-            description: `टिकट रिफंड (Refund): ${targetTkt.ticketId} - एडमिन द्वारा टिकट रिमूव किया गया`,
+            description: `टिकट रिफंड (Refund): ${targetTkt.ticketId || targetTkt.id} - टिकट रिमूव राशि वॉलेट में वापस जमा`,
             paymentMethod: 'Admin Refund',
-            referenceId: targetTkt.ticketId,
+            referenceId: targetTkt.ticketId || targetTkt.id,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
             status: 'completed',
           });
@@ -1460,7 +1460,7 @@ async function startServer() {
   // Admin Batch Delete Tickets
   app.post('/api/tickets/batch-delete', (req: Request, res: Response) => {
     try {
-      const { ticketIds = [], refundUser } = req.body;
+      const { ticketIds = [], refundUser = true } = req.body;
       if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
         return res.status(400).json({ success: false, error: 'ticketIds array is required' });
       }

@@ -2455,7 +2455,7 @@ export function App() {
 
   // Delete Individual Ticket (Allowed for Completed/Finished Games)
   const handleUserRemoveTicket = (ticketId: string) => {
-    handleDeleteTicket(ticketId, false);
+    handleDeleteTicket(ticketId, true);
   };
 
   // Bulk Delete All Completed / Finished Game Tickets to Free Memory
@@ -4397,8 +4397,8 @@ export function App() {
     return true;
   };
 
-  // 14d. Admin Delete Single Ticket (रिमूव टिकट) with optional user wallet refund
-  const handleDeleteTicket = async (ticketId: string, refundUser = false): Promise<boolean> => {
+  // 14d. Admin Delete Single Ticket (रिमूव टिकट) with automatic user wallet refund
+  const handleDeleteTicket = async (ticketId: string, refundUser = true): Promise<boolean> => {
     try {
       const targetTkt = tickets.find((t) => t.id === ticketId || t.ticketId === ticketId);
       if (!targetTkt) return false;
@@ -4431,16 +4431,21 @@ export function App() {
         );
       }
 
-      // 4. If refund requested, credit user wallet and add refund transaction
+      // 4. If refund requested / default, credit user wallet and add refund transaction
       if (refundUser && targetTkt.userId && (targetTkt.price || 0) > 0) {
         const refundAmt = Number(targetTkt.price);
+        let calculatedNewWalletBal = 0;
+        let calculatedNewDepBal = 0;
+
         setUsers((prev) =>
           prev.map((u) => {
             if (u.id === targetTkt.userId) {
+              calculatedNewWalletBal = (u.walletBalance || 0) + refundAmt;
+              calculatedNewDepBal = (u.depositBalance || 0) + refundAmt;
               return {
                 ...u,
-                walletBalance: (u.walletBalance || 0) + refundAmt,
-                depositBalance: (u.depositBalance || 0) + refundAmt,
+                walletBalance: calculatedNewWalletBal,
+                depositBalance: calculatedNewDepBal,
               };
             }
             return u;
@@ -4464,14 +4469,14 @@ export function App() {
 
         // Add refund transaction record
         const refundTxn: WalletTransaction = {
-          id: `txn_ref_${Date.now()}`,
+          id: `txn_ref_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
           userId: targetTkt.userId,
           type: 'deposit',
           amount: refundAmt,
-          balanceAfter: refundAmt,
-          description: `टिकट रिफंड (Refund): ${targetTkt.ticketId} - एडमिन द्वारा टिकट रिमूव किया गया`,
+          balanceAfter: calculatedNewWalletBal || refundAmt,
+          description: `टिकट रिफंड (Refund): ${targetTkt.ticketId || targetTkt.id} - टिकट रिमूव राशि वॉलेट में वापस जमा`,
           paymentMethod: 'Admin Refund',
-          referenceId: targetTkt.ticketId,
+          referenceId: targetTkt.ticketId || targetTkt.id,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
           status: 'completed',
         };
@@ -4482,13 +4487,31 @@ export function App() {
           id: `un_ref_${Date.now()}`,
           category: 'wallet_credit',
           title: `💰 टिकट रिफंड: ₹${refundAmt} वापस जमा हुआ`,
-          message: `आपका टिकट (${targetTkt.ticketId} - ${targetTkt.gameTitle}) एडमिन द्वारा रिमूव कर दिया गया है एवं ₹${refundAmt} आपके वॉलेट में वापस जमा कर दिए गए हैं।`,
+          message: `आपका टिकट (${targetTkt.ticketId || targetTkt.id} - ${targetTkt.gameTitle || 'Tambola'}) रिमूव होने पर ₹${refundAmt} आपके वॉलेट में तुरंत वापस क्रेडिट कर दिए गए हैं।`,
           timestamp: 'Just now',
           read: false,
           actionTab: 'wallet',
           amount: refundAmt,
         };
         setUserNotifications((prev) => [refNotif, ...prev]);
+
+        // Update Firestore User and Transaction in real-time
+        try {
+          const uDoc = users.find((u) => u.id === targetTkt.userId);
+          const finalBal = (uDoc?.walletBalance || 0) + refundAmt;
+          const finalDepBal = (uDoc?.depositBalance || 0) + refundAmt;
+          setDoc(
+            doc(db, 'users', targetTkt.userId),
+            {
+              walletBalance: finalBal,
+              depositBalance: finalDepBal,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {});
+
+          setDoc(doc(db, 'transactions', refundTxn.id), refundTxn).catch(() => {});
+        } catch (e) {}
       }
 
       // 5. Delete from Firestore
@@ -4522,7 +4545,7 @@ export function App() {
   };
 
   // 14e. Admin Batch Delete Tickets (चयनित टिकट रिमूव करें)
-  const handleBatchDeleteTickets = async (ticketIds: string[], refundUser = false): Promise<boolean> => {
+  const handleBatchDeleteTickets = async (ticketIds: string[], refundUser = true): Promise<boolean> => {
     try {
       if (!Array.isArray(ticketIds) || ticketIds.length === 0) return false;
       const idSet = new Set(ticketIds);
@@ -4565,7 +4588,7 @@ export function App() {
         })
       );
 
-      // 4. Process refunds if requested
+      // 4. Process refunds if requested / default
       if (refundUser) {
         const userRefundMap: Record<string, number> = {};
         targetTkts.forEach((t) => {
@@ -4575,13 +4598,18 @@ export function App() {
         });
 
         Object.entries(userRefundMap).forEach(([userId, refundTotal]) => {
+          let updatedUserBal = 0;
+          let updatedDepBal = 0;
+
           setUsers((prev) =>
             prev.map((u) => {
               if (u.id === userId) {
+                updatedUserBal = (u.walletBalance || 0) + refundTotal;
+                updatedDepBal = (u.depositBalance || 0) + refundTotal;
                 return {
                   ...u,
-                  walletBalance: (u.walletBalance || 0) + refundTotal,
-                  depositBalance: (u.depositBalance || 0) + refundTotal,
+                  walletBalance: updatedUserBal,
+                  depositBalance: updatedDepBal,
                 };
               }
               return u;
@@ -4609,14 +4637,44 @@ export function App() {
             userId: userId,
             type: 'deposit',
             amount: refundTotal,
-            balanceAfter: refundTotal,
-            description: `बैच टिकट रिफंड (Batch Refund): एडमिन द्वारा टिकट रिमूव किए गए`,
+            balanceAfter: updatedUserBal || refundTotal,
+            description: `बैच टिकट रिफंड (Batch Refund): टिकट रिमूव होने पर ₹${refundTotal} वॉलेट में वापस जमा`,
             paymentMethod: 'Admin Refund',
             referenceId: `REF-${Date.now().toString().slice(-6)}`,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
             status: 'completed',
           };
           setTransactions((prev) => [refundTxn, ...prev]);
+
+          // Push in-app notification
+          const refNotif: UserNotificationItem = {
+            id: `un_ref_${Date.now()}_${userId}`,
+            category: 'wallet_credit',
+            title: `💰 टिकट रिफंड: ₹${refundTotal} वापस जमा हुआ`,
+            message: `आपके टिकट रिमूव होने पर कुल ₹${refundTotal} आपके वॉलेट में तुरंत वापस क्रेडिट कर दिए गए हैं।`,
+            timestamp: 'Just now',
+            read: false,
+            actionTab: 'wallet',
+            amount: refundTotal,
+          };
+          setUserNotifications((prev) => [refNotif, ...prev]);
+
+          // Sync Firestore
+          try {
+            const uDoc = users.find((u) => u.id === userId);
+            const finalBal = (uDoc?.walletBalance || 0) + refundTotal;
+            const finalDepBal = (uDoc?.depositBalance || 0) + refundTotal;
+            setDoc(
+              doc(db, 'users', userId),
+              {
+                walletBalance: finalBal,
+                depositBalance: finalDepBal,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            ).catch(() => {});
+            setDoc(doc(db, 'transactions', refundTxn.id), refundTxn).catch(() => {});
+          } catch (e) {}
         });
       }
 
