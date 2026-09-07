@@ -1195,24 +1195,24 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {winners.slice(0, 6).map((win, idx) => (
+          {(winners || []).slice(0, 6).map((win, idx) => (
             <div
-              key={win.id || idx}
+              key={win?.id || idx}
               className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-3 hover:border-amber-400/40 transition-all"
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black text-sm">
-                  {win.userName.charAt(0)}
+                  {(win?.userName || 'P').charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-xs text-white">{win.userName}</span>
+                    <span className="font-bold text-xs text-white">{win?.userName || 'विजेता'}</span>
                     <span className="text-[9px] bg-emerald-950 text-emerald-400 border border-emerald-500/40 px-1.5 py-0.2 rounded-full font-bold">
                       ✓ Paid
                     </span>
                   </div>
                   <span className="text-[11px] text-amber-300 font-medium block">
-                    {win.prizeName}
+                    {win?.prizeName || 'Prize'}
                   </span>
                 </div>
               </div>
@@ -1221,7 +1221,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span className="text-sm font-black text-emerald-400 block font-mono">
                   +₹{(win?.prizeAmount || 0).toLocaleString('en-IN')}
                 </span>
-                <span className="text-[9px] text-slate-500">{win.timestamp || 'Just now'}</span>
+                <span className="text-[9px] text-slate-500">{win?.timestamp || 'Just now'}</span>
               </div>
             </div>
           ))}

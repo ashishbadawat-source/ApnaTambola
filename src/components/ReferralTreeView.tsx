@@ -460,7 +460,7 @@ export const ReferralTreeView: React.FC<ReferralTreeViewProps> = ({
             <div className="flex items-center gap-3.5">
               <div className="relative">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-300 text-slate-950 font-black text-lg flex items-center justify-center border-2 border-white shadow-lg">
-                  {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                  {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
                 </div>
                 <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[9px] border border-white">
                   ROOT
@@ -647,7 +647,7 @@ const VisualTreeNodeItem: React.FC<VisualTreeNodeItemProps> = ({
               <div
                 className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl ${config.cardBg} text-white font-black text-sm flex items-center justify-center border-2 ${config.border}`}
               >
-                {node.user.name ? node.user.name.charAt(0).toUpperCase() : 'U'}
+                {node?.user?.name ? node.user.name.charAt(0).toUpperCase() : 'U'}
               </div>
             )}
             <span
