@@ -119,7 +119,7 @@ export const WalletView: React.FC<WalletViewProps> = ({
 
   const latestApprovedDeposit = userApprovedDeposits[0];
   const totalApprovedDepositAmount = userApprovedDeposits.reduce(
-    (sum, d) => sum + d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0),
+    (sum, d) => sum + d.amount + (d.registrationBonus || 0),
     0
   );
 
@@ -959,12 +959,6 @@ export const WalletView: React.FC<WalletViewProps> = ({
                     <div className="p-3 rounded-2xl bg-slate-950/90 border border-amber-500/30">
                       <span className="text-[10px] text-amber-400 block font-bold">1st डिपॉजिट बोनस:</span>
                       <span className="text-amber-300 font-black text-lg">+₹{latestApprovedDeposit.registrationBonus}</span>
-                    </div>
-                  ) : null}
-                  {latestApprovedDeposit.bonusRewardUnlock ? (
-                    <div className="p-3 rounded-2xl bg-slate-950/90 border border-purple-500/30">
-                      <span className="text-[10px] text-purple-400 block font-bold">रिवार्ड अनलॉक:</span>
-                      <span className="text-purple-300 font-black text-lg">+₹{latestApprovedDeposit.bonusRewardUnlock}</span>
                     </div>
                   ) : null}
                   <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800">

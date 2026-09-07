@@ -285,6 +285,35 @@ async function startServer() {
     });
   });
 
+  // Real-Time Server-Sent Events (SSE) Stream for Instant Admin User Sync
+  const sseClients: Response[] = [];
+
+  function broadcastSSE(type: string, payload: any) {
+    const data = JSON.stringify({ type, payload, timestamp: Date.now() });
+    for (let i = sseClients.length - 1; i >= 0; i--) {
+      const client = sseClients[i];
+      try {
+        client.write(`data: ${data}\n\n`);
+      } catch (e) {
+        sseClients.splice(i, 1);
+      }
+    }
+  }
+
+  app.get('/api/events/stream', (req: Request, res: Response) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    res.write(`data: ${JSON.stringify({ type: 'connected', time: Date.now() })}\n\n`);
+    sseClients.push(res);
+    req.on('close', () => {
+      const idx = sseClients.indexOf(res);
+      if (idx >= 0) sseClients.splice(idx, 1);
+    });
+  });
+
   // 1b. Users API - Cross-device sync, Registration & Referral linking
   app.get('/api/users', (req: Request, res: Response) => {
     res.json(users);
@@ -534,6 +563,20 @@ async function startServer() {
 
       // STEP 5: Commit to durable persistent disk storage
       saveStateToDisk();
+
+      // Broadcast instant live event to all connected admin/client portals
+      broadcastSSE('user_registered', {
+        user: newUser,
+        referrer: referrer
+          ? {
+              id: referrer.id,
+              name: referrer.name,
+              referralCode: referrer.referralCode,
+              phone: referrer.phone,
+            }
+          : null,
+        totalUsers: users.length,
+      });
 
       console.log(`[Referral Registration] Registered user ${newUser.name} (${newUser.id}), Referrer ID: ${newUser.referrer_id || 'NONE (Direct)'}`);
 
@@ -941,7 +984,6 @@ async function startServer() {
         utrNumber,
         proofImageUrl,
         registrationBonus,
-        bonusRewardUnlock,
         requestDate,
       } = req.body;
 
@@ -1009,7 +1051,6 @@ async function startServer() {
         status: existingDep ? existingDep.status : 'pending',
         requestDate: requestDate || (existingDep ? existingDep.requestDate : new Date().toISOString()),
         registrationBonus: registrationBonus !== undefined ? registrationBonus : (user && !user.hasDeposited && !user.firstDepositBonusClaimed ? 10 : 0),
-        bonusRewardUnlock: Number(bonusRewardUnlock) || 0,
       };
 
       if (existingDep) {
@@ -1118,19 +1159,16 @@ async function startServer() {
 
       if (targetUser) {
         const bonus1st = deposit.registrationBonus || (!targetUser.hasDeposited && !targetUser.firstDepositBonusClaimed ? 10 : 0);
-        const rewardUnlock = deposit.bonusRewardUnlock || 0;
 
         if (updatedUser && typeof updatedUser.depositBalance === 'number') {
           targetUser.depositBalance = updatedUser.depositBalance;
-          targetUser.bonusRewardBalance = updatedUser.bonusRewardBalance !== undefined ? updatedUser.bonusRewardBalance : targetUser.bonusRewardBalance;
           targetUser.walletBalance = updatedUser.walletBalance !== undefined ? updatedUser.walletBalance : (targetUser.depositBalance + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0));
           targetUser.hasDeposited = true;
           targetUser.firstDepositBonusClaimed = true;
         } else {
-          const totalDepositCredit = deposit.amount + bonus1st + rewardUnlock;
+          const totalDepositCredit = deposit.amount + bonus1st;
 
           targetUser.depositBalance = (targetUser.depositBalance || 0) + totalDepositCredit;
-          targetUser.bonusRewardBalance = Math.max(0, (targetUser.bonusRewardBalance || 0) - rewardUnlock);
           targetUser.hasDeposited = true;
           targetUser.firstDepositBonusClaimed = true;
           targetUser.walletBalance = (targetUser.depositBalance || 0) + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0);

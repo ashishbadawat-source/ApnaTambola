@@ -241,7 +241,21 @@ export function App() {
 
   // Real-Time Registration Radar State for Instant Admin Discovery
   const [latestRegisteredUser, setLatestRegisteredUser] = useState<User | null>(null);
-  const knownUserIdsRef = useRef<Set<string>>(new Set(INITIAL_USERS.map((u) => u.id)));
+  const knownUserIdsRef = useRef<Set<string>>(
+    new Set([
+      ...INITIAL_USERS.map((u) => u.id),
+      ...(() => {
+        try {
+          const saved = localStorage.getItem('apna_tambola_registered_users');
+          if (saved) {
+            const arr = JSON.parse(saved);
+            if (Array.isArray(arr)) return arr.map((u: any) => u && u.id).filter(Boolean);
+          }
+        } catch (e) {}
+        return [];
+      })(),
+    ])
+  );
 
   const handleDetectNewUsers = (incomingList: User[]) => {
     if (!Array.isArray(incomingList) || incomingList.length === 0) return;
@@ -635,7 +649,7 @@ export function App() {
             if (myApprovedDeps.length > 0) {
               let totalApprovedDeposit = 0;
               myApprovedDeps.forEach((d) => {
-                totalApprovedDeposit += (d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0));
+                totalApprovedDeposit += (d.amount + (d.registrationBonus || 0));
               });
 
               if ((prevUser.depositBalance || 0) < totalApprovedDeposit) {
@@ -1031,7 +1045,7 @@ export function App() {
                 if (myApproved.length > 0) {
                   let totalApproved = 0;
                   myApproved.forEach((d) => {
-                    totalApproved += (d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0));
+                    totalApproved += (d.amount + (d.registrationBonus || 0));
                   });
                   if ((prevUser.depositBalance || 0) < totalApproved) {
                     const updated = {
@@ -1079,6 +1093,36 @@ export function App() {
     // ⚡ Continuous 1-Second Auto-Sync across all devices and tabs
     const intervalId = setInterval(pollServerSync, 1000);
 
+    // 🔴 Instant 0ms Server-Sent Events (SSE) Stream for live user registrations and updates
+    let eventSource: EventSource | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'EventSource' in window) {
+        eventSource = new EventSource('/api/events/stream');
+        eventSource.onmessage = (event) => {
+          try {
+            const parsed = JSON.parse(event.data);
+            if (parsed?.type === 'user_registered' && parsed?.payload?.user) {
+              const nu = parsed.payload.user as User;
+              setUsers((prev) => {
+                const exists = prev.some((u) => u.id === nu.id);
+                const nextUsers = exists
+                  ? sortUsersNewestFirst(prev.map((u) => (u.id === nu.id ? { ...u, ...nu } : u)))
+                  : sortUsersNewestFirst([nu, ...prev]);
+                try {
+                  localStorage.setItem('apna_tambola_registered_users', JSON.stringify(nextUsers));
+                } catch (e) {}
+                return nextUsers;
+              });
+              handleDetectNewUsers([nu]);
+            }
+          } catch (err) {}
+        };
+        eventSource.onerror = () => {
+          // SSE auto-reconnects
+        };
+      }
+    } catch (e) {}
+
     const handleWindowFocus = () => {
       pollServerSync();
     };
@@ -1093,6 +1137,7 @@ export function App() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (eventSource) eventSource.close();
       if (bc) bc.close();
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', handleWindowFocus);
@@ -1753,7 +1798,7 @@ export function App() {
       if (userApprovedDeps.length > 0) {
         let totalApprovedDeposit = 0;
         userApprovedDeps.forEach((d) => {
-          totalApprovedDeposit += (d.amount + (d.registrationBonus || 0) + (d.bonusRewardUnlock || 0));
+          totalApprovedDeposit += (d.amount + (d.registrationBonus || 0));
         });
         if ((mergedUser.depositBalance || 0) < totalApprovedDeposit) {
           mergedUser.depositBalance = totalApprovedDeposit;
@@ -2924,12 +2969,6 @@ export function App() {
     const isFirstDeposit = !currentUser.hasDeposited && !currentUser.firstDepositBonusClaimed;
     const registrationBonus = isFirstDeposit ? 10 : 0;
 
-    // 2. 10% Daily Reward Bonus Unlock Rule:
-    const availableReward = currentUser.bonusRewardBalance || 0;
-    const maxTenPercent = amount * 0.10;
-    const unlockedReward = Math.min(maxTenPercent, availableReward);
-    const roundedUnlocked = Math.round(unlockedReward * 100) / 100;
-
     const newDepositReq: DepositRequest = {
       id: `dep_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,
       userId: currentUser.id,
@@ -2943,7 +2982,6 @@ export function App() {
       status: 'pending',
       requestDate: new Date().toISOString(),
       registrationBonus,
-      bonusRewardUnlock: roundedUnlocked,
     };
 
     // Update deposits state & localStorage
@@ -3073,11 +3111,9 @@ export function App() {
     }
 
     const regBonus = deposit.registrationBonus || 0;
-    const rewUnlock = deposit.bonusRewardUnlock || 0;
-    const totalCredit = deposit.amount + regBonus + rewUnlock;
+    const totalCredit = deposit.amount + regBonus;
 
     const newDepositBal = (targetUser.depositBalance || 0) + totalCredit;
-    const newBonusRewBal = Math.max(0, (targetUser.bonusRewardBalance || 0) - rewUnlock);
     const newTotalWallet = newDepositBal + (targetUser.winningBalance || 0) + (targetUser.referralBalance || 0);
 
     const updatedTargetUser: User = {
@@ -3085,7 +3121,6 @@ export function App() {
       hasDeposited: true,
       firstDepositBonusClaimed: true,
       depositBalance: newDepositBal,
-      bonusRewardBalance: newBonusRewBal,
       walletBalance: newTotalWallet,
     };
 
