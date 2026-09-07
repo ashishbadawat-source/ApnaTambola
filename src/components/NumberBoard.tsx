@@ -4,20 +4,21 @@ import { TAMBOLA_NICKNAMES } from '../utils/tambolaNicknames';
 import { AppTemplateId, getAppTemplate } from '../utils/appThemes';
 
 interface NumberBoardProps {
-  calledNumbers: number[];
-  currentNumber: number | null;
+  calledNumbers?: number[];
+  currentNumber?: number | null;
   onNumberClick?: (num: number) => void;
   templateId?: AppTemplateId;
 }
 
 export const NumberBoard: React.FC<NumberBoardProps> = ({
-  calledNumbers,
-  currentNumber,
+  calledNumbers = [],
+  currentNumber = null,
   onNumberClick,
   templateId = 'royal_gold',
 }) => {
   const [filter, setFilter] = useState<'all' | 'called' | 'uncalled'>('all');
-  const calledSet = new Set(calledNumbers);
+  const safeCalled = Array.isArray(calledNumbers) ? calledNumbers : [];
+  const calledSet = new Set(safeCalled);
   const template = getAppTemplate(templateId);
 
   const numbers = Array.from({ length: 90 }, (_, i) => i + 1);
@@ -38,7 +39,7 @@ export const NumberBoard: React.FC<NumberBoardProps> = ({
               </span>
             </h3>
             <p className="text-[11px] text-slate-300">
-              Called: <strong className="text-amber-400 font-black">{calledNumbers.length}</strong> / 90 | Remaining: <strong className="text-slate-200">{90 - calledNumbers.length}</strong>
+              Called: <strong className="text-amber-400 font-black">{safeCalled.length}</strong> / 90 | Remaining: <strong className="text-slate-200">{Math.max(0, 90 - safeCalled.length)}</strong>
             </p>
           </div>
         </div>
@@ -59,7 +60,7 @@ export const NumberBoard: React.FC<NumberBoardProps> = ({
               filter === 'called' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Called ({calledNumbers.length})
+            Called ({safeCalled.length})
           </button>
           <button
             onClick={() => setFilter('uncalled')}
@@ -67,7 +68,7 @@ export const NumberBoard: React.FC<NumberBoardProps> = ({
               filter === 'uncalled' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Uncalled ({90 - calledNumbers.length})
+            Uncalled ({Math.max(0, 90 - safeCalled.length)})
           </button>
         </div>
       </div>

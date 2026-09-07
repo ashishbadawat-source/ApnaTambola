@@ -1679,6 +1679,7 @@ export function App() {
   const [celebrationData, setCelebrationData] = useState<WinnerFlashData | null>(null);
 
   const autoCallTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProcessedTurnRef = useRef<string>('');
 
   const rawLiveGame = (games || []).find((g) => g && g.id === selectedGameId) || (games || []).find((g) => g && g.status === 'live') || (games || [])[0];
   const liveGame = React.useMemo(() => {
@@ -2160,7 +2161,13 @@ export function App() {
 
   // ⚡ Automatic Winner Tracking Engine (Includes Online, Auto Mode & Offline tickets)
   useEffect(() => {
-    if (!liveGame || !liveGame.currentNumber || !liveGame.calledNumbers || liveGame.calledNumbers.length === 0) return;
+    if (!liveGame || !liveGame.currentNumber || !Array.isArray(liveGame.calledNumbers) || liveGame.calledNumbers.length === 0) return;
+
+    const currentTurnKey = `${liveGame.id}_${liveGame.currentNumber}_${liveGame.calledNumbers.length}`;
+    if (lastProcessedTurnRef.current === currentTurnKey) {
+      return;
+    }
+    lastProcessedTurnRef.current = currentTurnKey;
 
     const gameTickets = (tickets || []).filter((t) => t && (t.gameId === liveGame.id || !t.gameId));
 
@@ -2169,9 +2176,9 @@ export function App() {
       gameTitle: liveGame.title,
       currentNumber: liveGame.currentNumber,
       calledNumbers: liveGame.calledNumbers,
-      prizes: liveGame.prizes,
+      prizes: liveGame.prizes || [],
       tickets: gameTickets,
-      currentUser,
+      currentUser: currentUser || INITIAL_USERS[0],
     });
 
     if (trackingResult.newWins.length > 0) {
@@ -2221,7 +2228,9 @@ export function App() {
         });
 
         if (win.isCurrentUser) {
-          playWinningFanfare();
+          try {
+            playWinningFanfare();
+          } catch (e) {}
 
           // Credit into Withdrawal Wallet (winningBalance)
           setCurrentUser((prev) => {
@@ -2271,7 +2280,7 @@ export function App() {
           setCelebrationData({
             prizeName: win.prizeName,
             prizeAmount: win.splitPrizeAmount,
-            userName: currentUser.name,
+            userName: currentUser ? currentUser.name : win.userName,
             ticketId: win.ticketId,
             ticketNumber: win.ticketNumber,
             winningNumber: win.winningNumber,
@@ -2315,7 +2324,7 @@ export function App() {
         }
       });
     }
-  }, [liveGame?.calledNumbers, liveGame?.currentNumber]);
+  }, [liveGame?.calledNumbers, liveGame?.currentNumber, liveGame?.id]);
 
   // Toggle Ticket Auto Mode
   const handleToggleTicketAutoMode = (ticketId: string) => {
@@ -2343,35 +2352,36 @@ export function App() {
 
   // 1. Call Next Number Handler
   const handleCallNextNumber = (forcedNumber?: number, targetGameId?: string) => {
-    let chosenNumber: number | null = null;
     const activeTargetId = targetGameId || liveGame?.id;
     if (!activeTargetId) return;
 
-    setGames((prevGames) => {
-      return prevGames.map((g) => {
+    const targetGame = (games || []).find((g) => g && g.id === activeTargetId);
+    if (!targetGame) return;
+
+    const calledList = Array.isArray(targetGame.calledNumbers) ? targetGame.calledNumbers : [];
+    if (calledList.length >= 90) {
+      setGames((prev) => prev.map((g) => (g.id === activeTargetId ? { ...g, autoCalling: false, status: 'completed' } : g)));
+      return;
+    }
+
+    let nextNum: number;
+    if (forcedNumber && !calledList.includes(forcedNumber) && forcedNumber >= 1 && forcedNumber <= 90) {
+      nextNum = forcedNumber;
+    } else {
+      const available = Array.from({ length: 90 }, (_, i) => i + 1).filter((n) => !calledList.includes(n));
+      if (available.length === 0) {
+        setGames((prev) => prev.map((g) => (g.id === activeTargetId ? { ...g, autoCalling: false, status: 'completed' } : g)));
+        return;
+      }
+      nextNum = available[Math.floor(Math.random() * available.length)];
+    }
+
+    const newCalled = [...calledList, nextNum];
+    const newPrev = [nextNum, ...(Array.isArray(targetGame.previousNumbers) ? targetGame.previousNumbers : [])].slice(0, 5);
+
+    setGames((prevGames) =>
+      prevGames.map((g) => {
         if (g.id !== activeTargetId) return g;
-        const calledList = Array.isArray(g.calledNumbers) ? g.calledNumbers : [];
-        if (calledList.length >= 90) {
-          return { ...g, autoCalling: false, status: 'completed' };
-        }
-
-        let nextNum: number;
-        if (forcedNumber && !calledList.includes(forcedNumber)) {
-          nextNum = forcedNumber;
-        } else {
-          const available = Array.from({ length: 90 }, (_, i) => i + 1).filter(
-            (n) => !calledList.includes(n)
-          );
-          if (available.length === 0) {
-            return { ...g, autoCalling: false, status: 'completed' };
-          }
-          nextNum = available[Math.floor(Math.random() * available.length)];
-        }
-
-        chosenNumber = nextNum;
-        const newCalled = [...calledList, nextNum];
-        const newPrev = [nextNum, ...(Array.isArray(g.previousNumbers) ? g.previousNumbers : [])].slice(0, 5);
-
         return {
           ...g,
           currentNumber: nextNum,
@@ -2379,29 +2389,26 @@ export function App() {
           calledNumbers: newCalled,
           previousNumbers: newPrev,
         };
-      });
-    });
+      })
+    );
 
     // ⚡ Auto-Dab for All Tickets (Online & Offline Users)
-    if (chosenNumber) {
-      const numToDab = chosenNumber;
-      setTickets((prevTickets) =>
-        prevTickets.map((t) => {
-          if (!t) return t;
-          if (t.gameId === activeTargetId || !t.gameId) {
-            const hasNum = Array.isArray(t.numbers) && t.numbers.some((row) => Array.isArray(row) && row.includes(numToDab));
-            const isAlreadyMarked = Array.isArray(t.markedNumbers) && t.markedNumbers.includes(numToDab);
-            if (hasNum && !isAlreadyMarked) {
-              return {
-                ...t,
-                markedNumbers: [...(t.markedNumbers || []), numToDab],
-              };
-            }
+    setTickets((prevTickets) =>
+      prevTickets.map((t) => {
+        if (!t) return t;
+        if (t.gameId === activeTargetId || !t.gameId) {
+          const hasNum = Array.isArray(t.numbers) && t.numbers.some((row) => Array.isArray(row) && row.includes(nextNum));
+          const isAlreadyMarked = Array.isArray(t.markedNumbers) && t.markedNumbers.includes(nextNum);
+          if (hasNum && !isAlreadyMarked) {
+            return {
+              ...t,
+              markedNumbers: [...(t.markedNumbers || []), nextNum],
+            };
           }
-          return t;
-        })
-      );
-    }
+        }
+        return t;
+      })
+    );
   };
 
   // Delete Individual Ticket (Allowed for Completed/Finished Games)

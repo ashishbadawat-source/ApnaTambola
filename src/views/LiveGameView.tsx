@@ -40,7 +40,7 @@ import {
 } from '../utils/audio';
 
 interface LiveGameViewProps {
-  game: TambolaGame;
+  game?: TambolaGame;
   userTickets: TambolaTicket[];
   currentUser: User;
   soundEnabled: boolean;
@@ -81,36 +81,62 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
   const [activeTab, setActiveTab] = useState<'tickets' | 'board' | 'prizes'>('tickets');
   const [autoMarkEnabled, setAutoMarkEnabled] = useState<boolean>(true);
   const [voiceLang, setVoiceLang] = useState<VoiceLanguage>(
-    game.voiceLanguage || getCallerVoiceLanguage() || 'both'
+    game?.voiceLanguage || getCallerVoiceLanguage() || 'both'
   );
 
   // Latest claimed prize for the live flash ticker
-  const latestClaimedPrize = (game.prizes || [])
+  const latestClaimedPrize = (game?.prizes || [])
     .filter((p) => p && Array.isArray(p.claimedWinners) && p.claimedWinners.length > 0)
-    .sort((a, b) => (b.claimedWinners[0]?.claimedAt || '').localeCompare(a.claimedWinners[0]?.claimedAt || ''))[0];
+    .sort((a, b) => ((b.claimedWinners?.[0]?.claimedAt || '')).localeCompare(a.claimedWinners?.[0]?.claimedAt || ''))[0];
 
   const handleLanguageChange = (newLang: VoiceLanguage) => {
     setVoiceLang(newLang);
     setCallerVoiceLanguage(newLang);
-    if (game.currentNumber && soundEnabled) {
-      speakNumberCall(game.currentNumber, true, newLang);
+    if (game?.currentNumber && soundEnabled) {
+      try {
+        speakNumberCall(game.currentNumber, true, newLang);
+      } catch (e) {}
     }
   };
 
   // Play sound when currentNumber changes
   useEffect(() => {
-    if (game.currentNumber && soundEnabled) {
-      playNumberCallSound();
-      speakNumberCall(game.currentNumber, soundEnabled, voiceLang);
+    if (game?.currentNumber && soundEnabled) {
+      try {
+        playNumberCallSound();
+        speakNumberCall(game.currentNumber, soundEnabled, voiceLang);
+      } catch (e) {}
     }
-  }, [game.currentNumber, soundEnabled, voiceLang]);
+  }, [game?.currentNumber, soundEnabled, voiceLang]);
+
+  if (!game) {
+    return (
+      <div className="glass-panel rounded-3xl p-8 sm:p-12 text-center space-y-4 border border-purple-500/20 my-8">
+        <div className="w-16 h-16 rounded-full bg-purple-900/40 text-purple-300 flex items-center justify-center mx-auto border border-purple-500/30">
+          <Radio className="w-8 h-8 animate-pulse" />
+        </div>
+        <h2 className="text-xl font-black text-slate-100">कोई लाइव गेम सक्रिय नहीं है (No Live Game Active)</h2>
+        <p className="text-sm text-slate-400 max-w-md mx-auto">
+          वर्तमान में कोई लाइव टूर्नामेंट सक्रिय नहीं मिला है। आप गेम्स लॉबी से मैच चुन सकते हैं या टिकट खरीद सकते हैं।
+        </p>
+        <div className="pt-2 flex items-center justify-center gap-3">
+          <button
+            onClick={() => onBuyTickets('')}
+            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/30"
+          >
+            गेम्स लॉबी देखें (View Games)
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const enNickname = game.currentNumber ? TAMBOLA_NICKNAMES_EN[game.currentNumber] || '' : '';
   const hiNickname = game.currentNumber ? TAMBOLA_NICKNAMES_HI[game.currentNumber] || '' : '';
   const hiWord = game.currentNumber ? HINDI_NUMBERS[game.currentNumber] || '' : '';
 
   // Filter player tickets for this game
-  const currentGameTickets = userTickets.filter((t) => t.gameId === game.id);
+  const currentGameTickets = (userTickets || []).filter((t) => t && (t.gameId === game.id || !t.gameId));
 
   const handleManualCall = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,7 +153,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
       <LiveWinnerFlashTicker
         activeFlash={
           activeWinnerFlash ||
-          (latestClaimedPrize && latestClaimedPrize.claimedWinners[0]
+          (latestClaimedPrize && latestClaimedPrize.claimedWinners && latestClaimedPrize.claimedWinners[0]
             ? {
                 id: latestClaimedPrize.id,
                 winnerName: latestClaimedPrize.claimedWinners[0].userName,
@@ -136,7 +162,7 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
                 winningNumber: latestClaimedPrize.claimedWinners[0].winningNumber || 47,
                 ticketNumber: latestClaimedPrize.claimedWinners[0].ticketNumber,
                 ticketId: latestClaimedPrize.claimedWinners[0].ticketId,
-                isCurrentUser: latestClaimedPrize.claimedWinners[0].userId === currentUser.id,
+                isCurrentUser: latestClaimedPrize.claimedWinners[0].userId === currentUser?.id,
                 isAutoClaimed: true,
                 timestamp: 'Just now',
               }
