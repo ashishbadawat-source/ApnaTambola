@@ -24,6 +24,7 @@ import {
   Gift,
   Award,
   LogOut,
+  Building2,
 } from 'lucide-react';
 
 interface AllOptionsModalProps {
@@ -156,6 +157,15 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
       color: 'from-sky-500/20 to-blue-500/20 text-sky-300 border-sky-500/40',
       badge: 'Sky Blue',
     },
+    {
+      id: 'franchise',
+      name: '13. Fund Franchise Portal',
+      nameHi: 'एडमिन फंड फ्रेंचाइजी (3-7% कमीशन)',
+      desc: 'Apply for Franchise ID, distribute player funds, earn instant commission on every transfer',
+      icon: Building2,
+      color: 'from-amber-500/20 to-yellow-500/20 text-amber-300 border-amber-500/40',
+      badge: '🏢 FRANCHISE ID',
+    },
   ];
 
   const ADMIN_MODULES = [
@@ -242,6 +252,13 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
       name: 'Global Site Settings & Branding',
       desc: 'UPI ID config, QR upload, voice caller language & deposit thresholds',
       icon: Settings,
+    },
+    {
+      id: 'franchise',
+      num: '16',
+      name: 'Admin Fund Franchise Governance',
+      desc: 'Approve franchise applications, allocate balances, adjust commission & view transfer logs',
+      icon: Building2,
     },
   ];
 

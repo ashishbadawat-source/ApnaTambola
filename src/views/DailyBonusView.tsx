@@ -441,13 +441,13 @@ export const DailyBonusView: React.FC<DailyBonusViewProps> = ({
               </div>
               <div className="text-3xl font-black text-white">{wonPrize.label} (₹{wonPrize.amount.toFixed(2)})</div>
               <p className="text-xs text-pink-200">
-                ₹{wonPrize.amount.toFixed(2)} आपके दैनिक रिवार्ड वॉलेट में जुड़ गया है! अगली बार एडमिन पेमेंट पर इसका 10% आपके टिकट वॉलेट में क्रेडिट होगा।
+                ₹{wonPrize.amount.toFixed(2)} आपके वॉलेट में जुड़ गया है! आप इसका उपयोग टिकट बुकिंग व गेम्स खेलने के लिए कर सकते हैं।
               </p>
               <button
                 onClick={() => onNavigate('wallet')}
                 className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-black text-xs hover:bg-amber-300 transition-all cursor-pointer shadow"
               >
-                रिचार्ज करें और रिवार्ड अनलॉक करें →
+                वॉलेट देखें →
               </button>
             </div>
           )}

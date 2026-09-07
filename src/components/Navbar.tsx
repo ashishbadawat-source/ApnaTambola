@@ -33,6 +33,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  Building2,
 } from 'lucide-react';
 import { User as UserType } from '../types';
 import { AllOptionsModal } from './AllOptionsModal';
@@ -509,6 +510,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                       >
                         <User className="w-4 h-4 text-purple-400" />
                         <span>प्रोफ़ाइल (Profile & KYC)</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleTabChange('franchise');
+                          setUserDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-amber-300 hover:bg-amber-500/10 flex items-center gap-2 transition-colors cursor-pointer"
+                      >
+                        <Building2 className="w-4 h-4 text-amber-400" />
+                        <span>🏢 फंड फ्रेंचाइजी (Franchise ID)</span>
                       </button>
 
                       <button

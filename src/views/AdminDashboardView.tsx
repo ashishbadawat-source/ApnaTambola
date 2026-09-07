@@ -21,6 +21,7 @@ import {
   Copy,
   Check,
   X,
+  Building2,
 } from 'lucide-react';
 import {
   AdminStats,
@@ -37,6 +38,8 @@ import {
   LoginHistoryEntry,
   SiteSettings,
   OfferPopup,
+  Franchise,
+  FranchiseTransferRecord,
 } from '../types';
 
 import { INITIAL_SITE_SETTINGS } from '../data/mockData';
@@ -56,6 +59,7 @@ import { ModuleSettings } from './admin/ModuleSettings';
 import { ModuleEmailSettings } from './admin/ModuleEmailSettings';
 import { ModuleReferralAnalytics } from './admin/ModuleReferralAnalytics';
 import { ModuleOfferPopups } from './admin/ModuleOfferPopups';
+import { ModuleFranchise } from './admin/ModuleFranchise';
 
 interface AdminDashboardViewProps {
   stats: AdminStats;
@@ -110,6 +114,29 @@ interface AdminDashboardViewProps {
   onViewUserWallet?: (user: User) => void;
   latestRegisteredUser?: User | null;
   onClearLatestUser?: () => void;
+  franchises?: Franchise[];
+  franchiseTransfers?: FranchiseTransferRecord[];
+  onApproveFranchise?: (
+    franchiseId: string,
+    allocatedFund: number,
+    commissionRate: number,
+    assignedFranchiseId?: string,
+    remarks?: string
+  ) => Promise<boolean>;
+  onRejectFranchise?: (franchiseId: string, remarks: string) => Promise<boolean>;
+  onUpdateFranchiseFund?: (franchiseId: string, amountChange: number, note: string) => Promise<boolean>;
+  onUpdateFranchiseStatus?: (franchiseId: string, status: 'approved' | 'suspended' | 'rejected') => Promise<boolean>;
+  onCreateDirectFranchise?: (data: {
+    userId: string;
+    franchiseId: string;
+    franchiseName: string;
+    city: string;
+    state: string;
+    tier: 'bronze' | 'silver' | 'gold' | 'master';
+    securityDeposit: number;
+    allocatedFund: number;
+    commissionRate: number;
+  }) => Promise<boolean>;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -165,6 +192,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onForceRefresh,
   isSyncing,
   onViewUserWallet,
+  franchises = [],
+  franchiseTransfers = [],
+  onApproveFranchise = async () => true,
+  onRejectFranchise = async () => true,
+  onUpdateFranchiseFund = async () => true,
+  onUpdateFranchiseStatus = async () => true,
+  onCreateDirectFranchise = async () => true,
 }) => {
   const [internalTab, setInternalTab] = useState<string>('dashboard');
   const [copiedLatestId, setCopiedLatestId] = useState<boolean>(false);
@@ -211,6 +245,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     { id: 'notifications', label: '13. Notifications', icon: Bell, badge: null },
     { id: 'settings', label: '14. Site & Security', icon: Settings, badge: null },
     { id: 'email_settings', label: '15. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
+    { id: 'franchise', label: '16. Fund Franchise', icon: Building2, badge: 'ID & FUND', badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black' },
   ];
 
   return (
@@ -525,6 +560,19 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         {activeTab === 'email_settings' && (
           <ModuleEmailSettings
             adminEmail={users.find((u) => u.role === 'admin')?.email || 'ashishbadawat@gmail.com'}
+          />
+        )}
+
+        {activeTab === 'franchise' && (
+          <ModuleFranchise
+            franchises={franchises}
+            franchiseTransfers={franchiseTransfers}
+            users={users}
+            onApproveFranchise={onApproveFranchise}
+            onRejectFranchise={onRejectFranchise}
+            onUpdateFranchiseFund={onUpdateFranchiseFund}
+            onUpdateFranchiseStatus={onUpdateFranchiseStatus}
+            onCreateDirectFranchise={onCreateDirectFranchise}
           />
         )}
       </div>
