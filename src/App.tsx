@@ -2792,6 +2792,7 @@ export function App() {
   };
 
   // 5b. Master Auto-Ticket Dispatch Engine (Auto-Book 1 ticket of exact price for all users with wallet funds)
+  // 5b. Master Auto-Ticket Dispatch Engine (Auto-Book 1 ticket of exact price for all users with wallet funds)
   const handleRunAutoTicketDispatch = async (targetGameId?: string, silent: boolean = false): Promise<{
     success: boolean;
     dispatchedCount: number;
@@ -2800,11 +2801,12 @@ export function App() {
     details?: Array<{ userId: string; userName: string; phone?: string; ticketId: string; deducted: number; newBalance: number }>;
   }> => {
     try {
-      // 1. Pick designated game or default to active/first upcoming game
+      // 1. Pick designated game or default to active/first upcoming/live game
       let game = targetGameId ? games.find((g) => g.id === targetGameId) : null;
       if (!game) {
         game = games.find((g) => g.status === 'live' && g.isActive !== false && g.isGameEnabled !== false) ||
                games.find((g) => g.status === 'upcoming' && g.isActive !== false && g.isGameEnabled !== false) ||
+               games.find((g) => g.isActive !== false && g.isGameEnabled !== false) ||
                games[0];
       }
 
@@ -2826,26 +2828,36 @@ export function App() {
       const newTxns: WalletTransaction[] = [];
       let totalDeducted = 0;
 
-      // Filter non-admin users with sufficient wallet funds (deposit + win + referral)
+      // Filter non-admin users with sufficient wallet funds (deposit + win + referral or general walletBalance)
       const eligibleUsers = users.filter((u) => {
         if (!u || !u.id || u.role === 'admin') return false;
-        const totalFund = Number(u.walletBalance || (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0)) || 0;
+        const dep = Number(u.depositBalance) || 0;
+        const win = Number(u.winningBalance) || 0;
+        const ref = Number(u.referralBalance) || 0;
+        const wal = Number(u.walletBalance) || 0;
+        const totalFund = Math.max(wal, dep + win + ref);
         return totalFund >= ticketPrice;
       });
 
       let updatedUsers = [...users];
 
       eligibleUsers.forEach((u) => {
-        // Check if user already has a ticket for this specific game
+        // Condition: Check if user already has a ticket for this specific game (1 ticket per game rule)
         const alreadyHas = tickets.some((t) => t.userId === u.id && t.gameId === game!.id) ||
                            newGeneratedTickets.some((t) => t.userId === u.id && t.gameId === game!.id);
         if (alreadyHas) return;
 
-        let needed = ticketPrice;
-        let depBal = u.depositBalance || 0;
-        let winBal = u.winningBalance || 0;
-        let refBal = u.referralBalance || 0;
+        let depBal = Number(u.depositBalance) || 0;
+        let winBal = Number(u.winningBalance) || 0;
+        let refBal = Number(u.referralBalance) || 0;
+        let walBal = Number(u.walletBalance) || 0;
 
+        // Auto-normalize if user only had general walletBalance
+        if (depBal === 0 && winBal === 0 && refBal === 0 && walBal > 0) {
+          depBal = walBal;
+        }
+
+        let needed = ticketPrice;
         if (depBal >= needed) {
           depBal -= needed;
           needed = 0;
@@ -2864,6 +2876,11 @@ export function App() {
 
         if (needed > 0 && refBal >= needed) {
           refBal -= needed;
+          needed = 0;
+        }
+
+        if (needed > 0 && walBal >= ticketPrice) {
+          walBal = Math.max(0, walBal - ticketPrice);
           needed = 0;
         }
 
@@ -2896,7 +2913,7 @@ export function App() {
           status: 'completed',
           description: `🎟️ ऑटो टिकट बुकिंग (${game!.title}) - ₹${ticketPrice} (Ticket ID: ${ticketId})`,
           referenceId: ticketId,
-          timestamp: new Date().toISOString(),
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
           balanceAfter: newWallet,
         };
 
@@ -3023,6 +3040,28 @@ export function App() {
     }
     return true;
   };
+
+  // Continuous Auto-Ticket Dispatch Background Effect
+  useEffect(() => {
+    if (siteSettings?.autoTicketEnabled === false) return;
+
+    // Initial check on load/mount
+    const timer = setTimeout(() => {
+      handleRunAutoTicketDispatch(siteSettings?.autoTicketGameId, true);
+    }, 1500);
+
+    // Periodic check every 12 seconds
+    const interval = setInterval(() => {
+      if (siteSettings?.autoTicketEnabled !== false) {
+        handleRunAutoTicketDispatch(siteSettings?.autoTicketGameId, true);
+      }
+    }, 12000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [siteSettings?.autoTicketEnabled, siteSettings?.autoTicketGameId, users.length, games.length, tickets.length]);
 
   // 6. Claim Prize Handler with instant verification & Equal Split Logic
   const handleClaimPrize = (ticketId: string, prizeCode: PrizeCode) => {
@@ -3509,6 +3548,13 @@ export function App() {
         bc.close();
       }
     } catch (e) {}
+
+    // Auto-Ticket Engine: If Auto-Ticket is enabled, immediately dispatch 1 ticket for newly funded user
+    if (siteSettings?.autoTicketEnabled !== false) {
+      setTimeout(() => {
+        handleRunAutoTicketDispatch(siteSettings?.autoTicketGameId, true);
+      }, 500);
+    }
 
     return true;
   };
@@ -4719,6 +4765,13 @@ export function App() {
         bc.close();
       }
     } catch (e) {}
+
+    // Auto-Ticket Engine: If wallet was credited and auto-ticket is enabled, trigger auto-ticket check
+    if (type === 'credit' && siteSettings?.autoTicketEnabled !== false) {
+      setTimeout(() => {
+        handleRunAutoTicketDispatch(siteSettings?.autoTicketGameId, true);
+      }, 500);
+    }
 
     return true;
   };

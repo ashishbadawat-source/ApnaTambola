@@ -1215,6 +1215,13 @@ async function startServer() {
 
       saveStateToDisk();
 
+      // If Auto-Ticket is enabled, automatically issue 1 ticket immediately for newly funded user
+      if (siteSettings && siteSettings.autoTicketEnabled !== false && targetUser) {
+        try {
+          executeAutoTicketDispatch(siteSettings.autoTicketGameId, targetUser.id);
+        } catch (e) {}
+      }
+
       res.json({
         success: true,
         deposit,
@@ -1265,6 +1272,12 @@ async function startServer() {
       transactions.unshift(directTxn);
 
       saveStateToDisk();
+
+      if (siteSettings && siteSettings.autoTicketEnabled !== false && targetUser) {
+        try {
+          executeAutoTicketDispatch(siteSettings.autoTicketGameId, targetUser.id);
+        } catch (e) {}
+      }
 
       res.json({ success: true, user: targetUser, transaction: directTxn });
     } catch (e: any) {
@@ -1816,21 +1829,38 @@ async function startServer() {
     });
   });
 
-  // 3b. Automatic Ticket Booking Engine (Auto Ticket Dispatch for Funded Users)
-  app.post('/api/tickets/auto-dispatch', (req: Request, res: Response) => {
+  // Helper: Core Auto-Ticket Booking Engine
+  function executeAutoTicketDispatch(targetGameId?: string, targetUserId?: string): {
+    success: boolean;
+    dispatchedCount: number;
+    totalDeducted: number;
+    ticketPrice: number;
+    gameTitle: string;
+    gameId: string;
+    details: Array<any>;
+    message: string;
+  } {
     try {
-      const { gameId, targetUserId } = req.body;
-      
-      // 1. Select designated or active/upcoming game
-      let targetGame = gameId ? games.find((g) => g.id === gameId) : null;
+      // 1. Select designated or active/upcoming/first available game
+      let targetGame = targetGameId ? games.find((g) => g.id === targetGameId) : null;
       if (!targetGame) {
         targetGame = games.find((g) => g.status === 'live' && g.isActive !== false && g.isGameEnabled !== false) ||
                      games.find((g) => g.status === 'upcoming' && g.isActive !== false && g.isGameEnabled !== false) ||
+                     games.find((g) => g.isActive !== false && g.isGameEnabled !== false) ||
                      games[0];
       }
 
       if (!targetGame) {
-        return res.status(404).json({ success: false, error: 'कोई सक्रिय टूर्नामेंट उपलब्ध नहीं है (No active game found).' });
+        return {
+          success: false,
+          dispatchedCount: 0,
+          totalDeducted: 0,
+          ticketPrice: 0,
+          gameTitle: '',
+          gameId: '',
+          details: [],
+          message: 'कोई सक्रिय टूर्नामेंट उपलब्ध नहीं है (No active game found).',
+        };
       }
 
       const ticketPrice = Number(targetGame.ticketPrice) || 5;
@@ -1850,14 +1880,25 @@ async function startServer() {
 
       targetUserList.forEach((u) => {
         if (!u || !u.id) return;
-        const totalUserFund = Number(u.walletBalance || (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0)) || 0;
+
+        let dep = Number(u.depositBalance) || 0;
+        let win = Number(u.winningBalance) || 0;
+        let ref = Number(u.referralBalance) || 0;
+        let wal = Number(u.walletBalance) || 0;
+
+        // Auto-normalize sub-balances if user only had general walletBalance
+        if (dep === 0 && win === 0 && ref === 0 && wal > 0) {
+          dep = wal;
+        }
+
+        const totalUserFund = Math.max(wal, dep + win + ref);
 
         // Condition 1: Must have sufficient funds for the exact ticket price
         if (totalUserFund < ticketPrice) {
           return;
         }
 
-        // Condition 2: Check if user already has a ticket for this specific game
+        // Condition 2: Check if user already has a ticket for this specific game (1 ticket per user rule)
         const alreadyHasTicket = tickets.some((t) => t.userId === u.id && t.gameId === targetGame!.id);
         if (alreadyHasTicket) {
           return;
@@ -1865,28 +1906,36 @@ async function startServer() {
 
         // Exact Price Deduction (deposit first, then winnings, then referral)
         let needed = ticketPrice;
-        if ((u.depositBalance || 0) >= needed) {
-          u.depositBalance = (u.depositBalance || 0) - needed;
+        if (dep >= needed) {
+          dep -= needed;
           needed = 0;
         } else {
-          needed -= (u.depositBalance || 0);
-          u.depositBalance = 0;
+          needed -= dep;
+          dep = 0;
         }
 
-        if (needed > 0 && (u.winningBalance || 0) >= needed) {
-          u.winningBalance = (u.winningBalance || 0) - needed;
+        if (needed > 0 && win >= needed) {
+          win -= needed;
           needed = 0;
         } else if (needed > 0) {
-          needed -= (u.winningBalance || 0);
-          u.winningBalance = 0;
+          needed -= win;
+          win = 0;
         }
 
-        if (needed > 0 && (u.referralBalance || 0) >= needed) {
-          u.referralBalance = (u.referralBalance || 0) - needed;
+        if (needed > 0 && ref >= needed) {
+          ref -= needed;
           needed = 0;
         }
 
-        u.walletBalance = (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0);
+        if (needed > 0 && wal >= ticketPrice) {
+          wal = Math.max(0, wal - ticketPrice);
+          needed = 0;
+        }
+
+        u.depositBalance = dep;
+        u.winningBalance = win;
+        u.referralBalance = ref;
+        u.walletBalance = dep + win + ref;
 
         // Generate Authentic 3x9 Matrix Ticket
         const matrix = generateTambolaTicketMatrix();
@@ -1952,7 +2001,7 @@ async function startServer() {
         console.log(`[Auto-Ticket Engine] Dispatched ${dispatchedList.length} tickets (₹${ticketPrice} each) for game "${targetGame.title}". Total deducted: ₹${totalDeducted}`);
       }
 
-      res.json({
+      return {
         success: true,
         dispatchedCount: dispatchedList.length,
         totalDeducted,
@@ -1963,7 +2012,40 @@ async function startServer() {
         message: dispatchedList.length > 0
           ? `🎉 ${dispatchedList.length} फंडेड यूजर्स को ₹${ticketPrice} का 1 टिकट सफलतापूर्वक भेजा गया (कुल ₹${totalDeducted} डेबिट हुआ)!`
           : `सभी फंडेड यूजर्स के पास पहले से टिकट उपलब्ध है या किसी के पास आवश्यक बैलेंस नहीं है।`,
-      });
+      };
+    } catch (err: any) {
+      console.error('[Auto-Ticket Engine Error]', err);
+      return {
+        success: false,
+        dispatchedCount: 0,
+        totalDeducted: 0,
+        ticketPrice: 0,
+        gameTitle: '',
+        gameId: '',
+        details: [],
+        message: err.message || 'Auto ticket execution error',
+      };
+    }
+  }
+
+  // Auto-Ticket Continuous Background Worker (Runs every 10 seconds if Auto Ticket is enabled)
+  let autoTicketInterval: NodeJS.Timeout | null = null;
+  function startAutoTicketWorker() {
+    if (autoTicketInterval) clearInterval(autoTicketInterval);
+    autoTicketInterval = setInterval(() => {
+      if (siteSettings && siteSettings.autoTicketEnabled !== false) {
+        executeAutoTicketDispatch(siteSettings.autoTicketGameId);
+      }
+    }, 10000);
+  }
+  startAutoTicketWorker();
+
+  // 3b. Automatic Ticket Booking Engine (Auto Ticket Dispatch for Funded Users)
+  app.post('/api/tickets/auto-dispatch', (req: Request, res: Response) => {
+    try {
+      const { gameId, targetUserId } = req.body;
+      const result = executeAutoTicketDispatch(gameId || siteSettings?.autoTicketGameId, targetUserId);
+      res.json(result);
     } catch (err: any) {
       console.error('[Auto-Ticket Error]', err);
       res.status(500).json({ success: false, error: err.message || 'Auto ticket execution failed' });

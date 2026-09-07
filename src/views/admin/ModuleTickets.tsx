@@ -520,7 +520,11 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     if (!currentAutoGame) return [];
     return users.filter((u) => {
       if (!u || !u.id || u.role === 'admin') return false;
-      const totalFund = Number(u.walletBalance || (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0)) || 0;
+      const dep = Number(u.depositBalance) || 0;
+      const win = Number(u.winningBalance) || 0;
+      const ref = Number(u.referralBalance) || 0;
+      const wal = Number(u.walletBalance) || 0;
+      const totalFund = Math.max(wal, dep + win + ref);
       return totalFund >= autoTicketPrice;
     });
   }, [users, currentAutoGame, autoTicketPrice]);
