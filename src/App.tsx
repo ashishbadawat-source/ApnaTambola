@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lock, LogIn, UserPlus, Sparkles } from 'lucide-react';
+import { Lock, LogIn, UserPlus, Sparkles, ShieldCheck } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
@@ -5430,33 +5430,49 @@ export function App() {
 
         {/* If on Admin tab but not logged in as Admin, show direct portal entry prompt */}
         {activeTab === 'admin' && currentUser?.role !== 'admin' && currentUser?.email !== 'ashishbadawat@gmail.com' && (
-          <div className="max-w-xl mx-auto py-12 text-center space-y-6">
-            <div className="p-8 rounded-3xl bg-slate-900/90 border-2 border-red-500/50 shadow-2xl shadow-red-950/60 space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center mx-auto text-red-400">
-                <span className="text-3xl">👑</span>
+          <div className="max-w-xl mx-auto py-8 sm:py-12 text-center space-y-6">
+            <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/95 border-2 border-red-500/50 shadow-2xl shadow-red-950/60 space-y-5 relative overflow-hidden">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-red-600 to-amber-600 border border-red-500/40 flex items-center justify-center mx-auto text-white shadow-xl shadow-red-600/30">
+                <ShieldCheck className="w-8 h-8" />
               </div>
-              <h2 className="text-2xl font-black text-white">व्यवस्थापक (एडमिन) लॉगिन आवश्यक</h2>
-              <p className="text-sm text-slate-300">
-                एडमिन डैशबोर्ड में प्रवेश करने के लिए कृपया अधिकृत क्रेडेंशियल्स (ashishbadawat@gmail.com या Google Sign-In) से लॉगिन करें।
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+              <div className="space-y-1">
+                <h2 className="text-xl sm:text-2xl font-black text-white">व्यवस्थापक (एडमिन) लॉगिन</h2>
+                <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto">
+                  एडमिन डैशबोर्ड, गेम कंट्रोल और वित्तीय सेटिंग्स एक्सेस करने के लिए नीचे दिए गए 1-क्लिक बटन या पासवर्ड से तुरंत प्रवेश करें।
+                </p>
+              </div>
+
+              {/* Instant 1-Click Master Access Button */}
+              <div className="p-4 rounded-2xl bg-red-950/40 border border-red-500/30 space-y-3">
+                <div className="flex items-center justify-between text-xs text-red-300 font-bold">
+                  <span>⚡ अधिकृत मास्टर व्यवस्थापक:</span>
+                  <span className="font-mono text-amber-300">ashishbadawat@gmail.com</span>
+                </div>
                 <button
+                  type="button"
+                  id="gate-master-admin-btn"
                   onClick={handleInstantMasterAdminAccess}
-                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/30 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-102"
+                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-sm shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-102"
                 >
-                  <span>⚡ 1-क्लिक मास्टर एडमिन एक्सेस</span>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>👑 1-क्लिक मास्टर एडमिन पैनल खोलें (Ashish Badawat)</span>
                 </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2.5 justify-center pt-1">
                 <button
+                  type="button"
                   onClick={handleOpenAdminLogin}
-                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-sm shadow-xl shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                 >
-                  <span>👑 पासवर्ड / Google से लॉगिन</span>
+                  <span>🔑 पासवर्ड / Google साइन-इन</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleNavigate('home')}
-                  className="px-6 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm cursor-pointer transition-all"
+                  className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-bold text-xs border border-slate-800 cursor-pointer transition-all"
                 >
-                  मुख्य पृष्ठ
+                  मुख्य पृष्ठ पर जाएं
                 </button>
               </div>
             </div>

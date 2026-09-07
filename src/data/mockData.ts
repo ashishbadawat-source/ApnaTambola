@@ -52,16 +52,33 @@ export const ADMIN_USER: User = {
   password: 'admin@tambola',
   role: 'admin',
   walletBalance: 85400,
-  depositBalance: 0,
-  winningBalance: 0,
-  referralBalance: 0,
+  depositBalance: 25000,
+  winningBalance: 25000,
+  referralBalance: 10000,
   kycStatus: 'verified',
   referralCode: 'REF-ADMIN',
   avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=160&q=80',
   createdAt: '2026-01-01T00:00:00.000Z',
 };
 
-export const INITIAL_USERS: User[] = [ADMIN_USER];
+export const MASTER_ADMIN_ASHISH: User = {
+  id: 'admin_master_1',
+  name: 'Ashish Badawat (Master Admin)',
+  email: 'ashishbadawat@gmail.com',
+  phone: '+91 9876543210',
+  password: 'admin@tambola',
+  role: 'admin',
+  walletBalance: 100000,
+  depositBalance: 50000,
+  winningBalance: 35000,
+  referralBalance: 15000,
+  kycStatus: 'verified',
+  referralCode: 'REF-ADMIN77',
+  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+  createdAt: '2026-01-01T00:00:00.000Z',
+};
+
+export const INITIAL_USERS: User[] = [MASTER_ADMIN_ASHISH, ADMIN_USER];
 
 // Initial called numbers for the active Live Game
 export const INITIAL_CALLED_NUMBERS = [12, 35, 8, 63, 21, 47, 74, 19, 52, 88, 3, 31, 67, 82, 15, 41, 59, 90, 24, 76];

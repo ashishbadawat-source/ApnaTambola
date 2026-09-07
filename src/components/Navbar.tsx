@@ -126,19 +126,35 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const handleAdminToggle = (toAdmin: boolean) => {
-    if (toAdmin && (!currentUser || currentUser.role !== 'admin')) {
-      if (onOpenAdminLogin) {
-        onOpenAdminLogin();
-        return;
+    if (toAdmin) {
+      if (!currentUser || currentUser.role !== 'admin') {
+        if (currentUser?.email === 'ashishbadawat@gmail.com') {
+          // Direct Master Admin
+          if (onNavigate) onNavigate('admin');
+          else if (setCurrentTab) setCurrentTab('admin');
+        } else {
+          if (onNavigate) onNavigate('admin');
+          else if (setCurrentTab) setCurrentTab('admin');
+          if (onOpenAdminLogin) {
+            onOpenAdminLogin();
+          }
+        }
+      } else {
+        if (onNavigate) onNavigate('admin');
+        else if (setCurrentTab) setCurrentTab('admin');
       }
-    }
-    if (setIsAdminView) {
-      setIsAdminView(toAdmin);
-    }
-    if (onNavigate) {
-      onNavigate(toAdmin ? 'admin' : 'home');
-    } else if (setCurrentTab) {
-      setCurrentTab(toAdmin ? 'admin' : 'home');
+      if (setIsAdminView) {
+        setIsAdminView(true);
+      }
+    } else {
+      if (setIsAdminView) {
+        setIsAdminView(false);
+      }
+      if (onNavigate) {
+        onNavigate('home');
+      } else if (setCurrentTab) {
+        setCurrentTab('home');
+      }
     }
     setUserDropdownOpen(false);
     setMobileMenuOpen(false);
