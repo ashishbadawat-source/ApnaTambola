@@ -430,6 +430,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         {activeTab === 'users' && (
           <ModuleUsers
             users={users}
+            tickets={tickets}
             onToggleKYC={onToggleKYC}
             onToggleBlockUser={onToggleBlockUser || (async () => true)}
             onResetPassword={onResetPassword || (async () => true)}

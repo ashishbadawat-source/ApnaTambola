@@ -33,8 +33,9 @@ import {
   RefreshCw,
   UserX,
   Copy,
+  Ticket,
 } from 'lucide-react';
-import { User, WalletTransaction } from '../../types';
+import { User, WalletTransaction, TambolaTicket } from '../../types';
 import {
   getUserRegistrationTimestamp,
   isUserRecentlyRegistered,
@@ -45,6 +46,7 @@ import {
 
 interface ModuleUsersProps {
   users: User[];
+  tickets?: TambolaTicket[];
   onToggleKYC: (userId: string) => Promise<boolean>;
   onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
   onToggleBlockUser?: (userId: string) => void;
@@ -60,6 +62,7 @@ interface ModuleUsersProps {
 
 export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   users,
+  tickets = [],
   onToggleKYC,
   onUpdateWalletBalance,
   onToggleBlockUser,
@@ -558,6 +561,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 <th className="px-4 py-3.5">Contact Details</th>
                 <th className="px-4 py-3.5">🔑 Password</th>
                 <th className="px-4 py-3.5">Wallet Balances</th>
+                <th className="px-4 py-3.5 whitespace-nowrap">🎟️ टिकट विवरण (कितने वाला कितना)</th>
                 <th className="px-4 py-3.5">KYC Status</th>
                 <th className="px-4 py-3.5">Referral Details</th>
                 <th className="px-4 py-3.5">Account Status</th>
@@ -718,6 +722,54 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                           <span>Win: ₹{user.winningBalance || 0}</span>
                           <span>Ref: ₹{user.referralBalance || 0}</span>
                         </div>
+                      </td>
+
+                      {/* Ticket Count & Price Breakdown (किस यूजर ने कितने वाला टिकट कितना लिया) */}
+                      <td className="px-4 py-3.5">
+                        {(() => {
+                          const uTkts = tickets.filter(
+                            (t) => t && (t.userId === user.id || t.userName === user.name)
+                          );
+                          if (uTkts.length === 0) {
+                            return <span className="text-slate-500 text-[11px] font-mono">0 टिकट</span>;
+                          }
+                          const priceMap: Record<number, number> = {};
+                          let totalSpent = 0;
+                          uTkts.forEach((t) => {
+                            const p = Number(t.price || 0);
+                            priceMap[p] = (priceMap[p] || 0) + 1;
+                            totalSpent += p;
+                          });
+                          const priceEntries = Object.entries(priceMap)
+                            .map(([p, count]) => ({
+                              price: Number(p),
+                              count,
+                            }))
+                            .sort((a, b) => a.price - b.price);
+
+                          return (
+                            <div className="space-y-1 min-w-[170px]">
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold text-xs border border-amber-500/30">
+                                  {uTkts.length} टिकट
+                                </span>
+                                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                                  ₹{totalSpent.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {priceEntries.map((pe) => (
+                                  <span
+                                    key={pe.price}
+                                    className="px-1.5 py-0.5 rounded bg-slate-950 border border-amber-400/30 text-[10px] font-mono text-amber-200"
+                                  >
+                                    ₹{pe.price} वाला: <strong className="text-white">{pe.count}</strong>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* KYC Status */}

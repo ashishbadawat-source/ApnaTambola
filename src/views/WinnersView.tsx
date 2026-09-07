@@ -260,7 +260,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 font-black shadow-md border border-amber-300">
-                    {(w?.userName || 'P').charAt(0).toUpperCase()}
+                    {String(w?.userName || 'P').charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <h3 className="font-bold text-base text-slate-100 leading-tight">
@@ -357,11 +357,11 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                     <td className="p-3 font-sans">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-amber-400/20 text-amber-300 font-black text-xs flex items-center justify-center border border-amber-400/30 shrink-0">
-                          {(w.userName || 'P').charAt(0).toUpperCase()}
+                          {String(w?.userName || 'P').charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <span className="font-bold text-white block">{w.userName}</span>
-                          <span className="text-[10px] text-slate-500">ID: {w.userId || 'N/A'}</span>
+                          <span className="font-bold text-white block">{w?.userName || 'Unknown Player'}</span>
+                          <span className="text-[10px] text-slate-500">ID: {w?.userId || 'N/A'}</span>
                         </div>
                       </div>
                     </td>

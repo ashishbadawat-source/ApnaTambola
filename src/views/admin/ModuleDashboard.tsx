@@ -106,6 +106,45 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
 
   const recentLiveUsers = useMemo(() => sortUsersNewestFirst(users).slice(0, 4), [users]);
 
+  // Top Ticket Buyers Breakdown (किस यूजर ने कितने वाला कितना टिकट लिया)
+  const topBuyerBreakdown = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        userId: string;
+        userName: string;
+        totalTickets: number;
+        totalSpent: number;
+        priceMap: Record<number, number>;
+      }
+    >();
+
+    (tickets || []).forEach((t) => {
+      const uId = t.userId || t.userName || 'unknown';
+      const userName = t.userName || 'Player';
+      const price = Number(t.price || 0);
+
+      const existing = map.get(uId);
+      if (existing) {
+        existing.totalTickets += 1;
+        existing.totalSpent += price;
+        existing.priceMap[price] = (existing.priceMap[price] || 0) + 1;
+      } else {
+        map.set(uId, {
+          userId: uId,
+          userName,
+          totalTickets: 1,
+          totalSpent: price,
+          priceMap: { [price]: 1 },
+        });
+      }
+    });
+
+    return Array.from(map.values())
+      .sort((a, b) => b.totalTickets - a.totalTickets)
+      .slice(0, 4);
+  }, [tickets]);
+
   // Dynamic Prize Pool Simulator State (70% distribution formula)
   const [simTicketsCount, setSimTicketsCount] = useState<number>(100);
   const [simTicketPrice, setSimTicketPrice] = useState<number>(50);
@@ -433,6 +472,91 @@ export const ModuleDashboard: React.FC<ModuleDashboardProps> = ({
               ) : (
                 <div className="col-span-full py-3 text-center text-slate-500 text-xs">
                   कोई नया खिलाड़ी डेटा मौजूद नहीं है
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* 🎟️ TICKET BUYERS BREAKDOWN WIDGET (किस यूजर ने कितने वाला कितना टिकट लिया) */}
+          {/* ========================================================================= */}
+          <div className="lg:col-span-12 rounded-3xl bg-gradient-to-r from-[#121629] via-[#161226] to-[#1a1528] border-2 border-indigo-500/40 p-5 space-y-4 shadow-2xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-indigo-500/20 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <Ticket className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white flex items-center gap-2">
+                    <span>टिकट खरीदार विश्लेषण (कितने वाला टिकट कितना लिया)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    प्रत्येक खिलाड़ी द्वारा खरीदे गए कुल टिकट और टिकट मूल्यवार (₹5, ₹10, ₹20, ₹50) का सीधा हिसाब।
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => onNavigateTab('tickets')}
+                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95 shrink-0"
+              >
+                <span>पूरा टिकट लेजर देखें</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Quick Cards for top buyers */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {topBuyerBreakdown.length > 0 ? (
+                topBuyerBreakdown.map((buyer, bIdx) => (
+                  <div
+                    key={buyer.userId || bIdx}
+                    className="rounded-2xl p-4 bg-slate-900/90 border border-slate-800 hover:border-amber-400/50 transition-all space-y-2.5 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-bold text-white text-xs truncate max-w-[140px]">{buyer.userName}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">ID: {buyer.userId.slice(0, 10)}</div>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold">
+                          #{bIdx + 1}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-2 p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px]">
+                        <div>
+                          <span className="text-slate-400 text-[9px] block">कुल टिकट</span>
+                          <strong className="text-amber-300 font-black font-mono">{buyer.totalTickets} टिकट</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 text-[9px] block">कुल खर्च</span>
+                          <strong className="text-emerald-400 font-black font-mono">₹{buyer.totalSpent.toLocaleString('en-IN')}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Price-wise Breakdown Badges */}
+                    <div className="pt-2 border-t border-slate-800/80">
+                      <div className="text-[10px] text-slate-400 font-bold mb-1">🎟️ कितने वाला कितना:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(buyer.priceMap).map(([price, count]) => (
+                          <span
+                            key={price}
+                            className="px-1.5 py-0.5 rounded-lg bg-slate-950 border border-amber-400/40 text-[10px] font-mono text-amber-200 flex items-center gap-1"
+                          >
+                            <span className="text-amber-400 font-bold">₹{price}:</span>
+                            <span className="text-white font-bold">{count} टिकट</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-4 text-center text-slate-500 text-xs">
+                  अभी तक किसी खिलाड़ी ने टिकट नहीं खरीदा है
                 </div>
               )}
             </div>

@@ -122,32 +122,36 @@ export const STANDARD_7_PRIZE_CONFIGS: PrizeDistributionConfig[] = [
 /**
  * Calculates dynamic prize amounts based on total tickets sold and ticket price.
  * Ensures the exact 70% prize pool and 30% admin share breakdown.
+ * Whenever tickets are sold or removed, this recalculates automatically without manual intervention.
  */
 export function calculateTambolaDynamicPrizes(
   ticketsSold: number,
   ticketPrice: number,
   existingPrizes?: GamePrize[],
-  minBaseTickets: number = 20
+  minBaseTickets: number = 0
 ): {
   totalCollection: number;
   adminShare: number;
   prizePool: number;
   prizes: GamePrize[];
 } {
-  // Use effective tickets sold (or fallback to minBaseTickets for preview when 0 sold)
-  const effectiveTickets = Math.max(ticketsSold, minBaseTickets);
-  const totalCollection = effectiveTickets * ticketPrice;
-  const adminShare = Math.round(totalCollection * ADMIN_COMMISSION_RATE);
-  const prizePool = Math.round(totalCollection * PRIZE_POOL_RATE);
+  // If ticketsSold > 0, calculate strictly on actual tickets sold.
+  // If ticketsSold == 0, show a preview based on 10 tickets or minBaseTickets so prize card is populated.
+  const isPreview = ticketsSold <= 0;
+  const count = isPreview ? Math.max(10, minBaseTickets) : ticketsSold;
+  const totalCollection = count * ticketPrice;
+  const adminShare = Math.round(totalCollection * ADMIN_COMMISSION_RATE); // Exact 30%
+  const prizePool = Math.round(totalCollection * PRIZE_POOL_RATE);        // Exact 70%
 
   const prizes: GamePrize[] = STANDARD_7_PRIZE_CONFIGS.map((config, idx) => {
     const existing = existingPrizes?.find(
       (p) => p.code === config.code || (config.code === 'star' && p.code === 'corners')
     );
 
-    // Calculate dynamic prize amount based on exact user percentage formula
+    // Calculate dynamic prize amount based on exact user percentage formula:
+    // Early 5 (2.5%), Star (2.5%), Top Line (2.5%), Mid Line (2.5%), Bot Line (2.5%), 1st Full House (40%), 2nd Full House (17.5%)
     const rawAmount = totalCollection * config.collectionPercentage;
-    const amount = Math.max(10, Math.round(rawAmount));
+    const amount = Math.max(5, Math.round(rawAmount));
 
     return {
       id: existing?.id || `prz_std_${config.code}_${idx + 1}`,
@@ -161,7 +165,7 @@ export function calculateTambolaDynamicPrizes(
   });
 
   return {
-    totalCollection,
+    totalCollection: isPreview ? 0 : totalCollection,
     adminShare,
     prizePool,
     prizes,

@@ -114,6 +114,11 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   // Print layout preview
   const [printingTicket, setPrintingTicket] = useState<TambolaTicket | null>(null);
 
+  // Buyers Sub-Tab Filters & View States (कितने वाला टिकट कितना लिया)
+  const [buyerSearchQuery, setBuyerSearchQuery] = useState('');
+  const [buyerPriceFilter, setBuyerPriceFilter] = useState<'all' | number>('all');
+  const [buyerViewMode, setBuyerViewMode] = useState<'cards' | 'table'>('cards');
+
   // Remove / Delete Modal
   const [deleteModalState, setDeleteModalState] = useState<{
     isOpen: boolean;
@@ -145,7 +150,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     return map;
   }, [users]);
 
-  // Unique Buyers Aggregation (कितने यूजर टिकट खरीदे हैं)
+  // Unique Buyers Aggregation (किस यूजर ने कितने वाला कितना टिकट ले रखा है)
   const buyerSummary = useMemo(() => {
     const map = new Map<
       string,
@@ -159,6 +164,8 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         totalSpent: number;
         tickets: TambolaTicket[];
         gameTitles: Set<string>;
+        priceMap: Map<number, { price: number; count: number; totalSpent: number }>;
+        priceBreakdown: Array<{ price: number; count: number; totalSpent: number }>;
       }
     >();
 
@@ -169,16 +176,28 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       const userPhone = uProfile?.phone || '';
       const userEmail = uProfile?.email || '';
       const avatar = uProfile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${uId}`;
+      const price = Number(t.price || 0);
 
       const existing = map.get(uId);
       if (existing) {
         existing.ticketCount += 1;
-        existing.totalSpent += Number(t.price || 0);
+        existing.totalSpent += price;
         existing.tickets.push(t);
         if (t.gameTitle) existing.gameTitles.add(t.gameTitle);
+
+        const pb = existing.priceMap.get(price);
+        if (pb) {
+          pb.count += 1;
+          pb.totalSpent += price;
+        } else {
+          existing.priceMap.set(price, { price, count: 1, totalSpent: price });
+        }
       } else {
         const gameTitles = new Set<string>();
         if (t.gameTitle) gameTitles.add(t.gameTitle);
+        const priceMap = new Map<number, { price: number; count: number; totalSpent: number }>();
+        priceMap.set(price, { price, count: 1, totalSpent: price });
+
         map.set(uId, {
           userId: uId,
           userName,
@@ -186,15 +205,50 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
           userEmail,
           avatar,
           ticketCount: 1,
-          totalSpent: Number(t.price || 0),
+          totalSpent: price,
           tickets: [t],
           gameTitles,
+          priceMap,
+          priceBreakdown: [],
         });
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => b.ticketCount - a.ticketCount);
+    return Array.from(map.values())
+      .map((b) => ({
+        ...b,
+        priceBreakdown: Array.from(b.priceMap.values()).sort((x, y) => x.price - y.price),
+      }))
+      .sort((a, b) => b.ticketCount - a.ticketCount);
   }, [tickets, userMap]);
+
+  // Distinct ticket prices sold across the platform
+  const distinctTicketPrices = useMemo(() => {
+    const set = new Set<number>();
+    tickets.forEach((t) => {
+      const p = Number(t.price || 0);
+      if (p > 0) set.add(p);
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }, [tickets]);
+
+  // Filtered buyer summary for search and price tier filtering
+  const filteredBuyerSummary = useMemo(() => {
+    return buyerSummary.filter((b) => {
+      if (buyerPriceFilter !== 'all') {
+        const hasTier = b.priceBreakdown.some((pb) => pb.price === buyerPriceFilter);
+        if (!hasTier) return false;
+      }
+      if (buyerSearchQuery.trim()) {
+        const q = buyerSearchQuery.toLowerCase();
+        const matchName = (b.userName || '').toLowerCase().includes(q);
+        const matchPhone = (b.userPhone || '').toLowerCase().includes(q);
+        const matchId = (b.userId || '').toLowerCase().includes(q);
+        if (!matchName && !matchPhone && !matchId) return false;
+      }
+      return true;
+    });
+  }, [buyerSummary, buyerPriceFilter, buyerSearchQuery]);
 
   // Aggregate Key Metrics (KPIs)
   const totalTicketsSold = tickets.length;
@@ -1271,34 +1325,142 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: BUYERS (कितने यूजर टिकट खरीदे हैं) */}
+      {/* TAB 2: BUYERS (कितने यूजर टिकट खरीदे हैं - कितने वाला टिकट कितना लिया) */}
       {/* ========================================================================= */}
       {activeSubTab === 'buyers' && (
         <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-200 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-blue-400 shrink-0" />
+          {/* Summary Banner */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/40 via-indigo-950/30 to-slate-900 border border-blue-500/30 text-blue-200 text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5 text-blue-400" />
+              </div>
               <div>
-                <strong className="text-white font-bold text-sm">कुल {uniqueBuyersCount} यूजरों ने टिकट खरीदे हैं।</strong>
-                <p className="text-[11px] text-slate-300">
-                  नीचे प्रत्येक खरीदार की पूरी जानकारी, खरीदे गए कुल टिकट एवं खर्च राशि का विवरण है।
+                <div className="flex items-center gap-2">
+                  <strong className="text-white font-black text-sm">कुल {uniqueBuyersCount} यूजरों ने टिकट खरीदे हैं</strong>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                    लाइव डेटा
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  यहाँ प्रत्येक यूजर द्वारा खरीदे गए कुल टिकट और कितने वाला टिकट कितना लिया (मूल्यवार विवरण) प्रदर्शित है।
                 </p>
               </div>
             </div>
-            <div className="text-right font-mono">
-              <span className="text-xs text-slate-400">कुल टिकट बिक्री: </span>
-              <strong className="text-amber-300 text-sm font-black">₹{totalTicketRevenue}</strong>
+            <div className="flex items-center gap-3 self-end md:self-auto font-mono">
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block">कुल टिकट बिक्री</span>
+                <strong className="text-amber-300 text-base font-black">₹{totalTicketRevenue.toLocaleString('en-IN')}</strong>
+              </div>
+              <div className="h-8 w-px bg-slate-800" />
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block">कुल टिकट संख्या</span>
+                <strong className="text-white text-base font-black">{totalTicketsSold}</strong>
+              </div>
             </div>
           </div>
 
-          {buyerSummary.length === 0 ? (
+          {/* Search, Filter by Price, and View Switcher */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="खिलाड़ी का नाम, मोबाइल नंबर या User ID से खोजें..."
+                  value={buyerSearchQuery}
+                  onChange={(e) => setBuyerSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                {buyerSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setBuyerSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* View Switcher Toggle */}
+              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start md:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setBuyerViewMode('cards')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    buyerViewMode === 'cards'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  कार्ड व्यू ({filteredBuyerSummary.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuyerViewMode('table')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    buyerViewMode === 'table'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  लेजर तालिका (Table)
+                </button>
+              </div>
+            </div>
+
+            {/* Price Tier Filter Pills (कितने वाला टिकट) */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/60">
+              <span className="text-[11px] font-bold text-slate-400 mr-1">टिकट दर फ़िल्टर:</span>
+              <button
+                type="button"
+                onClick={() => setBuyerPriceFilter('all')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  buyerPriceFilter === 'all'
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                सभी टिकट ({buyerSummary.length})
+              </button>
+              {distinctTicketPrices.map((price) => {
+                const countWithPrice = buyerSummary.filter((b) =>
+                  b.priceBreakdown.some((pb) => pb.price === price)
+                ).length;
+                return (
+                  <button
+                    key={price}
+                    type="button"
+                    onClick={() => setBuyerPriceFilter(price)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      buyerPriceFilter === price
+                        ? 'bg-amber-500 text-slate-950 font-black'
+                        : 'bg-slate-800 text-amber-300 hover:bg-slate-700 border border-slate-700/60'
+                    }`}
+                  >
+                    <span>₹{price} वाला</span>
+                    <span className="text-[10px] opacity-75">({countWithPrice})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {filteredBuyerSummary.length === 0 ? (
             <div className="text-center py-12 rounded-3xl bg-slate-900/50 border border-slate-800 space-y-3">
               <Users className="w-12 h-12 text-slate-600 mx-auto" />
-              <p className="text-slate-400 text-sm font-bold">अभी तक किसी यूजर ने टिकट नहीं खरीदा है।</p>
+              <p className="text-slate-400 text-sm font-bold">
+                {buyerSearchQuery || buyerPriceFilter !== 'all'
+                  ? 'दिए गए फ़िल्टर से कोई खरीदार नहीं मिला।'
+                  : 'अभी तक किसी यूजर ने टिकट नहीं खरीदा है।'}
+              </p>
             </div>
-          ) : (
+          ) : buyerViewMode === 'cards' ? (
+            /* ================= CARDS VIEW ================= */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {buyerSummary.map((buyer, bIdx) => (
+              {filteredBuyerSummary.map((buyer, bIdx) => (
                 <div
                   key={buyer.userId || `buyer-${bIdx}`}
                   className="rounded-3xl p-5 bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 hover:border-blue-500/50 transition-all shadow-xl space-y-4 flex flex-col justify-between"
@@ -1327,7 +1489,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                       </div>
 
                       <span className="px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[10px] font-black">
-                        #{bIdx + 1} Buyer
+                        #{bIdx + 1}
                       </span>
                     </div>
 
@@ -1337,14 +1499,40 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                         <div className="text-slate-400 text-[10px] font-bold">कुल टिकट खरीदे</div>
                         <div className="text-lg font-black text-amber-300 font-mono flex items-center gap-1">
                           <Ticket className="w-4 h-4 text-amber-400" />
-                          <span>{buyer.ticketCount}</span>
+                          <span>{buyer.ticketCount} टिकट</span>
                         </div>
                       </div>
                       <div>
                         <div className="text-slate-400 text-[10px] font-bold">कुल खर्च राशि</div>
                         <div className="text-lg font-black text-emerald-300 font-mono">
-                          ₹{buyer.totalSpent}
+                          ₹{buyer.totalSpent.toLocaleString('en-IN')}
                         </div>
+                      </div>
+                    </div>
+
+                    {/* EXACT REQUIREMENT: कितने वाला टिकट कितना लिया है (Price Breakdown) */}
+                    <div className="p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-1.5">
+                      <div className="text-[11px] font-black text-amber-300 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <span>🎟️ कितने वाला टिकट कितना लिया:</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          {buyer.priceBreakdown.length} दरें
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {buyer.priceBreakdown.map((pb) => (
+                          <div
+                            key={pb.price}
+                            className="px-2.5 py-1 rounded-xl bg-slate-900 border border-amber-400/30 text-xs font-mono flex items-center gap-1.5 shadow-sm"
+                          >
+                            <span className="text-amber-400 font-black">₹{pb.price} वाला:</span>
+                            <span className="px-1.5 py-0.2 rounded bg-amber-400/20 text-white font-bold text-[11px]">
+                              {pb.count} टिकट
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">(= ₹{pb.totalSpent})</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -1385,7 +1573,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                       type="button"
                       onClick={() => openUserAllTicketsDeleteModal(buyer)}
                       className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/50 text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                      title="इस यूजर के सभी टिकट रिमूव करें"
+                      title="इस यूजर के सभी टिकट रिमूव करें और वॉलेट में रिफंड भेजें"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>सभी रिमूव</span>
@@ -1393,6 +1581,95 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          ) : (
+            /* ================= TABLE VIEW ================= */
+            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 border-b border-slate-800 text-slate-400 text-[11px] uppercase tracking-wider">
+                    <th className="p-3 font-bold">#</th>
+                    <th className="p-3 font-bold">यूजर / खिलाड़ी</th>
+                    <th className="p-3 font-bold">मोबाइल व ID</th>
+                    <th className="p-3 font-bold text-center">कुल टिकट</th>
+                    <th className="p-3 font-bold text-right">कुल खर्च</th>
+                    <th className="p-3 font-bold">🎟️ कितने वाला टिकट कितना लिया (दर विवरण)</th>
+                    <th className="p-3 font-bold text-right">एक्शन</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 font-sans">
+                  {filteredBuyerSummary.map((buyer, bIdx) => (
+                    <tr key={buyer.userId || bIdx} className="hover:bg-slate-900/60 transition-colors">
+                      <td className="p-3 font-mono text-slate-500 font-bold">#{bIdx + 1}</td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={buyer.avatar}
+                            alt="avatar"
+                            className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+                          />
+                          <div>
+                            <div className="font-bold text-white text-xs">{buyer.userName}</div>
+                            {buyer.userEmail && (
+                              <div className="text-[10px] text-slate-400 truncate max-w-[140px]">{buyer.userEmail}</div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3 font-mono text-slate-300">
+                        <div>{buyer.userPhone || '—'}</div>
+                        <div className="text-[10px] text-slate-500">{buyer.userId.slice(0, 12)}</div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-mono font-black border border-amber-500/30">
+                          {buyer.ticketCount} टिकट
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-mono font-black text-emerald-400 text-sm">
+                        ₹{buyer.totalSpent.toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {buyer.priceBreakdown.map((pb) => (
+                            <span
+                              key={pb.price}
+                              className="px-2 py-0.5 rounded-lg bg-slate-900 border border-amber-400/40 text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1"
+                            >
+                              <strong className="text-amber-400">₹{pb.price} वाला:</strong>
+                              <span className="text-white font-black">{pb.count} टिकट</span>
+                              <span className="text-[9px] text-slate-400">(= ₹{pb.totalSpent})</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedBuyerFilter(buyer.userId);
+                              setActiveSubTab('history');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                          >
+                            <Eye className="w-3 h-3 text-amber-400" />
+                            <span>टिकट</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openUserAllTicketsDeleteModal(buyer)}
+                            className="px-2.5 py-1 rounded-lg bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                            title="रिमूव करें और रिफंड भेजें"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>रिमूव</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

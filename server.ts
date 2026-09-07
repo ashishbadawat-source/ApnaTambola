@@ -1399,6 +1399,47 @@ async function startServer() {
     res.json({ success: true, updatedCount, totalTickets: tickets.length });
   });
 
+  // Dynamic 70% Prize Pool and 30% Admin Commission Engine
+  function recalculateGamePrizes7030(game: TambolaGame) {
+    if (!game) return;
+    const gameTickets = tickets.filter((t) => t.gameId === game.id && t.isActive !== false);
+    game.totalTicketsSold = gameTickets.length;
+    const count = game.totalTicketsSold;
+    const totalCollection = count * game.ticketPrice;
+    game.prizePool = Math.round(totalCollection * 0.70); // 70% to players, 30% to admin
+
+    const pEarly5 = Math.max(5, Math.round(totalCollection * 0.025));
+    const pStar = Math.max(5, Math.round(totalCollection * 0.025));
+    const pTop = Math.max(5, Math.round(totalCollection * 0.025));
+    const pMid = Math.max(5, Math.round(totalCollection * 0.025));
+    const pBot = Math.max(5, Math.round(totalCollection * 0.025));
+    const pFh1 = Math.max(10, Math.round(totalCollection * 0.40));
+    const pFh2 = Math.max(10, Math.round(totalCollection * 0.175));
+
+    if (!Array.isArray(game.prizes) || game.prizes.length === 0) {
+      game.prizes = [
+        { id: `prz_${game.id}_e5`, code: 'early5', name: '1. जल्दी 5 (Early 5)', amount: pEarly5, maxWinners: 1, claimedWinners: [], description: 'First 5 numbers (2.5%)' },
+        { id: `prz_${game.id}_star`, code: 'star', name: '2. स्टार (Star)', amount: pStar, maxWinners: 1, claimedWinners: [], description: '4 corners + 1 center (2.5%)' },
+        { id: `prz_${game.id}_tl`, code: 'top_line', name: '3. पहली लाइन (Top Line)', amount: pTop, maxWinners: 1, claimedWinners: [], description: 'Row 1 complete (2.5%)' },
+        { id: `prz_${game.id}_ml`, code: 'mid_line', name: '4. दूसरी लाइन (Mid Line)', amount: pMid, maxWinners: 1, claimedWinners: [], description: 'Row 2 complete (2.5%)' },
+        { id: `prz_${game.id}_bl`, code: 'bot_line', name: '5. तीसरी लाइन (Bot Line)', amount: pBot, maxWinners: 1, claimedWinners: [], description: 'Row 3 complete (2.5%)' },
+        { id: `prz_${game.id}_fh1`, code: 'full_house', name: '6. पहला फुलहाउस (1st Full House)', amount: pFh1, maxWinners: 1, claimedWinners: [], description: 'All 15 numbers (40%)' },
+        { id: `prz_${game.id}_fh2`, code: 'second_full_house', name: '7. दूसरा फुलहाउस (2nd Full House)', amount: pFh2, maxWinners: 1, claimedWinners: [], description: '2nd 15 numbers (17.5%)' },
+      ];
+    } else {
+      game.prizes = game.prizes.map((p) => {
+        if (p.code === 'early5') return { ...p, amount: pEarly5 };
+        if (p.code === 'star' || p.code === 'corners') return { ...p, amount: pStar };
+        if (p.code === 'top_line') return { ...p, amount: pTop };
+        if (p.code === 'mid_line') return { ...p, amount: pMid };
+        if (p.code === 'bot_line') return { ...p, amount: pBot };
+        if (p.code === 'full_house') return { ...p, amount: pFh1 };
+        if (p.code === 'second_full_house') return { ...p, amount: pFh2 };
+        return p;
+      });
+    }
+  }
+
   // Admin Delete / Remove Ticket with automatic user wallet refund
   app.post('/api/tickets/delete', (req: Request, res: Response) => {
     try {
@@ -1444,6 +1485,13 @@ async function startServer() {
 
       const beforeCount = tickets.length;
       tickets = tickets.filter((t) => t.id !== ticketId && t.ticketId !== ticketId);
+
+      // Automatically recalculate 70% prize pool and 30% admin share
+      if (targetTkt.gameId) {
+        const game = games.find((g) => g.id === targetTkt.gameId);
+        if (game) recalculateGamePrizes7030(game);
+      }
+
       saveStateToDisk();
 
       res.json({
@@ -1493,18 +1541,20 @@ async function startServer() {
         });
       }
 
-      // Decrement game counters
+      // Decrement game counters and recalculate 70% prizes
+      const affectedGameIds = new Set<string>();
       targetTkts.forEach((t) => {
-        if (t.gameId) {
-          const game = games.find((g) => g.id === t.gameId);
-          if (game && game.totalTicketsSold > 0) {
-            game.totalTicketsSold = Math.max(0, game.totalTicketsSold - 1);
-          }
-        }
+        if (t.gameId) affectedGameIds.add(t.gameId);
       });
 
       const beforeCount = tickets.length;
       tickets = tickets.filter((t) => !idSet.has(t.id) && !idSet.has(t.ticketId));
+
+      affectedGameIds.forEach((gId) => {
+        const game = games.find((g) => g.id === gId);
+        if (game) recalculateGamePrizes7030(game);
+      });
+
       saveStateToDisk();
 
       res.json({
@@ -1717,6 +1767,7 @@ async function startServer() {
 
     game.totalTicketsSold += quantity;
     game.registeredPlayers = Math.min(game.maxPlayers, game.registeredPlayers + 1);
+    recalculateGamePrizes7030(game); // Exact 70% prize pool and 30% admin margin
 
     // Record Wallet Transaction
     const txn: WalletTransaction = {
@@ -1987,6 +2038,7 @@ async function startServer() {
       });
 
       if (dispatchedList.length > 0) {
+        recalculateGamePrizes7030(targetGame);
         siteSettings.lastAutoTicketRunTime = new Date().toISOString();
         saveStateToDisk();
 
