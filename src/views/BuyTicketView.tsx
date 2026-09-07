@@ -302,44 +302,75 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
               </div>
             )}
 
-            {/* 2. Select Quantity */}
-            <div className={`space-y-2 ${!isGameActive || !isBookingAllowed ? 'opacity-50 pointer-events-none' : ''}`}>
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                2. Select Number of Tickets
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <span className="w-16 text-center text-2xl font-black text-slate-100 font-mono">
-                  {quantity}
+            {/* 2. Select Quantity (Manual Multi-Ticket Purchase Allowed) */}
+            <div className={`space-y-2.5 ${!isGameActive || !isBookingAllowed ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                  <TicketIcon className="w-3.5 h-3.5 text-amber-400" />
+                  <span>2. टिकट संख्या चुनें (Select Quantity)</span>
+                </label>
+                <span className="text-[11px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                  ✨ आप जितने चाहें उतने टिकट ले सकते हैं
                 </span>
-                <button
-                  onClick={() => setQuantity(Math.min(20, quantity + 1))}
-                  className="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center justify-center transition-colors cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              </div>
 
-                {/* Preset Chips */}
-                <div className="flex items-center gap-1.5 ml-auto">
-                  {[1, 2, 5, 10].map((num) => (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center bg-slate-900 border border-slate-700 rounded-xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={quantity}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val >= 1) {
+                        setQuantity(Math.min(100, val));
+                      } else if (e.target.value === '') {
+                        setQuantity(1);
+                      }
+                    }}
+                    className="w-14 text-center text-xl font-black text-amber-300 font-mono bg-transparent focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.min(100, quantity + 1))}
+                    className="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Preset Fast Selection Chips */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[1, 2, 3, 5, 6, 10, 12].map((num) => (
                     <button
                       key={num}
+                      type="button"
                       onClick={() => setQuantity(num)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         quantity === num
-                          ? 'bg-amber-400 text-slate-950 shadow'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/30 ring-1 ring-amber-300'
+                          : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 border border-slate-700'
                       }`}
                     >
-                      {num} {num === 1 ? 'Tkt' : 'Tkts'}
+                      {num} {num === 1 ? 'टिकट' : num === 6 ? '6 (फुल शीट)' : `${num} टिकट`}
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div className="text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80 flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>
+                  <strong>मैनुअल बुकिंग:</strong> आप अपनी इच्छानुसार 1, 2, 6, 12 या कितने भी टिकट खरीद सकते हैं। (ऑटो मोड ऑन रहने पर सिर्फ 1 टिकट ही ऑटो-बुक होता है)।
+                </span>
               </div>
             </div>
 

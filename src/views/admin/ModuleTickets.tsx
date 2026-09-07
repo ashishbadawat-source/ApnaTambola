@@ -35,7 +35,7 @@ import {
   Clock,
   ArrowRight,
 } from 'lucide-react';
-import { TambolaTicket, TambolaGame, User, TicketColorThemeId } from '../../types';
+import { TambolaTicket, TambolaGame, User, TicketColorThemeId, SiteSettings } from '../../types';
 import { TambolaTicketCard } from '../../components/TambolaTicketCard';
 import { TICKET_COLOR_PALETTES, COLOR_KEYS, getTicketTheme, COLUMN_COLORS } from '../../utils/ticketColors';
 import { generateTambolaTicketMatrix, generateTicketId } from '../../utils/tambolaTicket';
@@ -44,6 +44,9 @@ interface ModuleTicketsProps {
   tickets: TambolaTicket[];
   games: TambolaGame[];
   users?: User[];
+  siteSettings?: SiteSettings;
+  onToggleAutoTicket?: (enabled: boolean, gameId?: string) => Promise<boolean> | void;
+  onRunAutoTicketDispatch?: (gameId?: string) => Promise<{ success: boolean; dispatchedCount: number; totalDeducted: number; message: string; details?: any[] }>;
   onAdminGenerateTickets?: (gameId: string, count: number, colorTheme?: TicketColorThemeId) => Promise<boolean>;
   onAdminToggleTicketStatus?: (ticketId: string, isActive: boolean) => Promise<boolean>;
   onAdminBatchToggleTickets?: (ticketIds: string[], isActive: boolean) => Promise<boolean>;
@@ -53,7 +56,7 @@ interface ModuleTicketsProps {
   isSyncing?: boolean;
 }
 
-type SubTab = 'history' | 'buyers' | 'cards' | 'generator';
+type SubTab = 'history' | 'buyers' | 'cards' | 'generator' | 'auto_ticket';
 type StatusFilter = 'all' | 'active' | 'disabled' | 'winning';
 type SortOption = 'newest' | 'oldest' | 'price_high' | 'price_low' | 'buyer_asc';
 
@@ -61,6 +64,9 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   tickets,
   games,
   users = [],
+  siteSettings,
+  onToggleAutoTicket,
+  onRunAutoTicketDispatch,
   onAdminGenerateTickets,
   onAdminToggleTicketStatus,
   onAdminBatchToggleTickets,
@@ -81,6 +87,18 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
 
   // Multi-selection for batch operations
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
+
+  // Auto-Ticket Engine State
+  const [selectedAutoGameId, setSelectedAutoGameId] = useState<string>(
+    siteSettings?.autoTicketGameId || games.find((g) => g.status === 'live' || g.status === 'upcoming')?.id || games[0]?.id || ''
+  );
+  const [isAutoDispatching, setIsAutoDispatching] = useState(false);
+  const [autoDispatchReport, setAutoDispatchReport] = useState<{
+    total: number;
+    amount: number;
+    message: string;
+    details?: Array<{ userId: string; userName: string; phone?: string; ticketId: string; deducted: number; newBalance: number }>;
+  } | null>(null);
 
   // Generator form
   const [batchGameId, setBatchGameId] = useState<string>(games[0]?.id || '');
@@ -491,6 +509,89 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     }
   };
 
+  // Auto-Ticket Engine Calculations
+  const currentAutoGame = games.find((g) => g.id === selectedAutoGameId) ||
+    games.find((g) => g.status === 'live' || g.status === 'upcoming') ||
+    games[0];
+  const autoTicketPrice = Number(currentAutoGame?.ticketPrice) || 5;
+  const isAutoEnabled = Boolean(siteSettings?.autoTicketEnabled);
+
+  const eligibleUsersForAuto = useMemo(() => {
+    if (!currentAutoGame) return [];
+    return users.filter((u) => {
+      if (!u || !u.id || u.role === 'admin') return false;
+      const totalFund = Number(u.walletBalance || (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0)) || 0;
+      return totalFund >= autoTicketPrice;
+    });
+  }, [users, currentAutoGame, autoTicketPrice]);
+
+  const usersAlreadyHavingTicket = useMemo(() => {
+    if (!currentAutoGame) return new Set<string>();
+    const set = new Set<string>();
+    tickets.forEach((t) => {
+      if (t.gameId === currentAutoGame.id && t.userId) {
+        set.add(t.userId);
+      }
+    });
+    return set;
+  }, [tickets, currentAutoGame]);
+
+  const pendingEligibleUsers = useMemo(() => {
+    return eligibleUsersForAuto.filter((u) => !usersAlreadyHavingTicket.has(u.id));
+  }, [eligibleUsersForAuto, usersAlreadyHavingTicket]);
+
+  const handleTriggerAutoDispatch = async (gId?: string) => {
+    const targetId = gId || selectedAutoGameId || currentAutoGame?.id;
+    setIsAutoDispatching(true);
+    try {
+      if (onRunAutoTicketDispatch) {
+        const res = await onRunAutoTicketDispatch(targetId);
+        setAutoDispatchReport({
+          total: res.dispatchedCount,
+          amount: res.totalDeducted,
+          message: res.message,
+          details: res.details,
+        });
+        showNotification(res.message, res.dispatchedCount > 0 ? 'success' : 'info');
+      } else {
+        const resp = await fetch('/api/tickets/auto-dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId: targetId }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+          setAutoDispatchReport({
+            total: data.dispatchedCount,
+            amount: data.totalDeducted,
+            message: data.message,
+            details: data.details,
+          });
+          showNotification(data.message, data.dispatchedCount > 0 ? 'success' : 'info');
+        }
+      }
+    } catch (e: any) {
+      showNotification(e.message || 'Auto ticket execution error', 'error');
+    } finally {
+      setIsAutoDispatching(false);
+    }
+  };
+
+  const handleToggleAutoEngine = async () => {
+    const nextState = !isAutoEnabled;
+    try {
+      if (onToggleAutoTicket) {
+        await onToggleAutoTicket(nextState, selectedAutoGameId);
+      }
+      showNotification(
+        `⚡ ऑटो टिकट इंजन को ${nextState ? 'चालू (ENABLED / ON)' : 'बंद (DISABLED / OFF)'} कर दिया गया है!`,
+        nextState ? 'success' : 'info'
+      );
+    } catch (e: any) {
+      showNotification('सेटिंग्स अपडेट करने में त्रुटि आई', 'error');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Header & Master Title */}
@@ -533,6 +634,113 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
             <span>0ms लाइव सिंक</span>
           </div>
         </div>
+      </div>
+
+      {/* 🚀 MASTER AUTO TICKET DISPATCH BAR (ऑटो टिकट मास्टर कंट्रोल) */}
+      <div className={`p-4 sm:p-5 rounded-3xl border transition-all shadow-xl ${
+        isAutoEnabled
+          ? 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-emerald-500/40 shadow-emerald-950/30'
+          : 'bg-gradient-to-r from-slate-900 via-slate-900/95 to-slate-950 border-amber-500/30 shadow-black/40'
+      }`}>
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+          {/* Left: Master Toggle & Info */}
+          <div className="flex items-start sm:items-center gap-3.5">
+            <button
+              onClick={handleToggleAutoEngine}
+              className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAutoEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-800 border-slate-700'
+              }`}
+              title={isAutoEnabled ? 'ऑटो टिकट बंद करें (Turn OFF)' : 'ऑटो टिकट चालू करें (Turn ON)'}
+            >
+              <span
+                className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  isAutoEnabled ? 'translate-x-8' : 'translate-x-0'
+                }`}
+              />
+            </button>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white flex items-center gap-1.5">
+                  <Zap className={`w-4 h-4 ${isAutoEnabled ? 'text-emerald-400 fill-emerald-400' : 'text-amber-400'}`} />
+                  <span>ऑटोमैटिक टिकट बुकिंग सिस्टम (Auto-Ticket Engine)</span>
+                </span>
+                <span className={`px-2 py-0.5 rounded-md text-[11px] font-black tracking-wider uppercase ${
+                  isAutoEnabled
+                    ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 animate-pulse'
+                    : 'bg-slate-800 border border-slate-700 text-slate-400'
+                }`}>
+                  {isAutoEnabled ? '🟢 ON (सक्रिय)' : '⚪ OFF (बंद)'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                बटन ON होते ही जिस यूजर के वॉलेट में फंड (₹{autoTicketPrice}) है, उसे <strong>1 टिकट</strong> जाएगा और फंड कट होगा।
+              </p>
+            </div>
+          </div>
+
+          {/* Right: Tournament Selector & 1-Click Trigger Button */}
+          <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto justify-between xl:justify-end">
+            <div className="flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+              <span className="text-slate-400 font-bold">टूर्नामेंट:</span>
+              <select
+                value={selectedAutoGameId}
+                onChange={(e) => {
+                  setSelectedAutoGameId(e.target.value);
+                  if (onToggleAutoTicket && isAutoEnabled) {
+                    onToggleAutoTicket(true, e.target.value);
+                  }
+                }}
+                className="bg-transparent text-amber-300 font-bold focus:outline-none cursor-pointer text-xs"
+              >
+                {games.map((g) => (
+                  <option key={g.id} value={g.id} className="bg-slate-900 text-white">
+                    {g.title} (₹{g.ticketPrice || 5})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-400/30 text-blue-300 text-xs font-bold">
+              <span>फंडेड यूजर: </span>
+              <strong className="text-white font-mono">{pendingEligibleUsers.length}</strong>
+              <span className="text-[10px] text-slate-400 ml-1">({eligibleUsersForAuto.length} कुल)</span>
+            </div>
+
+            <button
+              onClick={() => handleTriggerAutoDispatch()}
+              disabled={isAutoDispatching}
+              className={`px-4 py-2 rounded-xl font-black text-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg ${
+                isAutoDispatching
+                  ? 'bg-amber-600 text-slate-950 opacity-70 cursor-wait'
+                  : 'bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 shadow-amber-500/20'
+              }`}
+            >
+              <Zap className={`w-3.5 h-3.5 ${isAutoDispatching ? 'animate-spin' : 'fill-slate-950'}`} />
+              <span>{isAutoDispatching ? 'डिस्पैच हो रहा है...' : '⚡ अभी 1 टिकट भेजें (Book Now)'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Auto Dispatch Report Feedback if available */}
+        {autoDispatchReport && (
+          <div className="mt-3 p-3 rounded-2xl bg-slate-950/90 border border-emerald-500/30 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="text-emerald-300 font-bold">{autoDispatchReport.message}</span>
+            </div>
+            <div className="flex items-center gap-3 text-slate-400">
+              <span>डिस्पैच: <strong className="text-white">{autoDispatchReport.total} टिकट</strong></span>
+              <span>कुल डेबिट: <strong className="text-amber-400 font-bold">₹{autoDispatchReport.amount}</strong></span>
+              <button
+                onClick={() => setAutoDispatchReport(null)}
+                className="text-slate-500 hover:text-slate-300 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Notification Banner */}
@@ -666,6 +874,23 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         >
           <Plus className="w-4 h-4" />
           <span>बैच टिकट जनरेटर (Create Tickets)</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('auto_ticket')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'auto_ticket'
+              ? 'bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20'
+              : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+          }`}
+        >
+          <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
+          <span>⚡ ऑटो टिकट हब (Auto-Ticket Engine)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            isAutoEnabled ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {isAutoEnabled ? 'ON' : 'OFF'}
+          </span>
         </button>
       </div>
 
@@ -1442,6 +1667,260 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: AUTO-TICKET ENGINE HUB (ऑटोमैटिक टिकट डिस्पैच एवं वॉलेट कटौती हब) */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'auto_ticket' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Main Control Station */}
+          <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border-2 border-amber-500/40 shadow-2xl space-y-6">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${
+                  isAutoEnabled
+                    ? 'bg-emerald-500/20 border border-emerald-400 text-emerald-400'
+                    : 'bg-amber-500/20 border border-amber-400 text-amber-400'
+                }`}>
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                    <span>ऑटोमैटिक टिकट डिस्पैच एवं वॉलेट ऑटो-डेबिट इंजन</span>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-black ${
+                      isAutoEnabled ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      {isAutoEnabled ? '🟢 ON' : '⚪ OFF'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    जिस यूजर के वॉलेट में फंड है, उसे 1 टिकट ऑटोमैटिक बुक करें एवं वॉलेट से टिकट का निर्धारित भुगतान कट करें।
+                  </p>
+                </div>
+              </div>
+
+              {/* Master Switch */}
+              <div className="flex items-center gap-3 bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
+                <span className="text-xs font-bold text-slate-300">
+                  {isAutoEnabled ? 'ऑटो टिकट चालू है' : 'ऑटो टिकट बंद है'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleAutoEngine}
+                  className={`relative inline-flex h-9 w-18 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isAutoEnabled ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/30' : 'bg-slate-800 border-slate-700'
+                  }`}
+                  title={isAutoEnabled ? 'ऑटो टिकट बंद करें' : 'ऑटो टिकट चालू करें'}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-8 w-8 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      isAutoEnabled ? 'translate-x-9' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Settings & Trigger Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Target Tournament Box */}
+              <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-2">
+                <label className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-amber-400" />
+                  <span>टारगेट गेम / टूर्नामेंट</span>
+                </label>
+                <select
+                  value={selectedAutoGameId}
+                  onChange={(e) => {
+                    setSelectedAutoGameId(e.target.value);
+                    if (onToggleAutoTicket && isAutoEnabled) {
+                      onToggleAutoTicket(true, e.target.value);
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-amber-400 cursor-pointer"
+                >
+                  {games.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.title} (मूल्य: ₹{g.ticketPrice || 5})
+                    </option>
+                  ))}
+                </select>
+                <div className="text-[11px] text-amber-400 font-bold flex items-center justify-between">
+                  <span>टिकट कटौती राशि:</span>
+                  <span className="font-mono text-sm font-black">₹{autoTicketPrice}</span>
+                </div>
+              </div>
+
+              {/* Eligible Funded Users Count */}
+              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 space-y-2">
+                <div className="flex items-center justify-between text-xs text-blue-400 font-bold">
+                  <span>फंडेड यूजर (Funded Users)</span>
+                  <Users className="w-4 h-4" />
+                </div>
+                <div className="text-3xl font-black text-white font-mono">{eligibleUsersForAuto.length}</div>
+                <div className="text-[11px] text-slate-400">
+                  न्यूनतम ₹{autoTicketPrice} बैलेंस वाले कुल यूजर
+                </div>
+              </div>
+
+              {/* Pending for Ticket */}
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                <div className="flex items-center justify-between text-xs text-amber-400 font-bold">
+                  <span>लंबित यूजर (Need 1 Ticket)</span>
+                  <Ticket className="w-4 h-4" />
+                </div>
+                <div className="text-3xl font-black text-amber-300 font-mono">{pendingEligibleUsers.length}</div>
+                <div className="text-[11px] text-slate-400">
+                  जिन्हें अभी 1 टिकट जाना शेष है
+                </div>
+              </div>
+
+              {/* Action Trigger Box */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/40 flex flex-col justify-between space-y-2">
+                <div>
+                  <div className="text-xs text-amber-300 font-bold">1-Click मास्टर डिस्पैच</div>
+                  <div className="text-[11px] text-slate-400">सभी पात्र फंडेड यूजर्स को तुरंत भेजें</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleTriggerAutoDispatch()}
+                  disabled={isAutoDispatching || pendingEligibleUsers.length === 0}
+                  className={`w-full py-2.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg ${
+                    isAutoDispatching
+                      ? 'bg-amber-600 text-slate-950 opacity-70 cursor-wait'
+                      : pendingEligibleUsers.length === 0
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                      : 'bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-slate-950 shadow-amber-500/30 hover:brightness-110'
+                  }`}
+                >
+                  <Zap className={`w-4 h-4 ${isAutoDispatching ? 'animate-spin' : 'fill-slate-950'}`} />
+                  <span>{isAutoDispatching ? 'डिस्पैच जारी है...' : `⚡ ${pendingEligibleUsers.length} यूजर्स को टिकट भेजें`}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Explanatory Rule Box */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-2">
+              <div className="text-amber-400 font-black flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>ऑटोमैटिक टिकट एवं फंड कटौती नियम (Rules &amp; Verification):</span>
+              </div>
+              <ul className="grid grid-cols-1 md:grid-cols-3 gap-3 text-slate-400 text-[11px]">
+                <li className="flex items-start gap-1.5">
+                  <span className="text-amber-400 font-black">1.</span>
+                  <span><strong>सटीक कटौती:</strong> जितने का टिकट होगा (₹{autoTicketPrice}), यूजर के वॉलेट से ठीक उतना ही अमाउंट कट होगा।</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-amber-400 font-black">2.</span>
+                  <span><strong>ऑटो मोड = 1 टिकट:</strong> ऑटो मोड में 1 गेम का सिर्फ <strong>1 टिकट</strong> ही जाएगा। यदि यूजर चाहे तो वह खुद मैनुअल कितने भी टिकट (2, 6, 12...) खरीद सकता है।</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-amber-400 font-black">3.</span>
+                  <span><strong>बैलेंस प्राथमिकता:</strong> पहले डिपॉजिट बैलेंस, फिर विनिंग बैलेंस एवं रेफरल बैलेंस से कटौती होती है।</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Live Eligible Users Table */}
+          <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-base font-black text-white flex items-center gap-2">
+                  <span>पात्र फंडेड यूजर सूची (Eligible Users Live Status)</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                    {eligibleUsersForAuto.length} Users
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-400">
+                  वे सभी यूजर जिनके पास टूर्नामेंट "{currentAutoGame?.title}" हेतु ₹{autoTicketPrice} से अधिक वॉलेट फंड उपलब्ध है।
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-800">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950 text-slate-400 font-bold uppercase tracking-wider text-[10px] border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-4">यूजर नाम एवं मोबाइल</th>
+                    <th className="py-3 px-4">कुल वॉलेट फंड</th>
+                    <th className="py-3 px-4">डिपॉजिट बैलेंस</th>
+                    <th className="py-3 px-4">विनिंग बैलेंस</th>
+                    <th className="py-3 px-4">टिकट स्थिति</th>
+                    <th className="py-3 px-4 text-right">कार्रवाई</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 text-slate-200">
+                  {eligibleUsersForAuto.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
+                        वर्तमान में किसी भी यूजर के पास ₹{autoTicketPrice} बैलेंस उपलब्ध नहीं है।
+                      </td>
+                    </tr>
+                  ) : (
+                    eligibleUsersForAuto.map((u) => {
+                      const totalBal = Number(u.walletBalance || (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0)) || 0;
+                      const hasTicket = usersAlreadyHavingTicket.has(u.id);
+
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-800/50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-black text-amber-400 text-xs">
+                                {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                              </div>
+                              <div>
+                                <div className="font-bold text-white">{u.name}</div>
+                                <div className="text-[11px] text-slate-400 font-mono">{u.phone || u.email || u.id}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 font-mono font-black text-emerald-400 text-sm">
+                            ₹{totalBal}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-slate-300">
+                            ₹{u.depositBalance || 0}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-amber-300 font-bold">
+                            ₹{u.winningBalance || 0}
+                          </td>
+                          <td className="py-3 px-4">
+                            {hasTicket ? (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>टिकट बुक हो चुका है</span>
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                <span>लंबित (Ready for 1 Ticket)</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {hasTicket ? (
+                              <span className="text-slate-500 text-[11px] font-bold">✓ Complete</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleTriggerAutoDispatch()}
+                                disabled={isAutoDispatching}
+                                className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] shadow cursor-pointer transition-all active:scale-95"
+                              >
+                                ⚡ भेजें ₹{autoTicketPrice} टिकट
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

@@ -2791,6 +2791,239 @@ export function App() {
     }
   };
 
+  // 5b. Master Auto-Ticket Dispatch Engine (Auto-Book 1 ticket of exact price for all users with wallet funds)
+  const handleRunAutoTicketDispatch = async (targetGameId?: string, silent: boolean = false): Promise<{
+    success: boolean;
+    dispatchedCount: number;
+    totalDeducted: number;
+    message: string;
+    details?: Array<{ userId: string; userName: string; phone?: string; ticketId: string; deducted: number; newBalance: number }>;
+  }> => {
+    try {
+      // 1. Pick designated game or default to active/first upcoming game
+      let game = targetGameId ? games.find((g) => g.id === targetGameId) : null;
+      if (!game) {
+        game = games.find((g) => g.status === 'live' && g.isActive !== false && g.isGameEnabled !== false) ||
+               games.find((g) => g.status === 'upcoming' && g.isActive !== false && g.isGameEnabled !== false) ||
+               games[0];
+      }
+
+      if (!game) {
+        if (!silent) alert('⚠️ कोई सक्रिय टूर्नामेंट उपलब्ध नहीं है। कृपया पहले टूर्नामेंट चालू करें।');
+        return { success: false, dispatchedCount: 0, totalDeducted: 0, message: 'No active tournament found.' };
+      }
+
+      const ticketPrice = Number(game.ticketPrice) || 5;
+      const dispatchedList: Array<{
+        userId: string;
+        userName: string;
+        phone?: string;
+        ticketId: string;
+        deducted: number;
+        newBalance: number;
+      }> = [];
+      const newGeneratedTickets: TambolaTicket[] = [];
+      const newTxns: WalletTransaction[] = [];
+      let totalDeducted = 0;
+
+      // Filter non-admin users with sufficient wallet funds (deposit + win + referral)
+      const eligibleUsers = users.filter((u) => {
+        if (!u || !u.id || u.role === 'admin') return false;
+        const totalFund = Number(u.walletBalance || (u.depositBalance || 0) + (u.winningBalance || 0) + (u.referralBalance || 0)) || 0;
+        return totalFund >= ticketPrice;
+      });
+
+      let updatedUsers = [...users];
+
+      eligibleUsers.forEach((u) => {
+        // Check if user already has a ticket for this specific game
+        const alreadyHas = tickets.some((t) => t.userId === u.id && t.gameId === game!.id) ||
+                           newGeneratedTickets.some((t) => t.userId === u.id && t.gameId === game!.id);
+        if (alreadyHas) return;
+
+        let needed = ticketPrice;
+        let depBal = u.depositBalance || 0;
+        let winBal = u.winningBalance || 0;
+        let refBal = u.referralBalance || 0;
+
+        if (depBal >= needed) {
+          depBal -= needed;
+          needed = 0;
+        } else {
+          needed -= depBal;
+          depBal = 0;
+        }
+
+        if (needed > 0 && winBal >= needed) {
+          winBal -= needed;
+          needed = 0;
+        } else if (needed > 0) {
+          needed -= winBal;
+          winBal = 0;
+        }
+
+        if (needed > 0 && refBal >= needed) {
+          refBal -= needed;
+          needed = 0;
+        }
+
+        const newWallet = depBal + winBal + refBal;
+        const matrix = generateTambolaTicketMatrix();
+        const ticketId = generateTicketId();
+
+        const newTicket: TambolaTicket = {
+          id: `tkt_auto_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          gameId: game!.id,
+          gameTitle: game!.title,
+          userId: u.id,
+          userName: u.name,
+          ticketNumber: (game!.totalTicketsSold || 0) + newGeneratedTickets.length + 1,
+          ticketId,
+          numbers: matrix,
+          markedNumbers: [],
+          price: ticketPrice,
+          purchaseDate: new Date().toISOString(),
+          qrCodeData: `TAMBOLA-AUTO|${ticketId}|${game!.gameCode}|${u.name}|INR${ticketPrice}`,
+          colorTheme: game!.ticketColorTheme || 'multi',
+        };
+
+        const txn: WalletTransaction = {
+          id: `txn_auto_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          userId: u.id,
+          userName: u.name,
+          type: 'ticket_purchase',
+          amount: -ticketPrice,
+          status: 'completed',
+          description: `🎟️ ऑटो टिकट बुकिंग (${game!.title}) - ₹${ticketPrice} (Ticket ID: ${ticketId})`,
+          referenceId: ticketId,
+          timestamp: new Date().toISOString(),
+          balanceAfter: newWallet,
+        };
+
+        newGeneratedTickets.push(newTicket);
+        newTxns.push(txn);
+        totalDeducted += ticketPrice;
+
+        dispatchedList.push({
+          userId: u.id,
+          userName: u.name,
+          phone: u.phone,
+          ticketId,
+          deducted: ticketPrice,
+          newBalance: newWallet,
+        });
+
+        updatedUsers = updatedUsers.map((usr) => usr.id === u.id ? {
+          ...usr,
+          depositBalance: depBal,
+          winningBalance: winBal,
+          referralBalance: refBal,
+          walletBalance: newWallet,
+        } : usr);
+      });
+
+      if (newGeneratedTickets.length > 0) {
+        setTickets((prev) => [...newGeneratedTickets, ...prev]);
+        setTransactions((prev) => [...newTxns, ...prev]);
+        setUsers(updatedUsers);
+
+        // If current logged-in user is one of the affected users, update currentUser state
+        if (currentUser && dispatchedList.some((d) => d.userId === currentUser.id)) {
+          const myUpdate = updatedUsers.find((u) => u.id === currentUser.id);
+          if (myUpdate) {
+            setCurrentUser(myUpdate);
+            try {
+              localStorage.setItem('apna_tambola_auth_user', JSON.stringify(myUpdate));
+            } catch (e) {}
+          }
+        }
+
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify([...newGeneratedTickets, ...tickets]));
+          localStorage.setItem('apna_tambola_transactions', JSON.stringify([...newTxns, ...transactions]));
+          localStorage.setItem('apna_tambola_registered_users', JSON.stringify(updatedUsers));
+        } catch (e) {}
+
+        // Update tournament stats
+        setGames((prev) => prev.map((g) => g.id === game!.id ? {
+          ...g,
+          totalTicketsSold: (g.totalTicketsSold || 0) + newGeneratedTickets.length,
+          registeredPlayers: Math.min(g.maxPlayers || 500, (g.registeredPlayers || 0) + dispatchedList.length),
+        } : g));
+
+        // Add Admin Activity Log
+        setActivityLogs((prev) => [
+          {
+            id: `act_${Date.now()}_auto`,
+            adminName: 'Auto Ticket Engine',
+            action: `⚡ ${newGeneratedTickets.length} ऑटो टिकट जारी किए गए (${game!.title} - ₹${ticketPrice}/टिकट, कुल ₹${totalDeducted} डेबिट)`,
+            category: 'ticket',
+            ipAddress: '127.0.0.1 (System)',
+            device: 'Auto-Dispatch Engine',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+            status: 'success',
+          },
+          ...prev,
+        ]);
+
+        // Push User Notification for current user if applicable
+        if (currentUser && dispatchedList.some((d) => d.userId === currentUser.id)) {
+          const myTkt = newGeneratedTickets.find((t) => t.userId === currentUser.id);
+          if (myTkt) {
+            setUserNotifications((prev) => [
+              {
+                id: `un_auto_${Date.now()}`,
+                category: 'ticket_confirmation',
+                title: `🎟️ आपका ₹${ticketPrice} वाला 1 टिकट ऑटोमैटिक बुक हो गया!`,
+                message: `टूर्नामेंट "${game!.title}" हेतु आपका टिकट ID ${myTkt.ticketId} बुक हो चुका है। वॉलेट से ₹${ticketPrice} डेबिट किया गया है।`,
+                timestamp: 'Just now',
+                read: false,
+                actionTab: 'my-tickets',
+                ticketId: myTkt.ticketId,
+              },
+              ...prev,
+            ]);
+          }
+        }
+
+        // Server Sync
+        fetch('/api/tickets/auto-dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gameId: game.id }),
+        }).catch(() => {});
+      }
+
+      const resMsg = dispatchedList.length > 0
+        ? `🎉 ${dispatchedList.length} फंडेड यूजर्स को ₹${ticketPrice} का 1 टिकट भेजा गया (कुल ₹${totalDeducted} डेबिट हुआ)!`
+        : `सभी फंडेड यूजर्स के पास पहले से "${game.title}" का टिकट उपलब्ध है।`;
+
+      return {
+        success: true,
+        dispatchedCount: dispatchedList.length,
+        totalDeducted,
+        message: resMsg,
+        details: dispatchedList,
+      };
+    } catch (e: any) {
+      console.error('Error in handleRunAutoTicketDispatch:', e);
+      return { success: false, dispatchedCount: 0, totalDeducted: 0, message: e.message || 'Auto ticket execution error' };
+    }
+  };
+
+  const handleToggleAutoTicketMode = async (enabled: boolean, gameId?: string): Promise<boolean> => {
+    const updates: Partial<SiteSettings> = {
+      autoTicketEnabled: enabled,
+      ...(gameId !== undefined ? { autoTicketGameId: gameId } : {}),
+    };
+    await handleUpdateSettings(updates);
+    if (enabled) {
+      // Trigger dispatch immediately on turning ON
+      handleRunAutoTicketDispatch(gameId, false);
+    }
+    return true;
+  };
+
   // 6. Claim Prize Handler with instant verification & Equal Split Logic
   const handleClaimPrize = (ticketId: string, prizeCode: PrizeCode) => {
     if (!currentUser) {

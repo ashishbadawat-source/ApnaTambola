@@ -137,6 +137,8 @@ interface AdminDashboardViewProps {
     allocatedFund: number;
     commissionRate: number;
   }) => Promise<boolean>;
+  onToggleAutoTicket?: (enabled: boolean, gameId?: string) => Promise<boolean> | void;
+  onRunAutoTicketDispatch?: (gameId?: string) => Promise<{ success: boolean; dispatchedCount: number; totalDeducted: number; message: string; details?: any[] }>;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -192,6 +194,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onForceRefresh,
   isSyncing,
   onViewUserWallet,
+  onToggleAutoTicket,
+  onRunAutoTicketDispatch,
   franchises = [],
   franchiseTransfers = [],
   onApproveFranchise = async () => true,
@@ -455,6 +459,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             tickets={tickets}
             games={games}
             users={users}
+            siteSettings={siteSettings}
+            onToggleAutoTicket={onToggleAutoTicket}
+            onRunAutoTicketDispatch={onRunAutoTicketDispatch}
             onAdminGenerateTickets={onAdminGenerateTickets}
             onAdminToggleTicketStatus={onAdminToggleTicketStatus}
             onAdminBatchToggleTickets={onAdminBatchToggleTickets}

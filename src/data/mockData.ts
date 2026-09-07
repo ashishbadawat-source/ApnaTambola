@@ -838,6 +838,10 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   ticketPrizePoolPercentage: 70,
   p2pTransferFeePercentage: 5,
   defaultTicketTheme: 'multi',
+  autoTicketEnabled: true,
+  autoTicketGameId: '',
+  autoTicketDeductExactPrice: true,
+  autoTicketMaxPerUser: 1,
   adminUsername: 'admin@tambolalive.com',
   adminPassword: 'admin',
 };

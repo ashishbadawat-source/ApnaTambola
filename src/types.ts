@@ -383,6 +383,13 @@ export interface SiteSettings {
   globalTicketBookingEnabled?: boolean; // Default true: All ticket sales ON / चालू, false: All ticket sales OFF / बंद
   ticketPrizePoolPercentage?: number; // Default 70% (70% to players, 30% admin margin)
 
+  // Master Auto-Ticket Booking Engine (Admin Auto Ticket ON / OFF & Controls)
+  autoTicketEnabled?: boolean; // Default false/true: When ON, users with funds automatically get 1 ticket and exact price is deducted
+  autoTicketGameId?: string; // Specific tournament ID for auto ticket dispatch (empty = first active/upcoming game)
+  autoTicketDeductExactPrice?: boolean; // Deduct exact ticket price from wallet (default true)
+  autoTicketMaxPerUser?: number; // Max auto tickets per user per tournament (default 1)
+  lastAutoTicketRunTime?: string; // Timestamp of last auto ticket execution
+
   // Master Admin Credentials
   adminUsername?: string;
   adminPassword?: string;

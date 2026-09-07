@@ -38,6 +38,7 @@ import {
   ExternalLink,
   Layers,
   Sliders,
+  Zap,
 } from 'lucide-react';
 import { SiteSettings, ActivityLog, LoginHistoryEntry, TicketColorThemeId, TambolaGame } from '../../types';
 import { speakNumberCall, setCallerVoiceLanguage } from '../../utils/audio';
@@ -119,6 +120,16 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
     settings.defaultTicketTheme || 'multi'
   );
 
+  // Auto-Ticket Master Settings
+  const [autoTicketEnabled, setAutoTicketEnabled] = useState(settings.autoTicketEnabled || false);
+  const [autoTicketGameId, setAutoTicketGameId] = useState(
+    settings.autoTicketGameId || games[0]?.id || ''
+  );
+  const [autoTicketDeductExactPrice, setAutoTicketDeductExactPrice] = useState(
+    typeof settings.autoTicketDeductExactPrice === 'boolean' ? settings.autoTicketDeductExactPrice : true
+  );
+  const [autoTicketMaxPerUser, setAutoTicketMaxPerUser] = useState(settings.autoTicketMaxPerUser || 1);
+
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [copiedUpi, setCopiedUpi] = useState(false);
@@ -159,6 +170,12 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
         setConfirmPassword(settings.adminPassword);
       }
       if (settings.defaultTicketTheme) setDefaultTicketTheme(settings.defaultTicketTheme);
+      if (typeof settings.autoTicketEnabled === 'boolean') setAutoTicketEnabled(settings.autoTicketEnabled);
+      if (settings.autoTicketGameId) setAutoTicketGameId(settings.autoTicketGameId);
+      if (typeof settings.autoTicketDeductExactPrice === 'boolean') {
+        setAutoTicketDeductExactPrice(settings.autoTicketDeductExactPrice);
+      }
+      if (settings.autoTicketMaxPerUser) setAutoTicketMaxPerUser(settings.autoTicketMaxPerUser);
     }
   }, [settings]);
 
@@ -204,8 +221,12 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
         tdsPercentage,
         adminFeePercentage,
         voiceLanguage,
+        autoTicketEnabled,
+        autoTicketGameId,
+        autoTicketDeductExactPrice,
+        autoTicketMaxPerUser,
       });
-      setSaveSuccess('Master settings, Ticket Color Theme, Admin ID/Password & Financial rules (10% TDS, 5% Admin) live updated!');
+      setSaveSuccess('Master settings, Auto-Ticket Engine, Payment, and Security live updated!');
       setTimeout(() => setSaveSuccess(null), 4000);
     } finally {
       setSaving(false);
@@ -308,6 +329,7 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
 
   const SETTINGS_SUB_TABS = [
     { id: 'all', label: '🎛️ All Settings (सभी)', icon: Sliders },
+    { id: 'auto_ticket', label: '⚡ Auto-Ticket Engine (ऑटो टिकट)', icon: Zap },
     { id: 'games', label: '🎮 Game ON/OFF (गेम चालू/बंद)', icon: Gamepad2 },
     { id: 'payment', label: '💳 Payment & UPI QR (पेमेंट गेटवे)', icon: QrCode },
     { id: 'voice', label: '🎙️ Voice & Language (आवाज)', icon: Volume2 },
@@ -594,6 +616,121 @@ export const ModuleSettings: React.FC<ModuleSettingsProps> = ({
 
       {/* Main Configuration Form */}
       <form onSubmit={handleSaveSettings} className="space-y-6">
+
+        {/* ⚡ SECTION 0: AUTO-TICKET MASTER CONFIGURATION */}
+        {(activeSection === 'all' || activeSection === 'auto_ticket') && (
+          <div className="rounded-3xl bg-slate-900/90 border-2 border-amber-500/40 p-5 sm:p-7 space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-500/20 pb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-2xl ${
+                  autoTicketEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                }`}>
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                    <span>Auto-Ticket Booking &amp; Wallet Debit Engine (ऑटोमैटिक टिकट एवं वॉलेट कटौती)</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${
+                      autoTicketEnabled ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    }`}>
+                      {autoTicketEnabled ? '🟢 ENGINE ACTIVE' : '⚪ INACTIVE'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    जिस यूजर के वॉलेट में फंड है, उसके लिए ऑटोमैटिक 1 टिकट जारी होगा एवं निर्धारित टिकट मूल्य (₹5) वॉलेट से कटेगा।
+                  </p>
+                </div>
+              </div>
+
+              {/* Toggle Switch */}
+              <div className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
+                <span className="text-xs font-bold text-slate-300">
+                  {autoTicketEnabled ? 'इंजन चालू (ON)' : 'इंजन बंद (OFF)'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAutoTicketEnabled(!autoTicketEnabled)}
+                  className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autoTicketEnabled ? 'bg-emerald-500 border-emerald-400' : 'bg-slate-800 border-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      autoTicketEnabled ? 'translate-x-8' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs text-amber-300 font-bold flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>Target Tournament (टारगेट गेम)</span>
+                </label>
+                <select
+                  value={autoTicketGameId}
+                  onChange={(e) => setAutoTicketGameId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                >
+                  {games.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.title} (टिकट मूल्य: ₹{g.ticketPrice || 5})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs text-amber-300 font-bold flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>Deduct Exact Ticket Price (सटीक कटौती)</span>
+                </label>
+                <div className="flex items-center gap-3 bg-slate-950 px-3 py-2 rounded-xl border border-slate-800">
+                  <input
+                    type="checkbox"
+                    id="deductExact"
+                    checked={autoTicketDeductExactPrice}
+                    onChange={(e) => setAutoTicketDeductExactPrice(e.target.checked)}
+                    className="w-4 h-4 text-amber-500 rounded bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer"
+                  />
+                  <label htmlFor="deductExact" className="text-xs font-bold text-slate-300 cursor-pointer">
+                    जितने का टिकट हो उतना ही पेमेंट कट हो (Exact Price)
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs text-amber-300 font-bold flex items-center gap-1.5">
+                  <TicketIcon className="w-3.5 h-3.5" />
+                  <span>Tickets Per Funded User (प्रति यूजर टिकट)</span>
+                </label>
+                <input
+                  type="number"
+                  value={autoTicketMaxPerUser}
+                  onChange={(e) => setAutoTicketMaxPerUser(Number(e.target.value))}
+                  min={1}
+                  max={5}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-4">
+              <span className="text-xs text-slate-400">
+                ऑटो टिकट सेटिंग्स को लागू करने के लिए नीचे दिए गए 'Save System Settings' बटन पर क्लिक करें।
+              </span>
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs cursor-pointer active:scale-95 transition-all shadow"
+              >
+                {saving ? 'Saving...' : 'Save Auto-Ticket Settings'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 💳 SECTION 1: ADMIN UPI & QR CODE PAYMENT GATEWAY (USER RECHARGE DEPOSIT) */}
         {(activeSection === 'all' || activeSection === 'payment') && (
