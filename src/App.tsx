@@ -176,14 +176,20 @@ export function App() {
   });
 
   const [winners, setWinners] = useState<GameWinner[]>(() => {
+    let deletedWinnerIds = new Set<string>();
+    try {
+      const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_winner_ids') || '[]');
+      if (Array.isArray(arr)) deletedWinnerIds = new Set(arr);
+    } catch (e) {}
+
     try {
       const saved = localStorage.getItem('apna_tambola_winners');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed.filter((w: GameWinner) => !deletedWinnerIds.has(w.id));
       }
     } catch (e) {}
-    return INITIAL_WINNERS;
+    return INITIAL_WINNERS.filter((w) => !deletedWinnerIds.has(w.id));
   });
 
   const [transactions, setTransactions] = useState<WalletTransaction[]>(() => {
@@ -591,6 +597,42 @@ export function App() {
           }
         },
         (err) => console.warn('Firestore tickets listener:', err)
+      );
+
+      // Real-time winners sync
+      const unsubscribeWinners = onSnapshot(
+        collection(db, 'winners'),
+        (snapshot) => {
+          let deletedWinnerIds = new Set<string>();
+          try {
+            const arr = JSON.parse(localStorage.getItem('apna_tambola_deleted_winner_ids') || '[]');
+            if (Array.isArray(arr)) deletedWinnerIds = new Set(arr);
+          } catch (e) {}
+
+          if (!snapshot.empty) {
+            const firestoreWinners: GameWinner[] = [];
+            snapshot.forEach((docSnap) => {
+              if (!deletedWinnerIds.has(docSnap.id)) {
+                firestoreWinners.push({ ...(docSnap.data() as GameWinner), id: docSnap.id });
+              }
+            });
+            setWinners((prev) => {
+              const map = new Map<string, GameWinner>();
+              prev.forEach((w) => {
+                if (!deletedWinnerIds.has(w.id)) map.set(w.id, w);
+              });
+              firestoreWinners.forEach((w) => {
+                if (!deletedWinnerIds.has(w.id)) map.set(w.id, w);
+              });
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem('apna_tambola_winners', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        },
+        (err) => console.warn('Firestore winners listener:', err)
       );
 
       // Real-time deposits sync
@@ -4610,6 +4652,106 @@ export function App() {
     }
   };
 
+  // 14f. Delete Single Winner Record (विजेता रिमूव करें)
+  const handleDeleteWinner = async (winnerId: string): Promise<boolean> => {
+    try {
+      if (!winnerId) return false;
+
+      // 1. Record in deleted winner IDs in localStorage
+      try {
+        const deletedArr: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_winner_ids') || '[]');
+        if (!deletedArr.includes(winnerId)) deletedArr.push(winnerId);
+        localStorage.setItem('apna_tambola_deleted_winner_ids', JSON.stringify(deletedArr));
+      } catch (e) {}
+
+      // 2. Remove from local state
+      setWinners((prev) => {
+        const next = prev.filter((w) => w.id !== winnerId);
+        try {
+          localStorage.setItem('apna_tambola_winners', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 3. Delete from Firestore
+      try {
+        await deleteDoc(doc(db, 'winners', winnerId));
+      } catch (e) {}
+
+      return true;
+    } catch (err) {
+      console.error('Error deleting winner:', err);
+      return false;
+    }
+  };
+
+  // 14g. Batch Delete Winners (चयनित विजेता रिमूव करें)
+  const handleBatchDeleteWinners = async (winnerIds: string[]): Promise<boolean> => {
+    try {
+      if (!Array.isArray(winnerIds) || winnerIds.length === 0) return false;
+      const idSet = new Set(winnerIds);
+
+      // 1. Record in deleted winner IDs
+      try {
+        const deletedArr: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_winner_ids') || '[]');
+        winnerIds.forEach((id) => {
+          if (!deletedArr.includes(id)) deletedArr.push(id);
+        });
+        localStorage.setItem('apna_tambola_deleted_winner_ids', JSON.stringify(deletedArr));
+      } catch (e) {}
+
+      // 2. Remove from state
+      setWinners((prev) => {
+        const next = prev.filter((w) => !idSet.has(w.id));
+        try {
+          localStorage.setItem('apna_tambola_winners', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 3. Delete from Firestore
+      for (const id of winnerIds) {
+        try {
+          deleteDoc(doc(db, 'winners', id)).catch(() => {});
+        } catch (e) {}
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error batch deleting winners:', err);
+      return false;
+    }
+  };
+
+  // 14h. Clear All Winners (सभी विजेता साफ़ करें)
+  const handleClearAllWinners = async (): Promise<boolean> => {
+    try {
+      const allIds = winners.map((w) => w.id);
+
+      try {
+        const deletedArr: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_winner_ids') || '[]');
+        allIds.forEach((id) => {
+          if (!deletedArr.includes(id)) deletedArr.push(id);
+        });
+        localStorage.setItem('apna_tambola_deleted_winner_ids', JSON.stringify(deletedArr));
+        localStorage.setItem('apna_tambola_winners', JSON.stringify([]));
+      } catch (e) {}
+
+      setWinners([]);
+
+      for (const id of allIds) {
+        try {
+          deleteDoc(doc(db, 'winners', id)).catch(() => {});
+        } catch (e) {}
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error clearing winners:', err);
+      return false;
+    }
+  };
+
   // 15. Admin Update User Wallet
   const handleUpdateWalletBalance = async (
     userId: string,
@@ -5263,6 +5405,10 @@ export function App() {
         {activeTab === 'winners' && (
           <WinnersView
             winners={winners}
+            tickets={tickets}
+            currentUser={currentUser}
+            onDeleteWinner={handleDeleteWinner}
+            onNavigate={handleNavigate}
           />
         )}
 
@@ -5381,6 +5527,10 @@ export function App() {
             stats={adminStats}
             games={games}
             users={users}
+            winners={winners}
+            onDeleteWinner={handleDeleteWinner}
+            onBatchDeleteWinners={handleBatchDeleteWinners}
+            onClearAllWinners={handleClearAllWinners}
             latestRegisteredUser={latestRegisteredUser}
             onClearLatestUser={() => setLatestRegisteredUser(null)}
             withdrawals={withdrawals}

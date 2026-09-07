@@ -6,6 +6,7 @@ import {
   Radio,
   Ticket,
   Trophy,
+  Award,
   Share2,
   Wallet,
   ArrowUpRight,
@@ -27,6 +28,7 @@ import {
   AdminStats,
   TambolaGame,
   User,
+  GameWinner,
   WithdrawalRequest,
   ReferralCommission,
   TambolaTicket,
@@ -60,11 +62,13 @@ import { ModuleEmailSettings } from './admin/ModuleEmailSettings';
 import { ModuleReferralAnalytics } from './admin/ModuleReferralAnalytics';
 import { ModuleOfferPopups } from './admin/ModuleOfferPopups';
 import { ModuleFranchise } from './admin/ModuleFranchise';
+import { ModuleWinners } from './admin/ModuleWinners';
 
 interface AdminDashboardViewProps {
   stats: AdminStats;
   games: TambolaGame[];
   users: User[];
+  winners?: GameWinner[];
   withdrawals: WithdrawalRequest[];
   deposits?: DepositRequest[];
   commissions: ReferralCommission[];
@@ -116,6 +120,9 @@ interface AdminDashboardViewProps {
   onClearLatestUser?: () => void;
   franchises?: Franchise[];
   franchiseTransfers?: FranchiseTransferRecord[];
+  onDeleteWinner?: (winnerId: string) => Promise<boolean> | void;
+  onBatchDeleteWinners?: (winnerIds: string[]) => Promise<boolean> | void;
+  onClearAllWinners?: () => Promise<boolean> | void;
   onApproveFranchise?: (
     franchiseId: string,
     allocatedFund: number,
@@ -145,6 +152,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   stats,
   games,
   users,
+  winners = [],
   withdrawals,
   deposits = [],
   commissions,
@@ -160,6 +168,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onSaveOffer,
   onDeleteOffer,
   onToggleOfferStatus,
+  onDeleteWinner,
+  onBatchDeleteWinners,
+  onClearAllWinners,
   activeModule,
   onModuleChange,
   onCallNext,
@@ -227,6 +238,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   const safeWithdrawals = Array.isArray(withdrawals) ? withdrawals : [];
   const safeDeposits = Array.isArray(deposits) ? deposits : [];
   const safeOffers = Array.isArray(offers) ? offers : [];
+  const safeWinners = Array.isArray(winners) ? winners : [];
 
   const pendingWithdrawalsCount = safeWithdrawals.filter((w) => w && w.status === 'pending').length;
   const pendingDepositsCount = safeDeposits.filter((d) => d && d.status === 'pending').length;
@@ -239,17 +251,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     { id: 'games', label: '3. Game Management', icon: Gamepad2, badge: liveGamesCount > 0 ? `${liveGamesCount} LIVE` : null, badgeColor: 'bg-red-500 text-white' },
     { id: 'live_control', label: '4. Live Game Control', icon: Radio, badge: 'RNG', badgeColor: 'bg-amber-400 text-slate-950' },
     { id: 'tickets', label: '5. Ticket Management', icon: Ticket, badge: `${safeTickets.length}` },
-    { id: 'prizes', label: '6. Prize Management', icon: Trophy, badge: null },
-    { id: 'referrals', label: '7. 5-Level Referral', icon: Share2, badge: 'MLM' },
-    { id: 'referral_growth', label: '8. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },
-    { id: 'wallets', label: '9. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
-    { id: 'withdrawals', label: '10. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
-    { id: 'offers', label: '11. Offer Popups', icon: Gift, badge: activeOffersCount > 0 ? `${activeOffersCount} ON` : 'NEW', badgeColor: 'bg-pink-500 text-white font-black' },
-    { id: 'reports', label: '12. Reports & Analytics', icon: BarChart3, badge: null },
-    { id: 'notifications', label: '13. Notifications', icon: Bell, badge: null },
-    { id: 'settings', label: '14. Site & Security', icon: Settings, badge: null },
-    { id: 'email_settings', label: '15. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
-    { id: 'franchise', label: '16. Fund Franchise', icon: Building2, badge: 'ID & FUND', badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black' },
+    { id: 'winners', label: '6. Winners & Ticket Ledger', icon: Trophy, badge: `${safeWinners.length} WIN`, badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black' },
+    { id: 'prizes', label: '7. Prize Management', icon: Award, badge: null },
+    { id: 'referrals', label: '8. 5-Level Referral', icon: Share2, badge: 'MLM' },
+    { id: 'referral_growth', label: '9. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },
+    { id: 'wallets', label: '10. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
+    { id: 'withdrawals', label: '11. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
+    { id: 'offers', label: '12. Offer Popups', icon: Gift, badge: activeOffersCount > 0 ? `${activeOffersCount} ON` : 'NEW', badgeColor: 'bg-pink-500 text-white font-black' },
+    { id: 'reports', label: '13. Reports & Analytics', icon: BarChart3, badge: null },
+    { id: 'notifications', label: '14. Notifications', icon: Bell, badge: null },
+    { id: 'settings', label: '15. Site & Security', icon: Settings, badge: null },
+    { id: 'email_settings', label: '16. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
+    { id: 'franchise', label: '17. Fund Franchise', icon: Building2, badge: 'ID & FUND', badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black' },
   ];
 
   return (
@@ -469,6 +482,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onBatchDeleteTickets={onBatchDeleteTickets}
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
+          />
+        )}
+
+        {activeTab === 'winners' && (
+          <ModuleWinners
+            winners={winners}
+            tickets={tickets}
+            games={games}
+            users={users}
+            onDeleteWinner={onDeleteWinner}
+            onBatchDeleteWinners={onBatchDeleteWinners}
+            onClearAllWinners={onClearAllWinners}
           />
         )}
 
