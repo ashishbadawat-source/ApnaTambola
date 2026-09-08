@@ -41,6 +41,11 @@ import {
 
 interface LiveGameViewProps {
   game?: TambolaGame;
+  allGames?: TambolaGame[];
+  selectedGameId?: string;
+  onSelectGame?: (gameId: string) => void;
+  onStartGame?: (gameId: string) => Promise<void>;
+  onStopGame?: (gameId: string, markCompleted?: boolean) => Promise<void>;
   userTickets: TambolaTicket[];
   currentUser: User;
   soundEnabled: boolean;
@@ -60,6 +65,11 @@ interface LiveGameViewProps {
 
 export const LiveGameView: React.FC<LiveGameViewProps> = ({
   game,
+  allGames,
+  selectedGameId,
+  onSelectGame,
+  onStartGame,
+  onStopGame,
   userTickets,
   currentUser,
   soundEnabled,
@@ -171,6 +181,105 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
         onViewCelebration={(data) => setCelebrationData(data)}
         allClaimedPrizes={(game.prizes || []).filter((p) => Array.isArray(p.claimedWinners) && p.claimedWinners.length > 0)}
       />
+
+      {/* 🎮 Live Match Switcher & Strict Auto-Stop Banner */}
+      <div className="p-3.5 sm:p-4 rounded-3xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="text-xs text-slate-400 font-bold">🎮 वर्तमान सक्रिय मैच:</span>
+          <span className="text-sm font-black text-amber-300">{game.title}</span>
+          <span
+            className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+              game.status === 'live'
+                ? 'bg-red-500/20 text-red-300 border-red-500/50 animate-pulse'
+                : game.status === 'completed'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`}
+          >
+            {game.status === 'live' ? '🔴 ROOM LIVE' : game.status === 'completed' ? '🏁 FINISHED / STOPPED' : '⏰ SCHEDULED'}
+          </span>
+          {currentGameTickets.length > 0 && (
+            <span className="text-[11px] px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold">
+              🎟️ आपके {currentGameTickets.length} टिकट सक्रिय
+            </span>
+          )}
+        </div>
+
+        {/* Match selector dropdown */}
+        {allGames && allGames.length > 1 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">टिकट / मैच बदलें:</span>
+            <select
+              value={game.id}
+              onChange={(e) => onSelectGame && onSelectGame(e.target.value)}
+              className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400 cursor-pointer"
+            >
+              {allGames.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.title} ({(g.status || 'upcoming').toUpperCase()})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* 🛑 Auto-Stop / Finished Notice Banner */}
+      {game.status === 'completed' && (
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-red-950/70 via-slate-950 to-amber-950/70 border-2 border-amber-500/60 shadow-2xl space-y-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-400 flex items-center justify-center text-2xl shrink-0">
+              🛑
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  यह मैच समाप्त हो चुका है (Match Finished)
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/30 text-red-300 border border-red-500/50 font-bold uppercase tracking-wider">
+                  SYSTEM STOPPED
+                </span>
+              </div>
+              <p className="text-xs text-amber-200/90 leading-relaxed">
+                🔒 <strong>ऑटो-स्टॉप सक्रिय:</strong> दूसरा गेम अपने-आप शुरू नहीं होगा। जब तक एडमिन कोई अन्य गेम चुनकर चालू नहीं करता, तब तक लाइव रूम STOP रहेगा।
+              </p>
+            </div>
+          </div>
+
+          {isAdmin ? (
+            <div className="p-4 rounded-2xl bg-slate-900/95 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <span className="text-xs text-slate-200 font-bold">
+                👑 <strong>एडमिन कंट्रोल:</strong> नया गेम शुरू करने के लिए नीचे से कोई भी मैच चुनें:
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {allGames &&
+                  allGames
+                    .filter((g) => g.id !== game.id)
+                    .map((g) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => {
+                          if (onStartGame) onStartGame(g.id);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/30 cursor-pointer transition-transform hover:scale-105"
+                      >
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>{g.title} चालू करें</span>
+                      </button>
+                    ))}
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-slate-900/70 border border-slate-800 text-xs text-slate-300 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                अगला मैच एडमिन द्वारा शुरू किए जाने तक सिस्टम रुका रहेगा। कृपया प्रतीक्षा करें या अपने जीते हुए प्राइज़ देखें!
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live Header & Game Bar */}
       <div className="glass-panel rounded-3xl p-4 sm:p-6 border border-purple-500/30 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">

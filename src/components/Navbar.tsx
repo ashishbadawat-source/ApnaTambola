@@ -101,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   // Unify active tab resolution
   const currentActiveTab = activeTab || currentTab || 'home';
-  const inAdminMode = isAdminView !== undefined ? isAdminView : currentActiveTab === 'admin';
+  const inAdminMode = isAdminView !== undefined ? isAdminView : (currentUser?.role === 'admin' || currentActiveTab === 'admin');
 
   const handleTabChange = (tabId: string) => {
     // If not logged in and user tries to access protected features, open login modal
@@ -118,8 +118,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     } else if (setCurrentTab) {
       setCurrentTab(tabId);
     }
-    if (setIsAdminView) {
-      setIsAdminView(tabId === 'admin');
+    if (tabId === 'admin' && setIsAdminView) {
+      setIsAdminView(true);
+      try {
+        localStorage.setItem('apna_tambola_admin_view_active', 'true');
+      } catch (e) {}
     }
     setUserDropdownOpen(false);
     setMobileMenuOpen(false);
@@ -127,6 +130,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleAdminToggle = (toAdmin: boolean) => {
     if (toAdmin) {
+      if (setIsAdminView) {
+        setIsAdminView(true);
+      }
+      try {
+        localStorage.setItem('apna_tambola_admin_view_active', 'true');
+      } catch (e) {}
       if (!currentUser || currentUser.role !== 'admin') {
         if (currentUser?.email === 'ashishbadawat@gmail.com') {
           // Direct Master Admin
@@ -143,13 +152,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         if (onNavigate) onNavigate('admin');
         else if (setCurrentTab) setCurrentTab('admin');
       }
-      if (setIsAdminView) {
-        setIsAdminView(true);
-      }
     } else {
       if (setIsAdminView) {
         setIsAdminView(false);
       }
+      try {
+        localStorage.setItem('apna_tambola_admin_view_active', 'false');
+      } catch (e) {}
       if (onNavigate) {
         onNavigate('home');
       } else if (setCurrentTab) {
@@ -623,17 +632,21 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-1.5 sm:gap-2">
           {/* Active Mode Label Tag */}
           <div className="flex items-center gap-1 sm:gap-1.5 pr-1.5 sm:pr-2 border-r border-slate-800 shrink-0">
-            <span
-              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 ${
+            <button
+              type="button"
+              onClick={() => handleAdminToggle(!inAdminMode)}
+              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer ${
                 inAdminMode
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/40'
-                  : 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                  ? 'bg-red-500/25 text-red-300 border border-red-500/50 hover:bg-red-500/35'
+                  : 'bg-amber-400/20 text-amber-300 border border-amber-400/40 hover:bg-amber-400/30'
               }`}
+              title={inAdminMode ? 'यूज़र पैनल देखें (Switch to User Panel)' : 'एडमिन पैनल खोलें (Open Admin Panel)'}
             >
-              {inAdminMode ? <ShieldCheck className="w-3 h-3" /> : <Layers className="w-3 h-3" />}
+              {inAdminMode ? <ShieldCheck className="w-3 h-3 text-red-400" /> : <Layers className="w-3 h-3 text-amber-400" />}
               <span className="hidden sm:inline">{inAdminMode ? 'ADMIN PANEL' : currentUser ? 'USER PANEL' : 'VISITOR'}</span>
               <span className="sm:hidden">{inAdminMode ? 'ADMIN' : 'USER'}</span>
-            </span>
+              <span className="text-[9px] opacity-70 ml-0.5">⇄</span>
+            </button>
           </div>
 
           {/* Left Scroll Arrow */}

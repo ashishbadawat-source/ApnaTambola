@@ -23,6 +23,10 @@ import { playNumberCallSound, speakNumberCall } from '../../utils/audio';
 interface ModuleLiveControlProps {
   games: TambolaGame[];
   tickets: TambolaTicket[];
+  selectedGameId?: string;
+  onSelectGame?: (gameId: string) => void;
+  onStartGame?: (gameId: string) => Promise<void>;
+  onStopGame?: (gameId: string, markCompleted?: boolean) => Promise<void>;
   onCallNext: (number?: number, gameId?: string) => void;
   onToggleAuto: (gameId?: string) => void;
   onResetGame: (gameId?: string) => void;
@@ -32,6 +36,10 @@ interface ModuleLiveControlProps {
 export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   games = [],
   tickets = [],
+  selectedGameId: propSelectedGameId,
+  onSelectGame,
+  onStartGame,
+  onStopGame,
   onCallNext,
   onToggleAuto,
   onResetGame,
@@ -40,9 +48,16 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   const safeGames = Array.isArray(games) ? games.filter(Boolean) : [];
   const safeTickets = Array.isArray(tickets) ? tickets.filter(Boolean) : [];
 
-  const [selectedGameId, setSelectedGameId] = useState<string>(
-    safeGames.find((g) => g.status === 'live')?.id || safeGames[0]?.id || ''
+  const [internalSelectedId, setInternalSelectedId] = useState<string>(
+    propSelectedGameId || safeGames.find((g) => g.status === 'live')?.id || safeGames[0]?.id || ''
   );
+  const selectedGameId = propSelectedGameId || internalSelectedId;
+
+  const handleSelectGame = (id: string) => {
+    setInternalSelectedId(id);
+    if (onSelectGame) onSelectGame(id);
+  };
+
   const [manualNumberInput, setManualNumberInput] = useState('');
   const [soundVoice, setSoundVoice] = useState(true);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
@@ -62,7 +77,7 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   const isBookingOpen = currentGame?.bookingOpen !== false && currentGame?.isBookingOpen !== false;
 
   const handleStartLiveGame = async () => {
-    if (!currentGame || !onUpdateGame) return;
+    if (!currentGame) return;
 
     if (soldTicketsCount < MIN_TICKETS_TO_START) {
       const proceed = confirm(
@@ -71,50 +86,66 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
       if (!proceed) return;
     }
 
-    await onUpdateGame(currentGame.id, {
-      status: 'live',
-      isActive: true,
-      isGameEnabled: true,
-      bookingOpen: false,
-      isBookingOpen: false,
-    });
-    setStatusNotice(`🟢 गेम "${currentGame.title || 'Tambola Match'}" सफलतापूर्वक लाइव (LIVE ON) चालू कर दिया गया है!`);
+    if (onStartGame) {
+      await onStartGame(currentGame.id);
+    } else if (onUpdateGame) {
+      await onUpdateGame(currentGame.id, {
+        status: 'live',
+        isActive: true,
+        isGameEnabled: true,
+        bookingOpen: false,
+        isBookingOpen: false,
+      });
+    }
+    setStatusNotice(`🟢 गेम "${currentGame.title || 'Tambola Match'}" लाइव चालू कर दिया गया है! बाकी सभी गेम स्वतः STOP रहेंगे।`);
     setTimeout(() => setStatusNotice(null), 4000);
   };
 
   const handleStopLiveGame = async () => {
-    if (!currentGame || !onUpdateGame) return;
-    if (confirm(`क्या आप गेम "${currentGame.title || 'Tambola Match'}" का लाइव मोड बंद (LIVE OFF) करना चाहते हैं?`)) {
-      await onUpdateGame(currentGame.id, {
-        status: 'upcoming',
-        isActive: false,
-        isGameEnabled: false,
-        autoCalling: false,
-      });
-      setStatusNotice(`🔴 गेम "${currentGame.title || 'Tambola Match'}" का लाइव मोड बंद (LIVE OFF) कर दिया गया है!`);
+    if (!currentGame) return;
+    if (confirm(`क्या आप गेम "${currentGame.title || 'Tambola Match'}" का लाइव मोड बंद (LIVE OFF/STOP) करना चाहते हैं?`)) {
+      if (onStopGame) {
+        await onStopGame(currentGame.id, false);
+      } else if (onUpdateGame) {
+        await onUpdateGame(currentGame.id, {
+          status: 'upcoming',
+          isActive: false,
+          isGameEnabled: false,
+          autoCalling: false,
+        });
+      }
+      setStatusNotice(`🔴 गेम "${currentGame.title || 'Tambola Match'}" का लाइव मोड बंद (STOPPED) कर दिया गया है!`);
       setTimeout(() => setStatusNotice(null), 4000);
     }
   };
 
   const handlePauseGame = async () => {
-    if (!currentGame || !onUpdateGame) return;
-    await onUpdateGame(currentGame.id, {
-      status: 'upcoming',
-      autoCalling: false,
-    });
-    setStatusNotice(`⏸️ गेम "${currentGame.title || 'Tambola Match'}" को रोक दिया गया है (PAUSED).`);
+    if (!currentGame) return;
+    if (onStopGame) {
+      await onStopGame(currentGame.id, false);
+    } else if (onUpdateGame) {
+      await onUpdateGame(currentGame.id, {
+        status: 'upcoming',
+        autoCalling: false,
+      });
+    }
+    setStatusNotice(`⏸️ गेम "${currentGame.title || 'Tambola Match'}" को रोक दिया गया है (PAUSED / STOPPED).`);
     setTimeout(() => setStatusNotice(null), 4000);
   };
 
   const handleFinishGame = async () => {
-    if (!currentGame || !onUpdateGame) return;
-    if (confirm(`क्या आप गेम "${currentGame.title || 'Tambola Match'}" को समाप्त (COMPLETED) घोषित करना चाहते हैं?`)) {
-      await onUpdateGame(currentGame.id, {
-        status: 'completed',
-        autoCalling: false,
-      });
-      setStatusNotice(`🏁 गेम "${currentGame.title || 'Tambola Match'}" समाप्त (COMPLETED) हो गया है! यूज़र अब पुराने टिकट डिलीट कर सकते हैं।`);
-      setTimeout(() => setStatusNotice(null), 4000);
+    if (!currentGame) return;
+    if (confirm(`क्या आप गेम "${currentGame.title || 'Tambola Match'}" को समाप्त (COMPLETED) घोषित करना चाहते हैं?\n\nइसके बाद कोई अन्य गेम अपने-आप शुरू नहीं होगा। जब तक आप नया गेम लाइव नहीं करते, लाइव रूम STOP रहेगा।`)) {
+      if (onStopGame) {
+        await onStopGame(currentGame.id, true);
+      } else if (onUpdateGame) {
+        await onUpdateGame(currentGame.id, {
+          status: 'completed',
+          autoCalling: false,
+        });
+      }
+      setStatusNotice(`🏁 गेम "${currentGame.title || 'Tambola Match'}" समाप्त (COMPLETED) हो गया है! लाइव रूम STOP मोड में रहेगा जब तक आप अगला गेम शुरू नहीं करते।`);
+      setTimeout(() => setStatusNotice(null), 5000);
     }
   };
 
@@ -212,7 +243,7 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <select
             value={selectedGameId}
-            onChange={(e) => setSelectedGameId(e.target.value)}
+            onChange={(e) => handleSelectGame(e.target.value)}
             className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400 cursor-pointer"
           >
             {safeGames.map((g) => (
@@ -232,17 +263,17 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
                 ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 border-emerald-400/50 shadow-emerald-500/30'
                 : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400/50 shadow-amber-500/30'
             }`}
-            title={isLive ? 'गेम को लाइव बंद करें (Turn LIVE OFF)' : 'गेम को लाइव चालू करें (Turn LIVE ON)'}
+            title={isLive ? 'गेम को लाइव बंद करें (Turn LIVE OFF / STOP)' : 'गेम को लाइव चालू करें (Turn LIVE ON)'}
           >
             {isLive ? (
               <>
                 <Pause className="w-3.5 h-3.5 text-red-400" />
-                <span>🔴 LIVE OFF (बंद)</span>
+                <span>🔴 STOP GAME (गेम रोकें)</span>
               </>
             ) : (
               <>
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>🟢 LIVE ON (चालू)</span>
+                <span>🟢 START LIVE (गेम शुरू करें)</span>
               </>
             )}
           </button>
@@ -338,6 +369,105 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
               style={{ width: `${Math.min(100, (soldTicketsCount / MIN_TICKETS_TO_START) * 100)}%` }}
             />
           </div>
+        </div>
+      </div>
+
+      {/* 🎮 एडमिन गेम चयन व स्टॉप कंट्रोल बोर्ड (Manual Game Selection & Auto-Stop Banner) */}
+      <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-black text-amber-300 flex items-center gap-2">
+              <span>🎯 एडमिन मैच नियंत्रण बोर्ड (Manual Match Orchestrator)</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 font-bold">
+                Auto-Stop Active
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              जिस गेम को आप चुनेंगे वही गेम लाइव चलेगा। गेम खत्म होने पर दूसरा गेम खुद शुरू नहीं होगा, सिस्टम तब तक STOP रहेगा जब तक आप नया गेम शुरू नहीं करते।
+            </p>
+          </div>
+        </div>
+
+        {/* Match selector pills/cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+          {safeGames.map((g) => {
+            const isThisSelected = g.id === currentGame?.id;
+            const isThisLive = g.status === 'live';
+            const isThisCompleted = g.status === 'completed';
+            const ticketsCount = safeTickets.filter((t) => t.gameId === g.id).length || g.soldTickets || g.totalTicketsSold || 0;
+
+            return (
+              <div
+                key={g.id}
+                onClick={() => handleSelectGame(g.id)}
+                className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                  isThisSelected
+                    ? 'bg-amber-500/10 border-amber-400/80 shadow-md shadow-amber-950/40 ring-1 ring-amber-400/50'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-black text-white line-clamp-1">{g.title}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">{g.gameCode}</span>
+                  </div>
+                  <span
+                    className={`text-[9px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
+                      isThisLive
+                        ? 'bg-red-500/20 text-red-300 border-red-500/50 animate-pulse'
+                        : isThisCompleted
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-slate-800 text-slate-300 border-slate-700'
+                    }`}
+                  >
+                    {isThisLive ? '🔴 LIVE' : isThisCompleted ? '🏁 COMPLETED' : '⏰ SCHEDULED'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
+                  <span>🎟️ {ticketsCount} टिकट</span>
+                  <span>🎱 {Array.isArray(g.calledNumbers) ? g.calledNumbers.length : 0}/90 बॉल्स</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 pt-1">
+                  {!isThisLive ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectGame(g.id);
+                        if (onStartGame) {
+                          onStartGame(g.id);
+                        } else if (onUpdateGame) {
+                          onUpdateGame(g.id, { status: 'live', isActive: true, autoCalling: false, bookingOpen: false });
+                        }
+                      }}
+                      className="w-full py-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-black flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Play className="w-3 h-3 fill-current" />
+                      <span>लाइव चालू करें</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onStopGame) {
+                          onStopGame(g.id, false);
+                        } else if (onUpdateGame) {
+                          onUpdateGame(g.id, { status: 'upcoming', autoCalling: false });
+                        }
+                      }}
+                      className="w-full py-1.5 px-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-[11px] font-black flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                    >
+                      <Pause className="w-3 h-3" />
+                      <span>STOP गेम</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

@@ -82,7 +82,13 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, query,
 export function App() {
   // Navigation State
   const [activeTab, setActiveTab] = useState<string>('home');
-  const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
+  const [selectedGameId, setSelectedGameId] = useState<string | undefined>(() => {
+    try {
+      const saved = localStorage.getItem('apna_tambola_selected_game_id');
+      if (saved) return saved;
+    } catch {}
+    return undefined;
+  });
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
@@ -245,6 +251,44 @@ export function App() {
   const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>(INITIAL_USER_NOTIFICATIONS);
   const [showNotificationsDrawer, setShowNotificationsDrawer] = useState<boolean>(false);
 
+  // Persistent Admin View State (Cross-browser, tab-synchronized, and stable)
+  const [isAdminView, setIsAdminView] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('apna_tambola_admin_view_active');
+      if (saved === 'true') return true;
+      if (saved === 'false') return false;
+      const savedUser = localStorage.getItem('apna_tambola_auth_user');
+      if (savedUser) {
+        try {
+          const u = JSON.parse(savedUser);
+          if (u && (u.role === 'admin' || u.email === 'ashishbadawat@gmail.com')) return true;
+        } catch (e) {}
+      }
+    }
+    return false;
+  });
+
+  const handleSetIsAdminView = (val: boolean) => {
+    setIsAdminView(val);
+    try {
+      localStorage.setItem('apna_tambola_admin_view_active', String(val));
+    } catch (e) {}
+  };
+
+  // Instant Direct Referral Live Celebration Popup State
+  const [directReferralCelebration, setDirectReferralCelebration] = useState<User | null>(null);
+
+  // Synchronous references to avoid closure staleness in SSE and interval loops
+  const currentUserRef = useRef<User | null>(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  const commissionsRef = useRef<ReferralCommission[]>(commissions);
+  useEffect(() => {
+    commissionsRef.current = commissions;
+  }, [commissions]);
+
   // Real-Time Registration Radar State for Instant Admin Discovery
   const [latestRegisteredUser, setLatestRegisteredUser] = useState<User | null>(null);
   const knownUserIdsRef = useRef<Set<string>>(
@@ -279,6 +323,44 @@ export function App() {
       const nu = newestDiscovered as User;
       setLatestRegisteredUser(nu);
       playUserRegisteredSound();
+
+      // Check if this newly discovered user is a direct referral of the active user
+      const activeUser = currentUserRef.current;
+      const activeComms = commissionsRef.current;
+      if (activeUser && isDirectChildOf(nu, activeUser, activeComms)) {
+        setDirectReferralCelebration(nu);
+        playWinningFanfare();
+
+        // Add to User Notifications
+        setUserNotifications((prev) => [
+          {
+            id: `notif_ref_${Date.now()}_${nu.id}`,
+            category: 'referral_commission',
+            title: '🎉 नया डायरेक्ट रेफरल तुरंत जुड़ा!',
+            message: `${nu.name} (${nu.phone || 'New Player'}) ने आपके रेफरल लिंक से अभी रजिस्टर किया है। आपका ₹10 बोनस क्रेडिट हो गया है!`,
+            timestamp: 'Just now',
+            read: false,
+            amount: 10,
+            actionTab: 'referral',
+          },
+          ...prev,
+        ]);
+
+        // Immediately update user's wallet balances and referral counts
+        setCurrentUser((prev) => {
+          if (!prev) return null;
+          const updated: User = {
+            ...prev,
+            referralCount: (prev.referralCount || 0) + 1,
+            referralBalance: (prev.referralBalance || 0) + 10,
+            walletBalance: (prev.walletBalance || 0) + 10,
+          };
+          try {
+            localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+          } catch (e) {}
+          return updated;
+        });
+      }
 
       // Automatically add to Activity Log for Admin
       setActivityLogs((prev) => [
@@ -945,6 +1027,8 @@ export function App() {
             setCurrentUser(parsed);
           }
         } catch (err) {}
+      } else if (e.key === 'apna_tambola_admin_view_active' && e.newValue !== null) {
+        setIsAdminView(e.newValue === 'true');
       } else if (e.key === 'apna_tambola_tickets' && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
@@ -1003,9 +1087,15 @@ export function App() {
                 return false;
               });
               if (remote) {
+                const isMasterAdmin =
+                  prev.role === 'admin' ||
+                  prev.email === 'ashishbadawat@gmail.com' ||
+                  prev.id === 'admin_master_1' ||
+                  prev.email?.includes('admin');
                 const updated = {
                   ...prev,
                   ...remote,
+                  role: isMasterAdmin ? 'admin' : (remote.role || prev.role || 'user'),
                   // Ensure balances never drop unexpectedly
                   depositBalance: Math.max(prev.depositBalance || 0, remote.depositBalance || 0),
                   winningBalance: Math.max(prev.winningBalance || 0, remote.winningBalance || 0),
@@ -1723,7 +1813,38 @@ export function App() {
   const autoCallTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastProcessedTurnRef = useRef<string>('');
 
-  const rawLiveGame = (games || []).find((g) => g && g.id === selectedGameId) || (games || []).find((g) => g && g.status === 'live') || (games || [])[0];
+  const rawLiveGame = React.useMemo(() => {
+    const safeGamesList = Array.isArray(games) ? games.filter(Boolean) : [];
+    if (safeGamesList.length === 0) return undefined;
+
+    // 1. If explicit selectedGameId is set, always prioritize the user's selected ticket's game
+    if (selectedGameId) {
+      const matched = safeGamesList.find((g) => g && g.id === selectedGameId);
+      if (matched) return matched;
+    }
+
+    // 2. If admin has designated an active live game in siteSettings
+    if (siteSettings?.activeLiveGameId) {
+      const matchedAdmin = safeGamesList.find((g) => g && g.id === siteSettings.activeLiveGameId);
+      if (matchedAdmin) return matchedAdmin;
+    }
+
+    // 3. Look for a currently live game
+    const liveMatch = safeGamesList.find((g) => g && g.status === 'live');
+    if (liveMatch) return liveMatch;
+
+    // 4. If current user has purchased a ticket, prioritize their ticket's match
+    if (currentUser) {
+      const myTicket = (tickets || []).find((t) => t && t.userId === currentUser.id && t.gameId);
+      if (myTicket?.gameId) {
+        const userGame = safeGamesList.find((g) => g && g.id === myTicket.gameId);
+        if (userGame) return userGame;
+      }
+    }
+
+    // 5. Fallback: first game
+    return safeGamesList[0];
+  }, [games, selectedGameId, siteSettings?.activeLiveGameId, currentUser?.id, tickets]);
   const liveGame = React.useMemo(() => {
     if (!rawLiveGame) return undefined;
     return {
@@ -2224,6 +2345,17 @@ export function App() {
     });
 
     if (trackingResult.newWins.length > 0) {
+      // Check if Full House is claimed or all prizes are won
+      const isFullHouseClaimed = trackingResult.updatedPrizes.some(
+        (p) => (p.code === 'full_house' || p.code === 'second_full_house') &&
+               Array.isArray(p.claimedWinners) &&
+               p.claimedWinners.length >= (p.maxWinners || 1)
+      );
+      const areAllPrizesClaimed = trackingResult.updatedPrizes.length > 0 && trackingResult.updatedPrizes.every(
+        (p) => Array.isArray(p.claimedWinners) && p.claimedWinners.length >= (p.maxWinners || 1)
+      );
+      const isGameOver = isFullHouseClaimed || areAllPrizesClaimed;
+
       // Update Game Prizes in state
       setGames((prevGames) =>
         prevGames.map((g) => {
@@ -2231,9 +2363,32 @@ export function App() {
           return {
             ...g,
             prizes: trackingResult.updatedPrizes,
+            status: isGameOver ? 'completed' : g.status,
+            autoCalling: isGameOver ? false : g.autoCalling,
           };
         })
       );
+
+      // If match is over, stop auto-calling interval and keep in stopped state
+      if (isGameOver) {
+        if (autoCallTimerRef.current) {
+          clearInterval(autoCallTimerRef.current);
+          autoCallTimerRef.current = null;
+        }
+        setSiteSettings((prev) => ({
+          ...prev,
+          isLiveStopped: true,
+        }));
+        try {
+          setDoc(doc(db, 'games', liveGame.id), {
+            status: 'completed',
+            autoCalling: false,
+            prizes: trackingResult.updatedPrizes,
+            updatedAt: new Date().toISOString(),
+          }, { merge: true }).catch(() => {});
+          setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+        } catch {}
+      }
 
       // Process each win
       trackingResult.newWins.forEach((win) => {
@@ -2402,7 +2557,16 @@ export function App() {
 
     const calledList = Array.isArray(targetGame.calledNumbers) ? targetGame.calledNumbers : [];
     if (calledList.length >= 90) {
+      if (autoCallTimerRef.current) {
+        clearInterval(autoCallTimerRef.current);
+        autoCallTimerRef.current = null;
+      }
       setGames((prev) => prev.map((g) => (g.id === activeTargetId ? { ...g, autoCalling: false, status: 'completed' } : g)));
+      setSiteSettings((prev) => ({ ...prev, isLiveStopped: true }));
+      try {
+        setDoc(doc(db, 'games', activeTargetId), { autoCalling: false, status: 'completed' }, { merge: true }).catch(() => {});
+        setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+      } catch {}
       return;
     }
 
@@ -2412,7 +2576,16 @@ export function App() {
     } else {
       const available = Array.from({ length: 90 }, (_, i) => i + 1).filter((n) => !calledList.includes(n));
       if (available.length === 0) {
+        if (autoCallTimerRef.current) {
+          clearInterval(autoCallTimerRef.current);
+          autoCallTimerRef.current = null;
+        }
         setGames((prev) => prev.map((g) => (g.id === activeTargetId ? { ...g, autoCalling: false, status: 'completed' } : g)));
+        setSiteSettings((prev) => ({ ...prev, isLiveStopped: true }));
+        try {
+          setDoc(doc(db, 'games', activeTargetId), { autoCalling: false, status: 'completed' }, { merge: true }).catch(() => {});
+          setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+        } catch {}
         return;
       }
       nextNum = available[Math.floor(Math.random() * available.length)];
@@ -3247,11 +3420,14 @@ export function App() {
     setTransactions((prev) => [winTxn, ...prev]);
 
     // Update prize claim state in game
+    const isFullHouseCompleted = prizeCode === 'full_house' || prizeCode === 'second_full_house';
     setGames((prev) =>
       prev.map((g) => {
         if (g.id !== liveGame.id) return g;
         return {
           ...g,
+          status: isFullHouseCompleted ? 'completed' : g.status,
+          autoCalling: isFullHouseCompleted ? false : g.autoCalling,
           prizes: g.prizes.map((p) =>
             p.code === prizeCode
               ? {
@@ -3273,6 +3449,18 @@ export function App() {
         };
       })
     );
+
+    if (isFullHouseCompleted) {
+      if (autoCallTimerRef.current) {
+        clearInterval(autoCallTimerRef.current);
+        autoCallTimerRef.current = null;
+      }
+      setSiteSettings((prev) => ({ ...prev, isLiveStopped: true }));
+      try {
+        setDoc(doc(db, 'games', liveGame.id), { status: 'completed', autoCalling: false }, { merge: true }).catch(() => {});
+        setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+      } catch {}
+    }
 
     // Trigger fireworks, fanfare, and live ticket flash
     setCelebrationData({
@@ -4284,6 +4472,127 @@ export function App() {
     return true;
   };
 
+  // Live Match Select & Admin Start/Stop Handlers
+  const handleSelectGame = (gameId: string) => {
+    setSelectedGameId(gameId);
+    try {
+      localStorage.setItem('apna_tambola_selected_game_id', gameId);
+    } catch {}
+  };
+
+  const handleAdminStartGame = async (gameId: string): Promise<void> => {
+    // 1. Set chosen game to live, mark all other live games as completed/stopped
+    setGames((prev) => {
+      const next = prev.map((g) => {
+        if (g.id === gameId) {
+          return {
+            ...g,
+            status: 'live' as const,
+            isActive: true,
+            isGameEnabled: true,
+            bookingOpen: false,
+            isBookingOpen: false,
+          };
+        }
+        if (g.status === 'live') {
+          return {
+            ...g,
+            status: 'completed' as const,
+            autoCalling: false,
+          };
+        }
+        return g;
+      });
+      try {
+        localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    handleSelectGame(gameId);
+
+    // 2. Set siteSettings so every client synchronizes to this match
+    setSiteSettings((prev) => {
+      const next = {
+        ...prev,
+        activeLiveGameId: gameId,
+        isLiveStopped: false,
+      };
+      try {
+        localStorage.setItem('apna_tambola_site_settings', JSON.stringify(next));
+        setDoc(doc(db, 'system', 'site_settings'), { activeLiveGameId: gameId, isLiveStopped: false }, { merge: true }).catch(() => {});
+      } catch {}
+      return next;
+    });
+
+    // 3. Persist to Firestore
+    try {
+      setDoc(
+        doc(db, 'games', gameId),
+        {
+          status: 'live',
+          isActive: true,
+          isGameEnabled: true,
+          bookingOpen: false,
+          isBookingOpen: false,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      ).catch(() => {});
+
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'ADMIN_START_GAME', gameId });
+        bc.close();
+      }
+    } catch {}
+  };
+
+  const handleAdminStopGame = async (gameId: string, markCompleted: boolean = true): Promise<void> => {
+    const newStatus = markCompleted ? 'completed' : 'upcoming';
+    if (autoCallTimerRef.current) {
+      clearInterval(autoCallTimerRef.current);
+      autoCallTimerRef.current = null;
+    }
+
+    setGames((prev) => {
+      const next = prev.map((g) =>
+        g.id === gameId
+          ? {
+              ...g,
+              status: newStatus as any,
+              autoCalling: false,
+            }
+          : g
+      );
+      try {
+        localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setSiteSettings((prev) => {
+      const next = {
+        ...prev,
+        isLiveStopped: true,
+      };
+      try {
+        localStorage.setItem('apna_tambola_site_settings', JSON.stringify(next));
+        setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+      } catch {}
+      return next;
+    });
+
+    try {
+      setDoc(doc(db, 'games', gameId), { status: newStatus, autoCalling: false, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'ADMIN_STOP_GAME', gameId });
+        bc.close();
+      }
+    } catch {}
+  };
+
   // 12. Admin Update Game (Rate, Prizes, Colors, Timings, Game ON/OFF, Booking ON/OFF)
   const handleUpdateGame = async (gameId: string, updates: Partial<TambolaGame>): Promise<boolean> => {
     // Synchronize aliases
@@ -4299,13 +4608,48 @@ export function App() {
       normalizedUpdates.isBookingOpen = updates.bookingOpen;
     }
 
-    setGames((prev) => {
-      const next = prev.map((g) => (g.id === gameId ? { ...g, ...normalizedUpdates } : g));
-      try {
-        localStorage.setItem('apna_tambola_games', JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
+    if (normalizedUpdates.status === 'live') {
+      // If setting this game live, ensure all other games are stopped/completed
+      setGames((prev) => {
+        const next = prev.map((g) => {
+          if (g.id === gameId) return { ...g, ...normalizedUpdates };
+          if (g.status === 'live') return { ...g, status: 'completed' as const, autoCalling: false };
+          return g;
+        });
+        try {
+          localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+      handleSelectGame(gameId);
+      setSiteSettings((prev) => {
+        const next = { ...prev, activeLiveGameId: gameId, isLiveStopped: false };
+        try {
+          localStorage.setItem('apna_tambola_site_settings', JSON.stringify(next));
+          setDoc(doc(db, 'system', 'site_settings'), { activeLiveGameId: gameId, isLiveStopped: false }, { merge: true }).catch(() => {});
+        } catch {}
+        return next;
+      });
+    } else {
+      if (normalizedUpdates.status === 'completed') {
+        normalizedUpdates.autoCalling = false;
+        setSiteSettings((prev) => {
+          const next = { ...prev, isLiveStopped: true };
+          try {
+            localStorage.setItem('apna_tambola_site_settings', JSON.stringify(next));
+            setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+          } catch {}
+          return next;
+        });
+      }
+      setGames((prev) => {
+        const next = prev.map((g) => (g.id === gameId ? { ...g, ...normalizedUpdates } : g));
+        try {
+          localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+    }
 
     try {
       const gameRef = doc(db, 'games', gameId);
@@ -5365,6 +5709,8 @@ export function App() {
         currentUser={currentUser}
         activeTab={activeTab}
         onNavigate={handleNavigate}
+        isAdminView={isAdminView || currentUser?.role === 'admin'}
+        setIsAdminView={handleSetIsAdminView}
         soundEnabled={soundEnabled}
         setSoundEnabled={setSoundEnabled}
         onOpenDeposit={() => handleNavigate('wallet')}
@@ -5383,6 +5729,45 @@ export function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
       />
+
+      {/* ⚡ Instant Direct Referral Celebration Toast */}
+      {directReferralCelebration && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] animate-in fade-in slide-in-from-top-6 duration-300">
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-950 via-slate-950 to-emerald-950 border-2 border-emerald-400 text-white shadow-[0_0_30px_rgba(16,185,129,0.5)] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-2xl shrink-0">
+                🎉
+              </div>
+              <div>
+                <div className="font-black text-sm text-emerald-300 flex items-center gap-1.5">
+                  <span>नया डायरेक्ट रेफरल तुरंत जुड़ गया!</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 text-[10px] font-black">+₹10</span>
+                </div>
+                <div className="text-xs text-slate-300 mt-0.5">
+                  <strong>{directReferralCelebration.name}</strong> ({directReferralCelebration.phone || 'New User'}) आपके रेफरल से लाइव जुड़ गए हैं!
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => {
+                  setDirectReferralCelebration(null);
+                  handleNavigate('referral');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs cursor-pointer shadow transition-all"
+              >
+                देखें
+              </button>
+              <button
+                onClick={() => setDirectReferralCelebration(null)}
+                className="px-2 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs cursor-pointer transition-all"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Multi-Device Sync Toast Notification */}
       {syncFeedback && (
@@ -5442,6 +5827,11 @@ export function App() {
         {activeTab === 'live' && (
           <LiveGameView
             game={liveGame}
+            allGames={games}
+            selectedGameId={selectedGameId}
+            onSelectGame={handleSelectGame}
+            onStartGame={handleAdminStartGame}
+            onStopGame={handleAdminStopGame}
             userTickets={currentUser ? (currentUser.role === 'admin' ? tickets : tickets.filter((t) => t.userId === currentUser.id || !t.userId)) : tickets}
             currentUser={currentUser || INITIAL_USERS[0]}
             soundEnabled={soundEnabled}
@@ -5653,6 +6043,10 @@ export function App() {
             onCallNext={handleCallNextNumber}
             onToggleAuto={handleToggleAutoCaller}
             onResetGame={handleResetGame}
+            selectedGameId={selectedGameId}
+            onSelectGame={handleSelectGame}
+            onStartGame={handleAdminStartGame}
+            onStopGame={handleAdminStopGame}
             onCreateGame={handleCreateGame}
             onUpdateGame={handleUpdateGame}
             onDeleteGame={handleDeleteGame}

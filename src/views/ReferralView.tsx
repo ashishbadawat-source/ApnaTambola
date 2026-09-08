@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Users,
   Copy,
@@ -57,6 +57,48 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
   const [testMemberPhone, setTestMemberPhone] = useState(`98${Math.floor(10000000 + Math.random() * 90000000)}`);
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulationSuccess, setSimulationSuccess] = useState<string | null>(null);
+  const [serverDirectReferrals, setServerDirectReferrals] = useState<User[]>([]);
+  const [newlyJoinedAlert, setNewlyJoinedAlert] = useState<User | null>(null);
+  const knownDirectIdsRef = useRef<Set<string>>(new Set());
+
+  // ⚡ Live Server Database Query for Instant Direct Referrals (Zero-lag real-time visibility)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let isMounted = true;
+    const fetchDirectReferrals = async () => {
+      try {
+        const queryParam = currentUser.id || currentUser.referralCode;
+        const res = await fetch(`/api/referrals/direct?userId=${encodeURIComponent(queryParam)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.directReferrals) && isMounted) {
+            setServerDirectReferrals(data.directReferrals);
+
+            // Detect any new direct referral registered in real-time
+            data.directReferrals.forEach((u: User) => {
+              if (u && u.id && !knownDirectIdsRef.current.has(u.id)) {
+                const isInitialLoad = knownDirectIdsRef.current.size === 0;
+                knownDirectIdsRef.current.add(u.id);
+                if (!isInitialLoad) {
+                  setNewlyJoinedAlert(u);
+                }
+              }
+            });
+          }
+        }
+      } catch (err) {}
+    };
+
+    fetchDirectReferrals();
+    // Continuous 1-second auto-poll for real-time visibility across all devices
+    const interval = setInterval(fetchDirectReferrals, 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentUser?.id, currentUser?.referralCode]);
 
   // Upline sponsor lookup
   const uplineUser = currentUser ? (
@@ -207,6 +249,8 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
     } catch (err) {}
 
     setIsSimulating(false);
+    // Instant local state reflection with 0ms delay
+    setServerDirectReferrals((prev) => [newMember, ...prev]);
     setSimulationSuccess(`✓ ${newMember.name} (+91 ${cleanPhone}) सफलतापूर्वक आपके डायरेक्ट रेफरल (Level 1) में जुड़ गए हैं!`);
     setShowTestReferralModal(false);
     if (onForceRefresh) {
@@ -256,11 +300,25 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
     return Array.from(map.values());
   }, [currentUser, allUsers, referralMembers, commissions]);
 
-  // Direct Level 1 Referrals computed live from allUsers
+  // Direct Level 1 Referrals computed live from allUsers AND server authoritative sync
   const directReferralsList = useMemo(() => {
-    if (!currentUser || !allUsers || allUsers.length === 0) return [];
-    return allUsers
-      .filter((u) => u.id !== currentUser.id && isDirectChildOf(u, currentUser, commissions))
+    if (!currentUser) return [];
+    const map = new Map<string, User>();
+
+    // 1. All matched from current allUsers state
+    (allUsers || [])
+      .filter((u) => u && u.id && u.id !== currentUser.id && isDirectChildOf(u, currentUser, commissions))
+      .forEach((u) => map.set(u.id, u));
+
+    // 2. Server database-authoritative direct referrals
+    serverDirectReferrals.forEach((u) => {
+      if (u && u.id && u.id !== currentUser.id) {
+        const existing = map.get(u.id);
+        map.set(u.id, { ...(existing || {}), ...u });
+      }
+    });
+
+    return Array.from(map.values())
       .map((u) => {
         const memberMeta = referralMembers?.find((m) => m.id === u.id);
         const earned = commissions
@@ -277,14 +335,14 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
         const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return timeB - timeA;
       });
-  }, [currentUser, allUsers, commissions, referralMembers]);
+  }, [currentUser, allUsers, serverDirectReferrals, commissions, referralMembers]);
 
   const totalEarnings = commissions
     .filter((c) => (c.userId === currentUser?.id || !c.userId) && c.status === 'approved')
     .reduce((acc, c) => acc + c.commissionAmount, 0);
 
-  const directMembersCount = activeReferralMembers.filter((m) => m.level === 1).length;
-  const teamMembersCount = activeReferralMembers.length;
+  const directMembersCount = Math.max(directReferralsList.length, activeReferralMembers.filter((m) => m.level === 1).length);
+  const teamMembersCount = Math.max(directMembersCount, activeReferralMembers.length);
 
   const levelStats = [
     { level: 1, percent: '2.0%', name: 'Direct Referral Income (L1)', desc: 'Earned on every direct member ticket purchase', color: 'from-amber-500/20 border-amber-400/50 text-amber-300' },
@@ -304,6 +362,32 @@ export const ReferralView: React.FC<ReferralViewProps> = ({
 
   return (
     <div className="space-y-8 pb-16">
+      {/* ⚡ Real-Time New Direct Referral Live Celebration Banner */}
+      {newlyJoinedAlert && (
+        <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border-2 border-emerald-400 text-emerald-200 flex items-center justify-between shadow-2xl animate-in slide-in-from-top duration-300">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-2xl shrink-0 shadow-lg">
+              🎉
+            </div>
+            <div>
+              <div className="font-black text-white text-sm sm:text-base flex items-center gap-2">
+                <span>नया डायरेक्ट रेफरल तुरंत जुड़ गया है! (Instant Live Referral)</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black uppercase">Live Now</span>
+              </div>
+              <div className="text-xs text-emerald-300 mt-0.5">
+                खिलाड़ी: <strong className="text-white font-bold">{newlyJoinedAlert.name}</strong> ({newlyJoinedAlert.phone || 'New Player'}) आपके लेवल 1 डायरेक्ट नेटवर्क में शामिल हो गए हैं।
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setNewlyJoinedAlert(null)}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all shrink-0 ml-2"
+          >
+            देखा ✓
+          </button>
+        </div>
+      )}
+
       {/* 👑 Upline Sponsor Details Card */}
       <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#2c1242] via-[#1a1236] to-[#0d1726] border-2 border-purple-400/60 shadow-xl space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">

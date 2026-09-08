@@ -72,6 +72,17 @@ export function isDirectChildOf(
     if (pCode && cRefUserId === pCode) return true;
     if (pCodeNoPrefix && cRefUserId.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '') === pCodeNoPrefix) return true;
     if (pPhone && cRefUserId.replace(/\D/g, '') === pPhone) return true;
+
+    // Also extract clean code from cRefUserIdRaw in case full URL, query param or prefix was stored
+    const cleanExtracted = extractReferralCode(cRefUserIdRaw);
+    if (cleanExtracted) {
+      if (pCode && cleanExtracted === pCode) return true;
+      if (pId && cleanExtracted === pId) return true;
+      const cleanNoPref = cleanExtracted.replace(/^REF-?/, '').replace(/[^A-Z0-9]/g, '');
+      if (pCodeNoPrefix && cleanNoPref === pCodeNoPrefix) return true;
+      const digits = cleanExtracted.replace(/\D/g, '');
+      if (pPhone && digits.length >= 6 && (pPhone.endsWith(digits) || digits.endsWith(pPhone))) return true;
+    }
   }
 
   // Admin alias matching check (handles REF-ADM001, REF-ADMIN, ADM001, ADMIN, etc.)

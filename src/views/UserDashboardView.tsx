@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Gamepad2,
   Flame,
@@ -82,22 +82,58 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   // Calculate player stats
   const totalGamesPlayed = currentUser?.gamesPlayed || 0;
   const totalWinnings = currentUser?.totalWon || 0;
+
+  // Real-time server-verified direct referrals state
+  const [serverDirectUsers, setServerDirectUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let isMounted = true;
+    const fetchDirect = async () => {
+      try {
+        const q = currentUser.id || currentUser.referralCode;
+        const res = await fetch(`/api/referrals/direct?userId=${encodeURIComponent(q)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.directReferrals) && isMounted) {
+            setServerDirectUsers(data.directReferrals);
+          }
+        }
+      } catch (e) {}
+    };
+    fetchDirect();
+    const interval = setInterval(fetchDirect, 1200);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [currentUser?.id, currentUser?.referralCode]);
+
   // Direct Live Users from canonical matcher & database fields (works across all devices)
-  const directLiveUsers = currentUser
-    ? (allUsers || []).filter((u) => {
-        if (!u || u.id === currentUser.id) return false;
-        if (u.referrer_id && (u.referrer_id === currentUser.id || u.referrer_id === (currentUser as any).user_id || u.referrer_id === currentUser.referralCode)) {
-          return true;
-        }
-        if (u.referredByUserId && (u.referredByUserId === currentUser.id || u.referredByUserId === currentUser.referralCode)) {
-          return true;
-        }
-        if (u.referredBy && (u.referredBy === currentUser.referralCode || u.referredBy === currentUser.id)) {
-          return true;
-        }
-        return isDirectChildOf(u, currentUser, commissions || []);
-      })
-    : [];
+  const directLiveUsers = useMemo(() => {
+    if (!currentUser) return [];
+    const map = new Map<string, User>();
+
+    (allUsers || []).forEach((u) => {
+      if (!u || u.id === currentUser.id) return;
+      if (isDirectChildOf(u, currentUser, commissions || [])) {
+        map.set(u.id, u);
+      }
+    });
+
+    serverDirectUsers.forEach((u) => {
+      if (u && u.id && u.id !== currentUser.id) {
+        const existing = map.get(u.id);
+        map.set(u.id, { ...(existing || {}), ...u });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [currentUser, allUsers, serverDirectUsers, commissions]);
 
   const directReferralCount = directLiveUsers.length;
   const referralCount = referralMembers && referralMembers.length > 0

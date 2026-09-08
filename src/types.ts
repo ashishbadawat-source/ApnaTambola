@@ -373,6 +373,10 @@ export interface SiteSettings {
   // P2P User-to-User Fund Transfer Fee (default 5%)
   p2pTransferFeePercentage?: number;
 
+  // Live Game Orchestration Settings
+  activeLiveGameId?: string; // Currently designated live match by Admin
+  isLiveStopped?: boolean; // When true, live match is stopped until admin explicitly selects and starts another match
+
   // Voice Caller Language Configuration
   voiceLanguage?: 'en' | 'hi' | 'both';
 

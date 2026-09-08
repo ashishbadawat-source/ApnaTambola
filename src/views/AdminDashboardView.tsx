@@ -84,6 +84,10 @@ interface AdminDashboardViewProps {
   onToggleOfferStatus?: (offerId: string) => Promise<boolean> | void;
   activeModule?: string;
   onModuleChange?: (module: string) => void;
+  selectedGameId?: string;
+  onSelectGame?: (gameId: string) => void;
+  onStartGame?: (gameId: string) => Promise<void>;
+  onStopGame?: (gameId: string, markCompleted?: boolean) => Promise<void>;
   onCallNext: (number?: number) => void;
   onToggleAuto: () => void;
   onResetGame: () => void;
@@ -173,6 +177,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onClearAllWinners,
   activeModule,
   onModuleChange,
+  selectedGameId,
+  onSelectGame,
+  onStartGame,
+  onStopGame,
   onCallNext,
   onToggleAuto,
   onResetGame,
@@ -461,6 +469,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           <ModuleLiveControl
             games={games}
             tickets={tickets}
+            selectedGameId={selectedGameId}
+            onSelectGame={onSelectGame}
+            onStartGame={onStartGame}
+            onStopGame={onStopGame}
             onCallNext={onCallNext}
             onToggleAuto={onToggleAuto}
             onResetGame={onResetGame}
