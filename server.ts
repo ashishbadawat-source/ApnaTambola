@@ -1713,21 +1713,29 @@ async function startServer() {
       buyer = users[0];
     }
 
-    const totalCost = game.ticketPrice * quantity;
+    const totalCost = Number(req.body.totalCost) || (game.ticketPrice * quantity);
 
-    // Check balance
-    if ((buyer.walletBalance || 0) < totalCost) {
-      return res.status(400).json({ error: `Insufficient balance (₹${buyer.walletBalance || 0}). Required: ₹${totalCost}. Please add funds to wallet.` });
-    }
-
-    // Deduct from buyer wallet
-    buyer.walletBalance -= totalCost;
-    if ((buyer.depositBalance || 0) >= totalCost) {
-      buyer.depositBalance = (buyer.depositBalance || 0) - totalCost;
-    } else {
-      const remaining = totalCost - (buyer.depositBalance || 0);
-      buyer.depositBalance = 0;
-      buyer.winningBalance = Math.max(0, (buyer.winningBalance || 0) - remaining);
+    if (buyer) {
+      if (req.body.newWalletBalance !== undefined) {
+        buyer.walletBalance = Number(req.body.newWalletBalance);
+        if (clientUser) {
+          buyer.depositBalance = Number(clientUser.depositBalance) || 0;
+          buyer.winningBalance = Number(clientUser.winningBalance) || 0;
+          buyer.referralBalance = Number(clientUser.referralBalance) || 0;
+        }
+      } else {
+        if ((buyer.walletBalance || 0) < totalCost) {
+          return res.status(400).json({ error: `Insufficient balance (₹${buyer.walletBalance || 0}). Required: ₹${totalCost}. Please add funds to wallet.` });
+        }
+        buyer.walletBalance = Math.max(0, (buyer.walletBalance || 0) - totalCost);
+        if ((buyer.depositBalance || 0) >= totalCost) {
+          buyer.depositBalance = (buyer.depositBalance || 0) - totalCost;
+        } else {
+          const remaining = totalCost - (buyer.depositBalance || 0);
+          buyer.depositBalance = 0;
+          buyer.winningBalance = Math.max(0, (buyer.winningBalance || 0) - remaining);
+        }
+      }
     }
 
     // Adopt client-generated tickets or generate new tickets

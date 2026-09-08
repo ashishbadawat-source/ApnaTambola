@@ -58,8 +58,13 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   const selectedGame = allGames.find((g) => g.id === chosenGameId) || initialGame;
   const ticketPrice = selectedGame?.ticketPrice || 50;
   const totalCost = ticketPrice * quantity;
-  // Available wallet balance (deposit + winning + referral)
-  const availableBalance = (currentUser?.depositBalance || 0) + (currentUser?.winningBalance || 0) + (currentUser?.referralBalance || 0);
+
+  // Real available wallet balance across sub-wallets and general walletBalance
+  const userWal = Number(currentUser?.walletBalance) || 0;
+  const depBal = Number(currentUser?.depositBalance) || 0;
+  const winBal = Number(currentUser?.winningBalance) || 0;
+  const refBal = Number(currentUser?.referralBalance) || 0;
+  const availableBalance = Math.max(userWal, depBal + winBal + refBal);
   const canAfford = availableBalance >= totalCost;
 
   const isGlobalBookingOpen = siteSettings?.globalTicketBookingEnabled !== false;
@@ -407,36 +412,38 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                 </span>
               </div>
 
-              {/* Two-Wallet Balance Status */}
+              {/* User Wallet Balance Status */}
               <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="flex items-center gap-1.5 text-slate-400">
+                <div className="flex justify-between text-xs items-center">
+                  <span className="flex items-center gap-1.5 text-slate-300 font-semibold">
                     <Wallet className="w-3.5 h-3.5 text-amber-400" />
-                    <span>टिकट वॉलेट (Deposit Balance):</span>
+                    <span>कुल वॉलेट बैलेंस (Available Balance):</span>
                   </span>
-                  <span className={`font-black ${canAfford ? 'text-emerald-400' : 'text-red-400'}`}>
-                    ₹{(currentUser?.depositBalance || 0).toLocaleString('en-IN')}
+                  <span className={`font-black font-mono text-sm ${canAfford ? 'text-emerald-400' : 'text-red-400'}`}>
+                    ₹{availableBalance.toLocaleString('en-IN')}
                   </span>
                 </div>
-                <div className="flex justify-between text-[11px] text-slate-500">
-                  <span className="flex items-center gap-1.5">
-                    <span>💰 विथड्रॉल वॉलेट (Winnings/Bonus):</span>
+                <div className="flex justify-between text-[11px] text-slate-400 pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <span>डिपॉजिट वॉलेट:</span>
+                    <strong className="text-slate-200 font-mono">₹{depBal.toLocaleString('en-IN')}</strong>
                   </span>
-                  <span className="font-bold text-slate-300">
-                    ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+                  <span className="flex items-center gap-1">
+                    <span>विनिंग वॉलेट:</span>
+                    <strong className="text-slate-200 font-mono">₹{winBal.toLocaleString('en-IN')}</strong>
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Admin Fund Requirement Alert if Insufficient Deposit Balance */}
+            {/* Admin Fund Requirement Alert if Insufficient Balance */}
             {!canAfford && isGameActive && isBookingAllowed && (
               <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-500/40 text-xs text-red-200 space-y-1">
                 <div className="font-bold flex items-center gap-1.5 text-red-300">
-                  <span>⚠️ एडमिन से फंड ऐड करना आवश्यक है</span>
+                  <span>⚠️ अपर्याप्त वॉलेट बैलेंस (कम से कम ₹{totalCost} आवश्यक)</span>
                 </div>
                 <p className="text-[11px] text-red-300/90 leading-relaxed">
-                  जब तक एडमिन को पेमेंट करके फंड ऐड (Recharge) नहीं होता, तब तक टिकट नहीं खरीदा जा सकता। टिकट वॉलेट में ₹{Math.max(0, totalCost - (currentUser?.depositBalance || 0))} और चाहिए।
+                  {quantity} टिकट बुक करने के लिए आपके वॉलेट में ₹{totalCost} होने चाहिए। वर्तमान में कुल उपलब्ध बैलेंस ₹{availableBalance} है। आपको ₹{Math.max(0, totalCost - availableBalance)} और ऐड करने होंगे।
                 </p>
               </div>
             )}
@@ -477,8 +484,8 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                   <TicketIcon className="w-5 h-5" />
                   <span>{loading ? 'Processing Order...' : `PAY ₹${totalCost} & BUY ${quantity} TICKET(S)`}</span>
                 </button>
-                <p className="text-center text-[11px] text-slate-400 font-medium">
-                  ✓ आपके टिकट वॉलेट से ₹{totalCost} बराबर कट जाएंगे
+                <p className="text-center text-[11px] text-emerald-400 font-medium">
+                  ✓ बुकिंग करते ही आपके वॉलेट से ₹{totalCost} ({quantity} टिकट × ₹{ticketPrice}) कट जाएंगे
                 </p>
               </div>
             ) : (
@@ -488,7 +495,7 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                   className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white font-black text-base flex items-center justify-center gap-2 shadow-xl shadow-emerald-500/30 transition-all cursor-pointer"
                 >
                   <Plus className="w-5 h-5" />
-                  <span>+ एडमिन से फंड ऐड करें (Add ₹{totalCost - currentUser.depositBalance})</span>
+                  <span>+ वॉलेट में फंड ऐड करें (Add ₹{Math.max(10, totalCost - availableBalance)})</span>
                 </button>
                 <p className="text-center text-xs text-slate-400">
                   Instant deposit with Google Pay, PhonePe, Paytm, UPI, Cards &amp; NetBanking.

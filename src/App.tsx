@@ -2650,22 +2650,35 @@ export function App() {
         return false;
       }
 
-      // Exact total cost calculation (e.g., ₹5, ₹10, ₹15, ₹50 etc. * quantity)
-      const totalCost = game.ticketPrice * quantity;
+      // Exact total cost calculation (ticketPrice * quantity)
+      const totalCost = Number(game.ticketPrice || 0) * Number(quantity || 1);
 
-      // User needs available wallet balance
-      const availableBalance = (currentUser.depositBalance || 0) + (currentUser.winningBalance || 0) + (currentUser.referralBalance || 0);
+      // Current user wallet funds
+      let currentDep = Number(currentUser.depositBalance) || 0;
+      let currentWin = Number(currentUser.winningBalance) || 0;
+      let currentRef = Number(currentUser.referralBalance) || 0;
+      let currentWal = Number(currentUser.walletBalance) || 0;
+
+      // Auto-normalize if sub-balances are zero or lower than total walletBalance
+      if (currentDep === 0 && currentWin === 0 && currentRef === 0 && currentWal > 0) {
+        currentDep = currentWal;
+      } else if (currentDep + currentWin + currentRef < currentWal) {
+        currentDep += (currentWal - (currentDep + currentWin + currentRef));
+      }
+
+      const availableBalance = Math.max(currentWal, currentDep + currentWin + currentRef);
       if (availableBalance < totalCost) {
         const errorNotif: UserNotificationItem = {
           id: `un_err_${Date.now()}`,
           category: 'wallet_credit',
-          title: '⚠️ टिकट खरीदने हेतु फंड आवश्यक',
-          message: `टिकट खरीदने के लिए वॉलेट में कम से कम ₹${totalCost} होना आवश्यक है। (वर्तमान उपलब्ध बैलेंस: ₹${availableBalance})। कृपया वॉलेट में फंड ऐड करें।`,
+          title: '⚠️ अपर्याप्त वॉलेट बैलेंस',
+          message: `${quantity} टिकट खरीदने के लिए वॉलेट में कम से कम ₹${totalCost} होना आवश्यक है। (वर्तमान उपलब्ध बैलेंस: ₹${availableBalance})। कृपया वॉलेट में फंड ऐड करें।`,
           timestamp: 'Just now',
           read: false,
           actionTab: 'wallet',
         };
         setUserNotifications((prev) => [errorNotif, ...prev]);
+        alert(`⚠️ अपर्याप्त वॉलेट बैलेंस! ${quantity} टिकट के लिए कुल ₹${totalCost} चाहिए। आपके वॉलेट में केवल ₹${availableBalance} उपलब्ध हैं। कृपया पहले वॉलेट में फंड ऐड करें।`);
         return false;
       }
 
@@ -2674,11 +2687,10 @@ export function App() {
       const activeColorSetting = game.ticketColorTheme || siteSettings.defaultTicketTheme || 'multi';
 
       for (let i = 0; i < quantity; i++) {
-        const ticketNum = game.totalTicketsSold + i + 1;
+        const ticketNum = (game.totalTicketsSold || 0) + i + 1;
         
         let assignedColor: TicketColorThemeId = 'ruby';
         if (!activeColorSetting || activeColorSetting === 'multi') {
-          // Rotates and changes every ticket dynamically across palettes
           assignedColor = COLOR_KEYS[(ticketNum - 1 + i) % COLOR_KEYS.length];
         } else {
           assignedColor = activeColorSetting;
@@ -2704,11 +2716,12 @@ export function App() {
         });
       }
 
-      // Deduct from deposit balance first, then winning balance, then referral balance
+      // Exact payment deduction from wallet:
+      // Priority: Deposit balance first, then Winning balance, then Referral balance
       let remToDeduct = totalCost;
-      let newDeposit = currentUser.depositBalance || 0;
-      let newWinning = currentUser.winningBalance || 0;
-      let newReferral = currentUser.referralBalance || 0;
+      let newDeposit = currentDep;
+      let newWinning = currentWin;
+      let newReferral = currentRef;
 
       if (newDeposit >= remToDeduct) {
         newDeposit -= remToDeduct;
@@ -2729,9 +2742,16 @@ export function App() {
       if (remToDeduct > 0 && newReferral >= remToDeduct) {
         newReferral -= remToDeduct;
         remToDeduct = 0;
+      } else if (remToDeduct > 0) {
+        remToDeduct -= newReferral;
+        newReferral = 0;
       }
 
-      const newWallet = newDeposit + newWinning + newReferral;
+      const newWallet = Math.max(0, currentWal - totalCost);
+      const subTotal = newDeposit + newWinning + newReferral;
+      if (subTotal !== newWallet) {
+        newDeposit = Math.max(0, newWallet - (newWinning + newReferral));
+      }
 
       const updatedCurrentUser: User = {
         ...currentUser,
@@ -2741,8 +2761,13 @@ export function App() {
         walletBalance: newWallet,
       };
 
+      // 1. Update active current user state and persistent auth storage
       setCurrentUser(updatedCurrentUser);
+      try {
+        localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updatedCurrentUser));
+      } catch (e) {}
 
+      // 2. Update user in registered users list
       setUsers((prev) => {
         const nextUsers = prev.map((u) => (u.id === updatedCurrentUser.id ? updatedCurrentUser : u));
         try {
@@ -2751,40 +2776,49 @@ export function App() {
         return nextUsers;
       });
 
-      // Record wallet transaction
+      // 3. Record wallet debit transaction in user Passbook
       const newTxn: WalletTransaction = {
         id: `txn_${Date.now()}`,
         userId: currentUser.id,
         type: 'ticket_purchase',
         amount: -totalCost,
         balanceAfter: newWallet,
-        description: `Bought ${quantity} ticket(s) @ ₹${game.ticketPrice} each (Total: -₹${totalCost}) for ${game.title}`,
+        description: `🎟️ टिकट बुकिंग: ${quantity} टिकट @ ₹${game.ticketPrice} = -₹${totalCost} (${game.title})`,
         referenceId: newTickets[0].ticketId,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
         status: 'completed',
       };
-      setTransactions((prev) => [newTxn, ...prev]);
+      setTransactions((prev) => {
+        const nextTxns = [newTxn, ...prev];
+        try {
+          localStorage.setItem('apna_tambola_transactions', JSON.stringify(nextTxns));
+        } catch (e) {}
+        return nextTxns;
+      });
 
-      // Update game tickets sold count & dynamically re-calculate standard 7-prize pool
+      // 4. Update tournament stats & dynamic 70/30 prize allocation
+      let updatedGameObj: TambolaGame = game;
       setGames((prev) =>
         prev.map((g) => {
           if (g.id !== gameId) return g;
-          const newTicketsSold = g.totalTicketsSold + quantity;
+          const newTicketsSold = (g.totalTicketsSold || 0) + quantity;
           const { prizePool, prizes } = calculateTambolaDynamicPrizes(
             newTicketsSold,
             g.ticketPrice,
             g.prizes
           );
-          return {
+          updatedGameObj = {
             ...g,
             totalTicketsSold: newTicketsSold,
-            registeredPlayers: g.registeredPlayers + 1,
+            registeredPlayers: (g.registeredPlayers || 0) + 1,
             prizePool,
             prizes,
           };
+          return updatedGameObj;
         })
       );
 
+      // 5. Store new tickets locally
       setTickets((prev) => {
         const next = [...newTickets, ...prev];
         try {
@@ -2793,21 +2827,33 @@ export function App() {
         return next;
       });
 
-      // Update admin stats
+      // 6. Realtime Firestore synchronization for user, transaction, tickets & game
+      try {
+        setDoc(doc(db, 'users', updatedCurrentUser.id), updatedCurrentUser, { merge: true }).catch(() => {});
+        setDoc(doc(db, 'transactions', newTxn.id), newTxn, { merge: true }).catch(() => {});
+        newTickets.forEach((tkt) => {
+          setDoc(doc(db, 'tickets', tkt.id), tkt, { merge: true }).catch(() => {});
+        });
+        if (updatedGameObj) {
+          setDoc(doc(db, 'games', game.id), updatedGameObj, { merge: true }).catch(() => {});
+        }
+      } catch (e) {}
+
+      // 7. Update admin platform stats
       setAdminStats((prev) => ({
         ...prev,
         ticketsSold: prev.ticketsSold + quantity,
         totalRevenue: prev.totalRevenue + totalCost,
       }));
 
-      // Distribute 5-Level Referral commissions
+      // 8. Distribute 5-Level Referral commissions
       try {
         distributeReferralCommissions(totalCost);
       } catch (err) {
         console.warn('Referral distribution warning:', err);
       }
 
-      // Sync purchase to server API
+      // 9. Sync ticket purchase and wallet deduction with server API
       fetch('/api/tickets/buy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2815,17 +2861,19 @@ export function App() {
           gameId: game.id,
           quantity,
           userId: currentUser.id,
+          totalCost,
+          newWalletBalance: newWallet,
           user: updatedCurrentUser,
           tickets: newTickets,
         }),
       }).catch((e) => console.warn('Ticket server purchase sync warning:', e));
 
-      // Push notification to user notifications list
+      // 10. Push notification to user notifications list
       const ticketNotif: UserNotificationItem = {
         id: `un_${Date.now()}`,
         category: 'ticket_confirmation',
-        title: `🎟️ ${quantity} Ticket(s) Confirmed for ${game.title}`,
-        message: `Your ${quantity} ticket(s) (IDs: ${newTickets.map((t) => t.ticketId).join(', ')}) are generated. Good luck!`,
+        title: `🎟️ ${quantity} टिकट बुक हुए (वॉलेट से -₹${totalCost} डेबिट)`,
+        message: `सफलतापूर्वक ${quantity} टिकट बुक हो गए (${game.title})। आपके वॉलेट से ₹${totalCost} काट लिए गए हैं। शेष वॉलेट बैलेंस: ₹${newWallet}। (Ticket IDs: ${newTickets.map((t) => t.ticketId).join(', ')})`,
         timestamp: 'Just now',
         read: false,
         actionTab: 'my-tickets',
