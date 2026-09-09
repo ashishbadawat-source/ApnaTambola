@@ -106,6 +106,9 @@ interface AdminDashboardViewProps {
   onAdminGenerateTickets?: (gameId: string, count: number, colorTheme?: TicketColorThemeId) => Promise<boolean>;
   onAdminToggleTicketStatus?: (ticketId: string, isActive: boolean) => Promise<boolean>;
   onAdminBatchToggleTickets?: (ticketIds: string[], isActive: boolean) => Promise<boolean>;
+  onAdminUpdateTicketGame?: (ticketId: string, targetGameId: string) => Promise<boolean>;
+  onAdminBatchUpdateTicketGame?: (ticketIds: string[], targetGameId: string) => Promise<{ success: boolean; count: number }>;
+  onAdminTransferAllTicketsToGame?: (targetGameId: string, sourceGameId?: string) => Promise<{ success: boolean; count: number }>;
   onDeleteTicket?: (ticketId: string, refundUser?: boolean) => Promise<boolean>;
   onBatchDeleteTickets?: (ticketIds: string[], refundUser?: boolean) => Promise<boolean>;
   onApproveCommission?: (commissionId: string) => void;
@@ -199,6 +202,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onAdminGenerateTickets,
   onAdminToggleTicketStatus,
   onAdminBatchToggleTickets,
+  onAdminUpdateTicketGame,
+  onAdminBatchUpdateTicketGame,
+  onAdminTransferAllTicketsToGame,
   onDeleteTicket,
   onBatchDeleteTickets,
   onApproveCommission,
@@ -491,6 +497,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onAdminGenerateTickets={onAdminGenerateTickets}
             onAdminToggleTicketStatus={onAdminToggleTicketStatus}
             onAdminBatchToggleTickets={onAdminBatchToggleTickets}
+            onAdminUpdateTicketGame={onAdminUpdateTicketGame}
+            onAdminBatchUpdateTicketGame={onAdminBatchUpdateTicketGame}
+            onAdminTransferAllTicketsToGame={onAdminTransferAllTicketsToGame}
             onDeleteTicket={onDeleteTicket}
             onBatchDeleteTickets={onBatchDeleteTickets}
             onForceRefresh={onForceRefresh}

@@ -124,6 +124,7 @@ export interface TambolaGame {
   title: string;
   gameCode: string;
   date: string;
+  matchDate?: string;
   startTime: string;
   scheduledStartIso?: string;
   ticketPrice: number;

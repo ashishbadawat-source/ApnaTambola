@@ -34,6 +34,11 @@ import {
   ShoppingBag,
   Clock,
   ArrowRight,
+  ArrowRightLeft,
+  Shuffle,
+  Repeat,
+  Send,
+  CheckCheck,
 } from 'lucide-react';
 import { TambolaTicket, TambolaGame, User, TicketColorThemeId, SiteSettings } from '../../types';
 import { TambolaTicketCard } from '../../components/TambolaTicketCard';
@@ -50,13 +55,16 @@ interface ModuleTicketsProps {
   onAdminGenerateTickets?: (gameId: string, count: number, colorTheme?: TicketColorThemeId) => Promise<boolean>;
   onAdminToggleTicketStatus?: (ticketId: string, isActive: boolean) => Promise<boolean>;
   onAdminBatchToggleTickets?: (ticketIds: string[], isActive: boolean) => Promise<boolean>;
+  onAdminUpdateTicketGame?: (ticketId: string, targetGameId: string) => Promise<boolean>;
+  onAdminBatchUpdateTicketGame?: (ticketIds: string[], targetGameId: string) => Promise<{ success: boolean; count: number }>;
+  onAdminTransferAllTicketsToGame?: (targetGameId: string, sourceGameId?: string) => Promise<{ success: boolean; count: number }>;
   onDeleteTicket?: (ticketId: string, refundUser?: boolean) => Promise<boolean>;
   onBatchDeleteTickets?: (ticketIds: string[], refundUser?: boolean) => Promise<boolean>;
   onForceRefresh?: () => void;
   isSyncing?: boolean;
 }
 
-type SubTab = 'history' | 'buyers' | 'cards' | 'generator' | 'auto_ticket';
+type SubTab = 'history' | 'buyers' | 'transfer' | 'cards' | 'generator' | 'auto_ticket';
 type StatusFilter = 'all' | 'active' | 'disabled' | 'winning';
 type SortOption = 'newest' | 'oldest' | 'price_high' | 'price_low' | 'buyer_asc';
 
@@ -70,6 +78,9 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   onAdminGenerateTickets,
   onAdminToggleTicketStatus,
   onAdminBatchToggleTickets,
+  onAdminUpdateTicketGame,
+  onAdminBatchUpdateTicketGame,
+  onAdminTransferAllTicketsToGame,
   onDeleteTicket,
   onBatchDeleteTickets,
   onForceRefresh,
@@ -87,6 +98,16 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
 
   // Multi-selection for batch operations
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
+
+  // Find active live game or today's designated game
+  const activeLiveGame = useMemo(() => {
+    return (
+      games.find((g) => g.id === siteSettings?.activeLiveGameId) ||
+      games.find((g) => g.status === 'live') ||
+      games.find((g) => g.status === 'upcoming') ||
+      games[0]
+    );
+  }, [games, siteSettings?.activeLiveGameId]);
 
   // Auto-Ticket Engine State
   const [selectedAutoGameId, setSelectedAutoGameId] = useState<string>(
@@ -135,6 +156,23 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     isDeleting: false,
   });
 
+  // Edit / Change Game Modal State (यूजर का टिकट आज के चलने वाले गेम में बदलें)
+  const [editGameModalState, setEditGameModalState] = useState<{
+    isOpen: boolean;
+    mode: 'single' | 'batch' | 'user' | 'all';
+    ticket?: TambolaTicket;
+    ticketIds?: string[];
+    user?: { id: string; name: string; count: number };
+    sourceGameId?: string;
+    targetGameId: string;
+    isUpdating: boolean;
+  }>({
+    isOpen: false,
+    mode: 'single',
+    targetGameId: activeLiveGame?.id || games[0]?.id || '',
+    isUpdating: false,
+  });
+
   const showNotification = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotificationMsg({ text, type });
     setTimeout(() => setNotificationMsg(null), 4500);
@@ -150,7 +188,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     return map;
   }, [users]);
 
-  // Unique Buyers Aggregation (किस यूजर ने कितने वाला कितना टिकट ले रखा है)
+  // Unique Buyers Aggregation (किस यूजर ने कौन से गेम का कितना टिकट ले रखा है)
   const buyerSummary = useMemo(() => {
     const map = new Map<
       string,
@@ -164,10 +202,15 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         totalSpent: number;
         tickets: TambolaTicket[];
         gameTitles: Set<string>;
+        gameMap: Map<string, { gameId: string; gameTitle: string; count: number; isCurrentLive: boolean }>;
+        gameBreakdown: Array<{ gameId: string; gameTitle: string; count: number; isCurrentLive: boolean }>;
+        nonLiveCount: number;
         priceMap: Map<number, { price: number; count: number; totalSpent: number }>;
         priceBreakdown: Array<{ price: number; count: number; totalSpent: number }>;
       }
     >();
+
+    const activeLiveId = activeLiveGame?.id || '';
 
     tickets.forEach((t) => {
       const uId = t.userId || t.userName || 'unknown';
@@ -177,6 +220,9 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       const userEmail = uProfile?.email || '';
       const avatar = uProfile?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${uId}`;
       const price = Number(t.price || 0);
+      const gId = t.gameId || 'unassigned';
+      const gTitle = t.gameTitle || 'Unnamed Game';
+      const isLive = gId === activeLiveId;
 
       const existing = map.get(uId);
       if (existing) {
@@ -184,6 +230,13 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         existing.totalSpent += price;
         existing.tickets.push(t);
         if (t.gameTitle) existing.gameTitles.add(t.gameTitle);
+
+        const gb = existing.gameMap.get(gId);
+        if (gb) {
+          gb.count += 1;
+        } else {
+          existing.gameMap.set(gId, { gameId: gId, gameTitle: gTitle, count: 1, isCurrentLive: isLive });
+        }
 
         const pb = existing.priceMap.get(price);
         if (pb) {
@@ -195,6 +248,9 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       } else {
         const gameTitles = new Set<string>();
         if (t.gameTitle) gameTitles.add(t.gameTitle);
+        const gameMap = new Map<string, { gameId: string; gameTitle: string; count: number; isCurrentLive: boolean }>();
+        gameMap.set(gId, { gameId: gId, gameTitle: gTitle, count: 1, isCurrentLive: isLive });
+
         const priceMap = new Map<number, { price: number; count: number; totalSpent: number }>();
         priceMap.set(price, { price, count: 1, totalSpent: price });
 
@@ -208,6 +264,9 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
           totalSpent: price,
           tickets: [t],
           gameTitles,
+          gameMap,
+          gameBreakdown: [],
+          nonLiveCount: 0,
           priceMap,
           priceBreakdown: [],
         });
@@ -215,12 +274,18 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     });
 
     return Array.from(map.values())
-      .map((b) => ({
-        ...b,
-        priceBreakdown: Array.from(b.priceMap.values()).sort((x, y) => x.price - y.price),
-      }))
+      .map((b) => {
+        const gList = Array.from(b.gameMap.values()).sort((x, y) => (y.isCurrentLive ? 1 : 0) - (x.isCurrentLive ? 1 : 0));
+        const nonLive = gList.filter((g) => !g.isCurrentLive).reduce((acc, curr) => acc + curr.count, 0);
+        return {
+          ...b,
+          gameBreakdown: gList,
+          nonLiveCount: nonLive,
+          priceBreakdown: Array.from(b.priceMap.values()).sort((x, y) => x.price - y.price),
+        };
+      })
       .sort((a, b) => b.ticketCount - a.ticketCount);
-  }, [tickets, userMap]);
+  }, [tickets, userMap, activeLiveGame]);
 
   // Distinct ticket prices sold across the platform
   const distinctTicketPrices = useMemo(() => {
@@ -259,6 +324,49 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   const winningTicketsCount = tickets.filter((t) => t.isWinningTicket || t.isWinner).length;
 
   // Filter & Sort tickets for History & Cards view
+  const gameMigrationStats = useMemo(() => {
+    const activeLiveId = activeLiveGame?.id || '';
+    const stats = games.map((g) => {
+      const gTickets = tickets.filter((t) => t.gameId === g.id);
+      const uSet = new Set(gTickets.map((t) => t.userId || t.userName).filter(Boolean));
+      const activeCount = gTickets.filter((t) => t.isActive !== false).length;
+      const isLive = g.id === activeLiveId;
+      return {
+        game: g,
+        gameId: g.id,
+        gameTitle: g.title,
+        ticketPrice: g.ticketPrice || 0,
+        isLive,
+        ticketCount: gTickets.length,
+        activeCount,
+        uniqueBuyers: uSet.size,
+        tickets: gTickets,
+      };
+    });
+
+    const knownGameIds = new Set(games.map((g) => g.id));
+    const orphanTickets = tickets.filter((t) => !t.gameId || !knownGameIds.has(t.gameId));
+    const orphanBuyers = new Set(orphanTickets.map((t) => t.userId || t.userName).filter(Boolean));
+    const totalNonLiveTickets = tickets.filter((t) => t.gameId !== activeLiveId).length;
+
+    const byGameId: Record<string, number> = {};
+    stats.forEach((s) => {
+      byGameId[s.gameId] = s.ticketCount;
+    });
+    const liveStat = stats.find((s) => s.isLive);
+    const activeLiveTicketsCount = liveStat ? liveStat.ticketCount : 0;
+
+    return {
+      gameStats: stats,
+      byGameId,
+      activeLiveTicketsCount,
+      orphanTickets,
+      orphanTicketsCount: orphanTickets.length,
+      orphanBuyersCount: orphanBuyers.size,
+      totalNonLiveTickets,
+    };
+  }, [games, tickets, activeLiveGame]);
+
   const filteredTickets = useMemo(() => {
     let result = tickets.filter((t) => {
       if (!t) return false;
@@ -525,6 +633,155 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       console.error('Delete error:', err);
       showNotification('टिकट रिमूव करने में त्रुटि आई। कृपया पुनः प्रयास करें।', 'error');
       setDeleteModalState((prev) => ({ ...prev, isDeleting: false }));
+    }
+  };
+
+  // =========================================================================
+  // TICKET GAME EDIT & CONSOLIDATION HANDLERS (यूजर का टिकट आज के गेम में बदलें)
+  // =========================================================================
+  const openSingleEditGameModal = (ticket: TambolaTicket, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const defaultTarget = activeLiveGame?.id || (games.find((g) => g.id !== ticket.gameId)?.id) || games[0]?.id || '';
+    setEditGameModalState({
+      isOpen: true,
+      mode: 'single',
+      ticket,
+      ticketIds: [ticket.id],
+      targetGameId: defaultTarget,
+      isUpdating: false,
+    });
+  };
+
+  const openBatchEditGameModal = () => {
+    if (selectedTicketIds.length === 0) {
+      showNotification('कृपया पहले कम से कम एक टिकट चुनें।', 'info');
+      return;
+    }
+    const defaultTarget = activeLiveGame?.id || games[0]?.id || '';
+    setEditGameModalState({
+      isOpen: true,
+      mode: 'batch',
+      ticketIds: selectedTicketIds,
+      targetGameId: defaultTarget,
+      isUpdating: false,
+    });
+  };
+
+  const openUserEditGameModal = (buyer: {
+    userId: string;
+    userName: string;
+    tickets: TambolaTicket[];
+  }) => {
+    const tIds = buyer.tickets.map((t) => t.id).filter(Boolean);
+    const defaultTarget = activeLiveGame?.id || games[0]?.id || '';
+    setEditGameModalState({
+      isOpen: true,
+      mode: 'user',
+      user: {
+        id: buyer.userId,
+        name: buyer.userName,
+        count: tIds.length,
+      },
+      ticketIds: tIds,
+      targetGameId: defaultTarget,
+      isUpdating: false,
+    });
+  };
+
+  const openAllTransferModal = (sourceGameId: string = 'all') => {
+    const defaultTarget = activeLiveGame?.id || games[0]?.id || '';
+    setEditGameModalState({
+      isOpen: true,
+      mode: 'all',
+      sourceGameId,
+      targetGameId: defaultTarget,
+      isUpdating: false,
+    });
+  };
+
+  const handleConfirmGameUpdate = async () => {
+    const { mode, ticket, ticketIds, user, sourceGameId, targetGameId } = editGameModalState;
+    if (!targetGameId) {
+      showNotification('कृपया गंतव्य (Target) गेम चुनें।', 'error');
+      return;
+    }
+
+    const targetGame = games.find((g) => g.id === targetGameId);
+    const targetTitle = targetGame?.title || 'Selected Match';
+
+    setEditGameModalState((prev) => ({ ...prev, isUpdating: true }));
+    try {
+      if (mode === 'single' && ticket) {
+        if (onAdminUpdateTicketGame) {
+          await onAdminUpdateTicketGame(ticket.id, targetGameId);
+        } else {
+          await fetch('/api/tickets/update-game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketId: ticket.id, targetGameId }),
+          });
+        }
+        showNotification(
+          `✅ टिकट #${ticket.ticketNumber} (${ticket.ticketId || ticket.id}) को सफलतापूर्वक "${targetTitle}" में बदल दिया गया है!`,
+          'success'
+        );
+        if (inspectingTicket?.id === ticket.id) {
+          setInspectingTicket((prev) => prev ? { ...prev, gameId: targetGameId, gameTitle: targetTitle } : null);
+        }
+      } else if ((mode === 'batch' || mode === 'user') && ticketIds && ticketIds.length > 0) {
+        if (onAdminBatchUpdateTicketGame) {
+          const res = await onAdminBatchUpdateTicketGame(ticketIds, targetGameId);
+          showNotification(
+            `🚀 कुल ${res.count || ticketIds.length} टिकटों को सफलतापूर्वक "${targetTitle}" में ट्रांसफर कर दिया गया है!`,
+            'success'
+          );
+        } else {
+          await fetch('/api/tickets/batch-update-game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketIds, targetGameId }),
+          });
+          showNotification(
+            `🚀 कुल ${ticketIds.length} टिकटों को सफलतापूर्वक "${targetTitle}" में ट्रांसफर कर दिया गया है!`,
+            'success'
+          );
+        }
+        setSelectedTicketIds([]);
+      } else if (mode === 'all') {
+        if (onAdminTransferAllTicketsToGame) {
+          const res = await onAdminTransferAllTicketsToGame(targetGameId, sourceGameId);
+          showNotification(
+            `🎉 सभी यूजर के ${res.count} टिकट आज के गेम "${targetTitle}" में शिफ्ट हो गए! अब सभी खिलाड़ी एक ही मैच में खेलेंगे।`,
+            'success'
+          );
+        } else {
+          await fetch('/api/tickets/transfer-all-to-game', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetGameId, sourceGameId }),
+          });
+          showNotification(
+            `🎉 सभी यूजर के टिकट आज के गेम "${targetTitle}" में शिफ्ट हो गए!`,
+            'success'
+          );
+        }
+        setSelectedTicketIds([]);
+      }
+
+      setEditGameModalState({
+        isOpen: false,
+        mode: 'single',
+        targetGameId: '',
+        isUpdating: false,
+      });
+
+      if (onForceRefresh) {
+        onForceRefresh();
+      }
+    } catch (err) {
+      console.error('Game update error:', err);
+      showNotification('टिकट का गेम बदलने में त्रुटि आई। कृपया पुनः प्रयास करें।', 'error');
+      setEditGameModalState((prev) => ({ ...prev, isUpdating: false }));
     }
   };
 
@@ -801,6 +1058,58 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         )}
       </div>
 
+      {/* 🎯 MASTER MATCH CONSOLIDATION & TICKET SHIFTER (यूजर कौनसे गेम का टिकट लिया है वो दिखे व आज के लाइव गेम में बदलें) */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-cyan-950/60 via-slate-900 to-blue-950/60 border border-cyan-500/40 shadow-xl space-y-3">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
+                <ArrowRightLeft className="w-4 h-4" />
+              </div>
+              <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                <span>🎯 मैच कंसॉलिडेशन व टिकट शिफ्टर (All Players in One Game)</span>
+                <span className="px-2 py-0.5 rounded-full bg-cyan-400 text-slate-950 text-[10px] font-black">
+                  1-Click Sync
+                </span>
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300">
+              आज चलने वाला लाइव गेम: <strong className="text-amber-300 font-bold">{activeLiveGame?.title || 'No Live Game'}</strong> {activeLiveGame?.ticketPrice ? `(₹${activeLiveGame.ticketPrice})` : ''} •{' '}
+              {gameMigrationStats.totalNonLiveTickets > 0 ? (
+                <span className="text-amber-400 font-bold">
+                  ⚠️ {gameMigrationStats.totalNonLiveTickets} टिकट दूसरे या पुराने मैचों में हैं।
+                </span>
+              ) : (
+                <span className="text-emerald-400 font-bold">
+                  ✅ सभी {totalTicketsSold} टिकट वर्तमान लाइव मैच में सिंक्रोनाइज़्ड हैं!
+                </span>
+              )}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto justify-between lg:justify-end">
+            <button
+              onClick={() => setActiveSubTab('transfer')}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>विस्तृत मैच लिस्ट देखें</span>
+            </button>
+
+            {activeLiveGame && (
+              <button
+                onClick={() => openAllTransferModal('all')}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 hover:from-cyan-300 hover:to-indigo-400 text-slate-950 font-black text-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg shadow-cyan-500/20"
+                title="सभी खिलाड़ियों के टिकट आज के लाइव गेम में बदलें ताकि सब एक साथ खेलें"
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+                <span>🚀 सारे टिकट आज के लाइव मैच में शिफ्ट करें</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Notification Banner */}
       {notificationMsg && (
         <div
@@ -950,6 +1259,21 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
             {isAutoEnabled ? 'ON' : 'OFF'}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveSubTab('transfer')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'transfer'
+              ? 'bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 text-white shadow-lg shadow-cyan-500/20'
+              : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+          }`}
+        >
+          <ArrowRightLeft className="w-4 h-4 text-cyan-400" />
+          <span>🎯 मैच कंसॉलिडेशन (Game Migration)</span>
+          <span className="px-2 py-0.5 rounded-full bg-black/30 border border-cyan-400/40 text-cyan-300 text-[10px] font-bold">
+            {gameMigrationStats.totalNonLiveTickets > 0 ? `⚠️ ${gameMigrationStats.totalNonLiveTickets} शिफ्ट करें` : '✅ All Live'}
+          </span>
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -1061,6 +1385,18 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Batch Change Game Button */}
+              {selectedTicketIds.length > 0 && (
+                <button
+                  onClick={openBatchEditGameModal}
+                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
+                  title="चयनित टिकटों को आज के या किसी अन्य गेम में बदलें"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>गेम बदलें ({selectedTicketIds.length})</span>
+                </button>
+              )}
+
               {/* Batch Remove Button */}
               {selectedTicketIds.length > 0 && (
                 <button
@@ -1215,10 +1551,24 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
 
                           {/* Tournament */}
                           <td className="p-3.5">
-                            <div className="max-w-[200px] truncate">
-                              <span className="font-bold text-slate-200">{tkt.gameTitle || 'Tambola Live'}</span>
-                              <div className="text-[10px] text-slate-400">
-                                {tkt.matchDate || 'Daily Match'}
+                            <div className="space-y-1 max-w-[220px]">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-slate-100">{tkt.gameTitle || 'Tambola Live'}</span>
+                                {tkt.gameId === activeLiveGame?.id ? (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-black">
+                                    🎯 आज का लाइव गेम
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-bold flex items-center gap-0.5">
+                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                    अन्य मैच
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                                <span>{tkt.matchDate || 'Daily Match'}</span>
+                                <span className="text-slate-600">•</span>
+                                <span className="font-mono text-slate-500">ID: {tkt.gameId ? tkt.gameId.slice(0, 8) : 'none'}</span>
                               </div>
                             </div>
                           </td>
@@ -1252,9 +1602,20 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                             </span>
                           </td>
 
-                          {/* Actions: Remove, Toggle ON/OFF, Inspect, Print */}
+                          {/* Actions: Edit Game, Remove, Toggle ON/OFF, Inspect, Print */}
                           <td className="p-3.5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
+                              {/* EDIT / CHANGE GAME BUTTON (यूजर का गेम बदलें) */}
+                              <button
+                                type="button"
+                                onClick={(e) => openSingleEditGameModal(tkt, e)}
+                                className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/40 text-xs font-black flex items-center gap-1 transition-all cursor-pointer shadow-sm active:scale-95"
+                                title="इस टिकट का गेम आज चलने वाले लाइव गेम में बदलें"
+                              >
+                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                                <span>गेम बदलें</span>
+                              </button>
+
                               {/* Direct 1-Click Toggle */}
                               <button
                                 type="button"
@@ -1536,6 +1897,38 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                       </div>
                     </div>
 
+                    {/* Match & Game Breakdown (कौनसे गेम का टिकट लिया है) */}
+                    <div className="p-3 rounded-2xl bg-cyan-500/5 border border-cyan-500/20 space-y-1.5">
+                      <div className="text-[11px] font-black text-cyan-300 flex items-center justify-between">
+                        <span>🎮 कौन से मैच का टिकट लिया:</span>
+                        {buyer.nonLiveCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-black">
+                            ⚠️ {buyer.nonLiveCount} अन्य मैच में
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {buyer.gameBreakdown.map((gb) => (
+                          <div
+                            key={gb.gameId}
+                            className={`px-2.5 py-1 rounded-xl border text-xs font-mono flex items-center gap-1.5 shadow-sm ${
+                              gb.isCurrentLive
+                                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                                : 'bg-slate-900 border-slate-700 text-slate-300'
+                            }`}
+                          >
+                            <span className="font-bold">{gb.gameTitle}:</span>
+                            <span className={`px-1.5 py-0.2 rounded font-black text-[11px] ${
+                              gb.isCurrentLive ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-amber-300'
+                            }`}>
+                              {gb.count} टिकट
+                            </span>
+                            {gb.isCurrentLive && <span className="text-[9px] text-emerald-400 font-bold">● LIVE</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* Tournaments list */}
                     <div className="space-y-1">
                       <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
@@ -1555,29 +1948,39 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                   </div>
 
                   {/* Actions for this buyer */}
-                  <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                  <div className="pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedBuyerFilter(buyer.userId);
-                        setActiveSubTab('history');
-                      }}
-                      className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                      onClick={() => openUserEditGameModal(buyer)}
+                      className="px-3 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-md shadow-cyan-500/20"
+                      title="इस यूजर के टिकट आज के लाइव मैच में बदलें"
                     >
-                      <Ticket className="w-3.5 h-3.5 text-amber-400" />
-                      <span>टिकट देखें ({buyer.ticketCount})</span>
-                      <ArrowRight className="w-3 h-3 text-slate-400" />
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      <span>आज के मैच में शिफ्ट करें</span>
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => openUserAllTicketsDeleteModal(buyer)}
-                      className="px-3 py-2 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/50 text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                      title="इस यूजर के सभी टिकट रिमूव करें और वॉलेट में रिफंड भेजें"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>सभी रिमूव</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBuyerFilter(buyer.userId);
+                          setActiveSubTab('history');
+                        }}
+                        className="px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                      >
+                        <Ticket className="w-3.5 h-3.5 text-amber-400" />
+                        <span>टिकट ({buyer.ticketCount})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openUserAllTicketsDeleteModal(buyer)}
+                        className="p-2 rounded-xl bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/50 text-xs font-black cursor-pointer transition-all active:scale-95"
+                        title="इस यूजर के सभी टिकट रिमूव करें और वॉलेट में रिफंड भेजें"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1593,7 +1996,8 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                     <th className="p-3 font-bold">मोबाइल व ID</th>
                     <th className="p-3 font-bold text-center">कुल टिकट</th>
                     <th className="p-3 font-bold text-right">कुल खर्च</th>
-                    <th className="p-3 font-bold">🎟️ कितने वाला टिकट कितना लिया (दर विवरण)</th>
+                    <th className="p-3 font-bold">🎟️ दर विवरण</th>
+                    <th className="p-3 font-bold">🎮 मैच स्थिति</th>
                     <th className="p-3 font-bold text-right">एक्शन</th>
                   </tr>
                 </thead>
@@ -1635,15 +2039,39 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                               key={pb.price}
                               className="px-2 py-0.5 rounded-lg bg-slate-900 border border-amber-400/40 text-[11px] font-mono font-bold text-amber-300 flex items-center gap-1"
                             >
-                              <strong className="text-amber-400">₹{pb.price} वाला:</strong>
-                              <span className="text-white font-black">{pb.count} टिकट</span>
-                              <span className="text-[9px] text-slate-400">(= ₹{pb.totalSpent})</span>
+                              <strong className="text-amber-400">₹{pb.price}:</strong>
+                              <span className="text-white font-black">{pb.count}t</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          {buyer.gameBreakdown.map((gb) => (
+                            <span
+                              key={gb.gameId}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                gb.isCurrentLive
+                                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                                  : 'bg-slate-900 border-slate-700 text-amber-300'
+                              }`}
+                            >
+                              {gb.gameTitle}: {gb.count}t {gb.isCurrentLive && '●'}
                             </span>
                           ))}
                         </div>
                       </td>
                       <td className="p-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openUserEditGameModal(buyer)}
+                            className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95 border border-cyan-500/40"
+                            title="आज के लाइव मैच में बदलें"
+                          >
+                            <ArrowRightLeft className="w-3 h-3" />
+                            <span>शिफ्ट</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
@@ -2200,6 +2628,356 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: TRANSFER / MATCH CONSOLIDATION (मैच कंसॉलिडेशन व टिकट शिफ्टर) */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'transfer' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Header & Quick Action Card */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-cyan-950/80 via-slate-900 to-slate-950 border border-cyan-500/40 space-y-4 shadow-xl">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2.5">
+                  <ArrowRightLeft className="w-6 h-6 text-cyan-400" />
+                  <span>मैच कंसॉलिडेशन व टिकट शिफ्टर (All Players in One Live Game)</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl">
+                  यूजर ने जिस भी मैच या पुराने गेम का टिकट लिया हो, एडमिन उसे आज चलने वाले लाइव मैच में आसानी से बदल सकता है ताकि सभी खिलाड़ी एक ही कमरे में एक साथ खेल सकें।
+                </p>
+              </div>
+
+              {activeLiveGame && (
+                <button
+                  type="button"
+                  onClick={() => openAllTransferModal('all')}
+                  className="px-5 py-3 rounded-2xl bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 hover:from-cyan-300 hover:to-indigo-400 text-slate-950 font-black text-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-xl shadow-cyan-500/20 shrink-0"
+                >
+                  <ArrowRightLeft className="w-5 h-5" />
+                  <span>🚀 सभी टिकट आज के मैच में बदलें</span>
+                </button>
+              )}
+            </div>
+
+            {/* Current Active Live Match Highlight */}
+            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+                <div>
+                  <span className="text-slate-400">वर्तमान में सक्रिय लाइव मैच: </span>
+                  <strong className="text-emerald-300 text-sm font-black">{activeLiveGame?.title || 'कोई लाइव मैच सक्रिय नहीं'}</strong>
+                  {activeLiveGame && (
+                    <span className="text-slate-400 ml-2 font-mono">
+                      (दर: ₹{activeLiveGame.ticketPrice || 5} • {activeLiveGame.matchDate || 'Daily Match'})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold">
+                  लाइव मैच में टिकट: {gameMigrationStats.activeLiveTicketsCount}
+                </span>
+                {gameMigrationStats.totalNonLiveTickets > 0 && (
+                  <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                    ⚠️ {gameMigrationStats.totalNonLiveTickets} अन्य मैचों में
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Game Wise Ticket Matrix Cards */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Ticket className="w-4 h-4 text-amber-400" />
+              <span>गेम/टूर्नामेंट अनुसार टिकट वितरण एवं त्वरित शिफ्ट:</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Active Games in List */}
+              {games.map((game) => {
+                const isLive = game.id === activeLiveGame?.id;
+                const count = gameMigrationStats.byGameId[game.id] || 0;
+                const ticketsForThisGame = tickets.filter(
+                  (t) => (t.gameId === game.id) || (!t.gameId && isLive)
+                );
+                const uniqueBuyersForGame = new Set(ticketsForThisGame.map((t) => t.userId || t.userName)).size;
+
+                return (
+                  <div
+                    key={game.id}
+                    className={`rounded-3xl p-5 border transition-all shadow-xl space-y-4 flex flex-col justify-between ${
+                      isLive
+                        ? 'bg-gradient-to-b from-emerald-950/40 via-slate-900 to-slate-950 border-emerald-500/50'
+                        : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h5 className="font-black text-white text-sm">{game.title}</h5>
+                            {isLive && (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[9px] uppercase tracking-wider">
+                                ● Live Now
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            टिकट दर: <strong className="text-amber-300 font-mono font-bold">₹{game.ticketPrice || 5}</strong> • {game.matchDate || 'Daily Match'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs">
+                        <div>
+                          <div className="text-slate-400 text-[10px]">कुल टिकट</div>
+                          <div className="text-lg font-black text-amber-400 font-mono">{count}</div>
+                        </div>
+                        <div>
+                          <div className="text-slate-400 text-[10px]">खिलाड़ी (Buyers)</div>
+                          <div className="text-lg font-black text-blue-300 font-mono">{uniqueBuyersForGame}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedGameFilter(game.id);
+                          setActiveSubTab('history');
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>टिकट देखें</span>
+                      </button>
+
+                      {!isLive && count > 0 && activeLiveGame && (
+                        <button
+                          type="button"
+                          onClick={() => openAllTransferModal(game.id)}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md shadow-cyan-500/20 active:scale-95 transition-all"
+                          title="इस गेम के सभी टिकट आज के लाइव मैच में भेजें"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5" />
+                          <span>लाइव मैच में भेजें ({count})</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Orphan or Unassigned Tickets Box if any */}
+              {gameMigrationStats.orphanTicketsCount > 0 && (
+                <div className="rounded-3xl p-5 bg-gradient-to-b from-amber-950/40 via-slate-900 to-slate-950 border border-amber-500/50 shadow-xl space-y-4 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>अपरिभाषित या पुराने गेम टिकट (Unassigned)</span>
+                    </div>
+                    <p className="text-xs text-slate-300">
+                      ये वे टिकट हैं जो किसी अज्ञात या डिलीट हो चुके गेम ID से जुड़े हैं।
+                    </p>
+                    <div className="p-3 rounded-2xl bg-slate-950 border border-amber-500/30 text-xs">
+                      <div className="text-slate-400 text-[10px]">कुल अपरिभाषित टिकट</div>
+                      <div className="text-xl font-black text-amber-400 font-mono">
+                        {gameMigrationStats.orphanTicketsCount} टिकट
+                      </div>
+                    </div>
+                  </div>
+
+                  {activeLiveGame && (
+                    <button
+                      type="button"
+                      onClick={() => openAllTransferModal('orphan')}
+                      className="w-full py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow active:scale-95 transition-all"
+                    >
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      <span>आज के लाइव गेम में जोड़ें ({gameMigrationStats.orphanTicketsCount})</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: EDIT / TRANSFER GAME (यूजर का गेम बदलें व आज के लाइव गेम में शिफ्ट करें) */}
+      {/* ========================================================================= */}
+      {editGameModalState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-lg bg-slate-900 border-2 border-cyan-500/80 rounded-3xl p-6 space-y-5 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0">
+                <ArrowRightLeft className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">गेम / टूर्नामेंट बदलें (Change Game)</h3>
+                <p className="text-xs text-slate-400">
+                  {editGameModalState.mode === 'single'
+                    ? 'इस टिकट को चयनित गेम / आज चलने वाले मैच में बदलें।'
+                    : editGameModalState.mode === 'batch'
+                    ? `चयनित ${editGameModalState.ticketIds?.length} टिकटों को नए गेम में ट्रांसफर करें।`
+                    : editGameModalState.mode === 'user'
+                    ? `यूजर (${editGameModalState.user?.name}) के सभी टिकटों को नए गेम में बदलें।`
+                    : 'सभी टिकटों को एक साथ आज के लाइव गेम में कंसॉलिडेट करें।'}
+                </p>
+              </div>
+            </div>
+
+            {/* Target Information */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+              {editGameModalState.mode === 'single' && editGameModalState.ticket && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">टिकट कोड:</span>
+                    <strong className="font-mono text-amber-400 font-black">
+                      {editGameModalState.ticket.ticketId || editGameModalState.ticket.id}
+                    </strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">खरीदार खिलाड़ी:</span>
+                    <strong className="text-white font-bold">{editGameModalState.ticket.userName || 'Player'}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">वर्तमान गेम:</span>
+                    <span className="text-amber-300 font-bold">{editGameModalState.ticket.gameTitle || 'Tambola Live'}</span>
+                  </div>
+                </>
+              )}
+
+              {editGameModalState.mode === 'batch' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">बदले जाने वाले टिकट:</span>
+                  <strong className="font-mono text-cyan-400 font-black text-sm">
+                    {editGameModalState.ticketIds?.length} टिकट
+                  </strong>
+                </div>
+              )}
+
+              {editGameModalState.mode === 'user' && editGameModalState.user && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">यूजर:</span>
+                    <strong className="text-white font-bold">{editGameModalState.user.name}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">कुल टिकट:</span>
+                    <strong className="font-mono text-cyan-400 font-black">{editGameModalState.user.count} टिकट</strong>
+                  </div>
+                </>
+              )}
+
+              {editGameModalState.mode === 'all' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">कुल शिफ्ट होने वाले टिकट:</span>
+                  <strong className="font-mono text-cyan-400 font-black text-sm">
+                    {totalTicketsSold} टिकट
+                  </strong>
+                </div>
+              )}
+            </div>
+
+            {/* Target Tournament Selector */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span>🎯 नया गेम / टूर्नामेंट चुनें (Target Game):</span>
+                {activeLiveGame && (
+                  <span className="text-emerald-400 text-[11px] font-bold">● {activeLiveGame.title} (Live)</span>
+                )}
+              </label>
+
+              <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {games.map((g) => {
+                  const isSelected = editGameModalState.targetGameId === g.id;
+                  const isLive = g.id === activeLiveGame?.id;
+                  return (
+                    <div
+                      key={g.id}
+                      onClick={() => setEditGameModalState((prev) => ({ ...prev, targetGameId: g.id }))}
+                      className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                        isSelected
+                          ? 'bg-cyan-500/20 border-cyan-400 text-white font-black shadow-md'
+                          : 'bg-slate-950/80 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          isSelected ? 'border-cyan-400 bg-cyan-400' : 'border-slate-600'
+                        }`}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />}
+                        </div>
+                        <div>
+                          <div className="font-bold flex items-center gap-1.5">
+                            <span>{g.title}</span>
+                            {isLive && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 text-[9px] font-black">
+                                लाइव मैच
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            दर: ₹{g.ticketPrice || 5} • {g.matchDate || 'Daily Match'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {isLive && (
+                        <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-lg">
+                          अनुशंसित (Recommended)
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Explanatory benefit note */}
+            <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200 flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <span>
+                गेम बदलने पर खिलाड़ी के टिकट का 3x9 ग्रिड नंबर वही रहेगा, सिर्फ उसका मैच बदल जाएगा ताकि वह आज के लाइव मैच में तुरंत भाग ले सके।
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setEditGameModalState({
+                    isOpen: false,
+                    mode: 'single',
+                    targetGameId: '',
+                    isUpdating: false,
+                  })
+                }
+                disabled={editGameModalState.isUpdating}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer transition-all"
+              >
+                रद्द करें (Cancel)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmGameUpdate}
+                disabled={editGameModalState.isUpdating || !editGameModalState.targetGameId}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-500/30 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>{editGameModalState.isUpdating ? 'अपडेट हो रहा है...' : 'हाँ, गेम बदलें (Confirm Shift)'}</span>
+              </button>
             </div>
           </div>
         </div>

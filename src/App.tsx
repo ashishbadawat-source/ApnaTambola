@@ -5102,6 +5102,229 @@ export function App() {
     }
   };
 
+  // 14g. Admin Edit Single Ticket Game (यूजर का टिकट आज के चलने वाले गेम में बदलें)
+  const handleAdminUpdateTicketGame = async (ticketId: string, targetGameId: string): Promise<boolean> => {
+    try {
+      const targetGame = games.find((g) => g.id === targetGameId);
+      if (!targetGame) return false;
+
+      let oldGameId = '';
+      let updatedTicket: TambolaTicket | null = null;
+
+      setTickets((prev) => {
+        const next = prev.map((t) => {
+          if (t.id === ticketId || t.ticketId === ticketId) {
+            oldGameId = t.gameId;
+            updatedTicket = {
+              ...t,
+              gameId: targetGame.id,
+              gameTitle: targetGame.title,
+              matchDate: targetGame.date || 'Today',
+            };
+            return updatedTicket;
+          }
+          return t;
+        });
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      if (!updatedTicket) return false;
+
+      // Update games participant counts
+      if (oldGameId && oldGameId !== targetGame.id) {
+        setGames((prev) =>
+          prev.map((g) => {
+            if (g.id === oldGameId) {
+              return {
+                ...g,
+                totalTicketsSold: Math.max(0, (g.totalTicketsSold || 0) - 1),
+              };
+            }
+            if (g.id === targetGame.id) {
+              return {
+                ...g,
+                totalTicketsSold: (g.totalTicketsSold || 0) + 1,
+              };
+            }
+            return g;
+          })
+        );
+      }
+
+      // Sync to Firestore
+      try {
+        const tktRef = doc(db, 'tickets', (updatedTicket as TambolaTicket).id);
+        await setDoc(
+          tktRef,
+          {
+            gameId: targetGame.id,
+            gameTitle: targetGame.title,
+            matchDate: targetGame.date || 'Today',
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn('Firestore ticket game update notice:', e);
+      }
+
+      // Notify User if applicable
+      const uId = (updatedTicket as TambolaTicket).userId;
+      if (uId) {
+        const tktCode = (updatedTicket as TambolaTicket).ticketId || (updatedTicket as TambolaTicket).id;
+        const transferNotif: UserNotificationItem = {
+          id: `un_trans_${Date.now()}`,
+          category: 'ticket_confirmation',
+          title: `🎟️ टिकट ट्रांसफर: आज के मैच में शिफ्ट`,
+          message: `आपका टिकट (${tktCode}) आज के लाइव मैच "${targetGame.title}" में सफलतापूर्वक शिफ्ट कर दिया गया है। आप इस मैच में लाइव खेल सकते हैं!`,
+          timestamp: 'Just now',
+          read: false,
+          actionTab: 'live',
+        };
+        setUserNotifications((prev) => [transferNotif, ...prev]);
+      }
+
+      // Admin Activity Log
+      setActivityLogs((prev) => [
+        {
+          id: `act_${Date.now()}_trans`,
+          adminName: currentUser?.name || 'Admin',
+          action: `🔄 टिकट #${(updatedTicket as TambolaTicket).ticketNumber} (${(updatedTicket as TambolaTicket).ticketId}) को "${targetGame.title}" में शिफ्ट किया गया।`,
+          category: 'ticket',
+          ipAddress: '127.0.0.1 (Admin)',
+          device: 'Admin Ticket Console',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          status: 'success',
+        },
+        ...prev,
+      ]);
+
+      // Broadcast across tabs
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'TICKET_GAME_UPDATED', ticketId, targetGameId });
+          bc.close();
+        }
+      } catch {}
+
+      return true;
+    } catch (err) {
+      console.error('Error updating ticket game:', err);
+      return false;
+    }
+  };
+
+  // 14h. Admin Batch Update Tickets Game (चयनित टिकटों को आज के गेम में शिफ्ट करें)
+  const handleAdminBatchUpdateTicketGame = async (
+    ticketIds: string[],
+    targetGameId: string
+  ): Promise<{ success: boolean; count: number }> => {
+    try {
+      if (!Array.isArray(ticketIds) || ticketIds.length === 0) return { success: false, count: 0 };
+      const targetGame = games.find((g) => g.id === targetGameId);
+      if (!targetGame) return { success: false, count: 0 };
+
+      const idSet = new Set(ticketIds);
+      let updatedCount = 0;
+
+      setTickets((prev) => {
+        const next = prev.map((t) => {
+          if (idSet.has(t.id) || idSet.has(t.ticketId)) {
+            updatedCount++;
+            return {
+              ...t,
+              gameId: targetGame.id,
+              gameTitle: targetGame.title,
+              matchDate: targetGame.date || 'Today',
+            };
+          }
+          return t;
+        });
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // Update game stats
+      setGames((prev) =>
+        prev.map((g) => {
+          if (g.id === targetGame.id) {
+            return {
+              ...g,
+              totalTicketsSold: (g.totalTicketsSold || 0) + updatedCount,
+            };
+          }
+          return g;
+        })
+      );
+
+      // Persist to Firestore
+      for (const tid of ticketIds) {
+        try {
+          const tkt = tickets.find((t) => t.id === tid || t.ticketId === tid);
+          const docId = tkt?.id || tid;
+          setDoc(
+            doc(db, 'tickets', docId),
+            {
+              gameId: targetGame.id,
+              gameTitle: targetGame.title,
+              matchDate: targetGame.date || 'Today',
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        } catch {}
+      }
+
+      // Broadcast
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'TICKETS_BATCH_GAME_UPDATED', ticketIds, targetGameId });
+          bc.close();
+        }
+      } catch {}
+
+      return { success: true, count: updatedCount };
+    } catch (err) {
+      console.error('Error batch updating ticket game:', err);
+      return { success: false, count: 0 };
+    }
+  };
+
+  // 14i. Admin Transfer All Tickets To Target Game (सारे यूजर एक ही गेम खेल सकें)
+  const handleAdminTransferAllTicketsToGame = async (
+    targetGameId: string,
+    sourceGameId?: string
+  ): Promise<{ success: boolean; count: number }> => {
+    try {
+      const targetGame = games.find((g) => g.id === targetGameId);
+      if (!targetGame) return { success: false, count: 0 };
+
+      // Find all tickets that need transfer
+      const ticketsToTransfer = tickets.filter((t) => {
+        if (t.gameId === targetGame.id) return false; // Already in target game
+        if (sourceGameId && sourceGameId !== 'all') {
+          return t.gameId === sourceGameId;
+        }
+        return true;
+      });
+
+      if (ticketsToTransfer.length === 0) return { success: true, count: 0 };
+
+      const ids = ticketsToTransfer.map((t) => t.id);
+      return await handleAdminBatchUpdateTicketGame(ids, targetGame.id);
+    } catch (err) {
+      console.error('Error transferring all tickets to game:', err);
+      return { success: false, count: 0 };
+    }
+  };
+
   // 14f. Delete Single Winner Record (विजेता रिमूव करें)
   const handleDeleteWinner = async (winnerId: string): Promise<boolean> => {
     try {
@@ -6062,6 +6285,9 @@ export function App() {
             onAdminGenerateTickets={handleAdminGenerateTickets}
             onAdminToggleTicketStatus={handleAdminToggleTicketStatus}
             onAdminBatchToggleTickets={handleAdminBatchToggleTickets}
+            onAdminUpdateTicketGame={handleAdminUpdateTicketGame}
+            onAdminBatchUpdateTicketGame={handleAdminBatchUpdateTicketGame}
+            onAdminTransferAllTicketsToGame={handleAdminTransferAllTicketsToGame}
             onDeleteTicket={handleDeleteTicket}
             onBatchDeleteTickets={handleBatchDeleteTickets}
             onApproveCommission={handleApproveCommission}
