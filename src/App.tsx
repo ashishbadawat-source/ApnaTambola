@@ -169,16 +169,28 @@ export function App() {
       if (Array.isArray(arr)) deletedTicketIds = new Set(arr);
     } catch (e) {}
 
+    let completedGameIds = new Set<string>();
+    try {
+      const savedGames = JSON.parse(localStorage.getItem('apna_tambola_games') || '[]');
+      if (Array.isArray(savedGames)) {
+        savedGames.forEach((g: any) => {
+          if (g && (g.status === 'completed' || g.status === 'cancelled')) {
+            completedGameIds.add(g.id);
+          }
+        });
+      }
+    } catch (e) {}
+
     try {
       const saved = localStorage.getItem('apna_tambola_tickets');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((t: TambolaTicket) => !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId));
+          return parsed.filter((t: TambolaTicket) => !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId) && (!t.gameId || !completedGameIds.has(t.gameId)));
         }
       }
     } catch (e) {}
-    return INITIAL_TICKETS.filter((t) => !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId));
+    return INITIAL_TICKETS.filter((t) => !deletedTicketIds.has(t.id) && !deletedTicketIds.has(t.ticketId) && (!t.gameId || !completedGameIds.has(t.gameId)));
   });
 
   const [winners, setWinners] = useState<GameWinner[]>(() => {
@@ -3342,6 +3354,11 @@ export function App() {
     const ticket = tickets.find((t) => t.id === ticketId);
     if (!ticket || !liveGame) return;
 
+    if (liveGame.status === 'completed' || ticket.isCompleted || ticket.isArchived) {
+      alert('यह गेम पहले ही समाप्त (Completed) हो चुका है! इस पर कोई पेमेंट या प्राइज क्लेम मान्य नहीं है।');
+      return;
+    }
+
     const prize = liveGame.prizes.find((p) => p.code === prizeCode);
     if (!prize) return;
 
@@ -4592,17 +4609,7 @@ export function App() {
     });
 
     if (markCompleted) {
-      setTickets((prev) => {
-        const next = prev.map((t) =>
-          t.gameId === gameId
-            ? { ...t, isCompleted: true, isArchived: true }
-            : t
-        );
-        try {
-          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
-        } catch {}
-        return next;
-      });
+      await handleClearCompletedTickets(gameId);
     }
 
     setSiteSettings((prev) => {
@@ -4677,6 +4684,7 @@ export function App() {
     } else {
       if (normalizedUpdates.status === 'completed') {
         normalizedUpdates.autoCalling = false;
+        await handleClearCompletedTickets(gameId);
         setSiteSettings((prev) => {
           const next = { ...prev, isLiveStopped: true };
           try {

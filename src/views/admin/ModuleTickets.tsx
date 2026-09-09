@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Ticket,
   Plus,
@@ -247,6 +247,13 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   };
 
   // Completed games set for filtering old/finished tickets
+  // Automatically clear / remove completed game tickets on module mount
+  useEffect(() => {
+    if (onClearCompletedTickets) {
+      onClearCompletedTickets('all').catch(() => {});
+    }
+  }, []);
+
   const completedGameIds = useMemo(() => {
     return new Set(games.filter((g) => g.status === 'completed').map((g) => g.id));
   }, [games]);
