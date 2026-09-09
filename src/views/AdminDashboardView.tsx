@@ -109,6 +109,7 @@ interface AdminDashboardViewProps {
   onAdminUpdateTicketGame?: (ticketId: string, targetGameId: string) => Promise<boolean>;
   onAdminBatchUpdateTicketGame?: (ticketIds: string[], targetGameId: string) => Promise<{ success: boolean; count: number }>;
   onAdminTransferAllTicketsToGame?: (targetGameId: string, sourceGameId?: string) => Promise<{ success: boolean; count: number }>;
+  onClearCompletedTickets?: (gameId?: string) => Promise<{ success: boolean; clearedCount: number }>;
   onDeleteTicket?: (ticketId: string, refundUser?: boolean) => Promise<boolean>;
   onBatchDeleteTickets?: (ticketIds: string[], refundUser?: boolean) => Promise<boolean>;
   onApproveCommission?: (commissionId: string) => void;
@@ -120,6 +121,13 @@ interface AdminDashboardViewProps {
   onUpdateUser?: (user: User) => void;
   onDeleteUser?: (userId: string) => Promise<boolean> | void;
   onBatchDeleteUsers?: (userIds: string[]) => Promise<boolean> | void;
+  onSetTicketName?: (gameId: string, ticketName: string) => Promise<boolean>;
+  onRunClawbackAudit?: () => Promise<{
+    auditedCount: number;
+    clawbacks: any[];
+    totalClawbackAmount: number;
+    deductedUsersCount: number;
+  }>;
   onForceRefresh?: () => void;
   isSyncing?: boolean;
   onViewUserWallet?: (user: User) => void;
@@ -205,6 +213,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onAdminUpdateTicketGame,
   onAdminBatchUpdateTicketGame,
   onAdminTransferAllTicketsToGame,
+  onClearCompletedTickets,
   onDeleteTicket,
   onBatchDeleteTickets,
   onApproveCommission,
@@ -221,6 +230,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onViewUserWallet,
   onToggleAutoTicket,
   onRunAutoTicketDispatch,
+  onSetTicketName,
+  onRunClawbackAudit,
   franchises = [],
   franchiseTransfers = [],
   onApproveFranchise = async () => true,
@@ -500,8 +511,15 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onAdminUpdateTicketGame={onAdminUpdateTicketGame}
             onAdminBatchUpdateTicketGame={onAdminBatchUpdateTicketGame}
             onAdminTransferAllTicketsToGame={onAdminTransferAllTicketsToGame}
+            onClearCompletedTickets={onClearCompletedTickets}
             onDeleteTicket={onDeleteTicket}
             onBatchDeleteTickets={onBatchDeleteTickets}
+            onStartGame={onStartGame}
+            onStopGame={onStopGame}
+            onUpdateGame={onUpdateGame}
+            onUpdateSettings={onUpdateSettings}
+            onSetTicketName={onSetTicketName}
+            onRunClawbackAudit={onRunClawbackAudit}
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
           />

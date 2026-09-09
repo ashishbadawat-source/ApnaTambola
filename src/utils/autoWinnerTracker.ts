@@ -142,6 +142,22 @@ export function checkAndAutoTrackWinners(
       );
       if (alreadyClaimed) continue;
 
+      // 🛡️ Strict Anti-Cheat Rule: 1 Ticket can win ONLY 1 Full House!
+      // If a ticket already claimed 'full_house', 'second_full_house', or 'third_full_house', it CANNOT claim any other Full House.
+      const isFullHousePrize = prizeCode === 'full_house' || prizeCode === 'second_full_house' || prizeCode === 'third_full_house';
+      if (isFullHousePrize) {
+        const hasAlreadyWonFullHouse = updatedPrizes.some(
+          (p) =>
+            (p.code === 'full_house' || p.code === 'second_full_house' || p.code === 'third_full_house') &&
+            Array.isArray(p.claimedWinners) &&
+            p.claimedWinners.some((w) => w && (w.ticketId === ticket.ticketId || (w.userId === ticket.userId && w.ticketNumber === ticket.ticketNumber)))
+        );
+        if (hasAlreadyWonFullHouse) {
+          // Skip ticket: Duplicate Full House on the same ticket is strictly forbidden by game rules!
+          continue;
+        }
+      }
+
       // Check if this ticket qualifies for this prize
       const verification = verifyClaim(
         prizeCode,
@@ -206,5 +222,92 @@ export function checkAndAutoTrackWinners(
   return {
     newWins,
     updatedPrizes,
+  };
+}
+
+export interface ClawbackItem {
+  ticketId: string;
+  ticketNumber: number;
+  userId: string;
+  userName: string;
+  duplicateWinnerId: string;
+  duplicatePrizeCode: string;
+  duplicatePrizeName: string;
+  clawbackAmount: number;
+  gameId: string;
+  gameTitle?: string;
+  reason: string;
+}
+
+export interface ClawbackAuditResult {
+  auditedCount: number;
+  clawbacks: ClawbackItem[];
+  totalClawbackAmount: number;
+}
+
+/**
+ * 🛡️ Anti-Cheat Audit Engine:
+ * Scans all winners and prize claim records.
+ * If any single ticket has > 1 Full House recorded (e.g. 1st Full House AND 2nd Full House on same ticket),
+ * it flags the duplicate payouts and calculates the exact penalty clawback deduction.
+ */
+export function auditDuplicateFullHouseWins(
+  allWinners: Array<{
+    id: string;
+    gameId: string;
+    gameTitle?: string;
+    prizeCode: PrizeCode | string;
+    prizeName: string;
+    prizeAmount: number;
+    userId: string;
+    userName: string;
+    ticketId: string;
+    ticketNumber: number;
+    date?: string;
+  }>
+): ClawbackAuditResult {
+  const fullHousePrizes = new Set(['full_house', 'second_full_house', 'third_full_house']);
+  const ticketFhMap = new Map<string, Array<typeof allWinners[0]>>();
+
+  for (const win of allWinners) {
+    if (!win || !win.ticketId || !fullHousePrizes.has(win.prizeCode)) continue;
+    const existing = ticketFhMap.get(win.ticketId) || [];
+    existing.push(win);
+    ticketFhMap.set(win.ticketId, existing);
+  }
+
+  const clawbacks: ClawbackItem[] = [];
+  let totalClawbackAmount = 0;
+
+  ticketFhMap.forEach((wins, ticketId) => {
+    if (wins.length > 1) {
+      // 1st win is legitimate, subsequent Full Houses on the same ticket are violations!
+      const validFirstWin = wins[0];
+      const duplicateWins = wins.slice(1);
+
+      for (const dup of duplicateWins) {
+        const amt = Number(dup.prizeAmount) || 0;
+        totalClawbackAmount += amt;
+        clawbacks.push({
+          ticketId,
+          ticketNumber: dup.ticketNumber || validFirstWin.ticketNumber,
+          userId: dup.userId,
+          userName: dup.userName,
+          duplicateWinnerId: dup.id,
+          duplicatePrizeCode: dup.prizeCode,
+          duplicatePrizeName: dup.prizeName,
+          clawbackAmount: amt,
+          gameId: dup.gameId,
+          gameTitle: dup.gameTitle,
+          reason: `नियम उल्लंघन: टिकट #${dup.ticketNumber || ticketId} पर पहले से 1 फुलहाउस (${validFirstWin.prizeName}) जीता जा चुका है। एक टिकट पर 2 फुलहाउस मान्य नहीं होने के कारण अतिरिक्त ₹${amt} की कटौती की गई।`,
+        });
+      }
+    }
+  });
+
+  return {
+    auditedCount: allWinners.length,
+    clawbacks,
+    totalClawbackAmount,
   };
 }

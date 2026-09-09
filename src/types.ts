@@ -75,6 +75,8 @@ export interface TambolaTicket {
   price: number;
   purchaseDate: string;
   colorTheme?: TicketColorThemeId;
+  ticketName?: string; // Custom ticket name/label set by Admin (e.g. "रॉयल सुपर ₹50", "धमाका ₹100")
+  ticketLabel?: string;
   autoMode?: boolean; // Auto-track and auto-claim prizes even when offline
   isWinner?: boolean;
   isWinningTicket?: boolean;
@@ -85,6 +87,8 @@ export interface TambolaTicket {
   isActive?: boolean; // Admin ON / OFF toggle for individual ticket (Default true: ON / चालू, false: OFF / बंद)
   status?: 'active' | 'void' | 'disabled' | 'refunded';
   disabledReason?: string;
+  isCompleted?: boolean;
+  isArchived?: boolean;
 }
 
 export type PrizeCode =
@@ -136,6 +140,8 @@ export interface TambolaGame {
   maxTicketsPerUser?: number;
   prizePool: number;
   ticketColorTheme?: TicketColorThemeId;
+  ticketName?: string; // Admin-defined Ticket Name (e.g. "रॉयल सुपर ₹50", "धमाका ₹100", "गोल्डन स्टार ₹20")
+  ticketLabel?: string;
   status: GameStatus;
   isGameEnabled?: boolean; // Admin Master ON / OFF toggle for entire game (Default true: ON / चालू, false: OFF / बंद)
   isActive?: boolean; // Alias for isGameEnabled

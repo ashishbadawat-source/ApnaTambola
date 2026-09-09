@@ -39,6 +39,12 @@ import {
   Repeat,
   Send,
   CheckCheck,
+  Play,
+  Square,
+  Archive,
+  FolderArchive,
+  Radio,
+  Award,
 } from 'lucide-react';
 import { TambolaTicket, TambolaGame, User, TicketColorThemeId, SiteSettings } from '../../types';
 import { TambolaTicketCard } from '../../components/TambolaTicketCard';
@@ -58,15 +64,28 @@ interface ModuleTicketsProps {
   onAdminUpdateTicketGame?: (ticketId: string, targetGameId: string) => Promise<boolean>;
   onAdminBatchUpdateTicketGame?: (ticketIds: string[], targetGameId: string) => Promise<{ success: boolean; count: number }>;
   onAdminTransferAllTicketsToGame?: (targetGameId: string, sourceGameId?: string) => Promise<{ success: boolean; count: number }>;
+  onClearCompletedTickets?: (gameId?: string) => Promise<{ success: boolean; clearedCount: number }>;
   onDeleteTicket?: (ticketId: string, refundUser?: boolean) => Promise<boolean>;
   onBatchDeleteTickets?: (ticketIds: string[], refundUser?: boolean) => Promise<boolean>;
+  onStartGame?: (gameId: string) => Promise<void>;
+  onStopGame?: (gameId: string, markCompleted?: boolean) => Promise<void>;
+  onUpdateGame?: (gameId: string, updates: Partial<TambolaGame>) => Promise<boolean>;
+  onUpdateSettings?: (settings: Partial<SiteSettings>) => Promise<boolean>;
+  onSetTicketName?: (gameId: string, ticketName: string) => Promise<boolean>;
+  onRunClawbackAudit?: () => Promise<{
+    auditedCount: number;
+    clawbacks: any[];
+    totalClawbackAmount: number;
+    deductedUsersCount: number;
+  }>;
   onForceRefresh?: () => void;
   isSyncing?: boolean;
 }
 
-type SubTab = 'history' | 'buyers' | 'transfer' | 'cards' | 'generator' | 'auto_ticket';
+type SubTab = 'history' | 'names_report' | 'buyers' | 'transfer' | 'cards' | 'generator' | 'auto_ticket' | 'controller' | 'anticheat_audit';
 type StatusFilter = 'all' | 'active' | 'disabled' | 'winning';
 type SortOption = 'newest' | 'oldest' | 'price_high' | 'price_low' | 'buyer_asc';
+type TicketPoolFilter = 'active_games' | 'completed_games' | 'all_tickets';
 
 export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   tickets,
@@ -81,13 +100,57 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   onAdminUpdateTicketGame,
   onAdminBatchUpdateTicketGame,
   onAdminTransferAllTicketsToGame,
+  onClearCompletedTickets,
   onDeleteTicket,
   onBatchDeleteTickets,
+  onStartGame,
+  onStopGame,
+  onUpdateGame,
+  onUpdateSettings,
+  onSetTicketName,
+  onRunClawbackAudit,
   onForceRefresh,
   isSyncing = false,
 }) => {
   // Navigation sub-tab
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('history');
+
+  // Ticket Name Editor Modal State
+  const [ticketNameModalState, setTicketNameModalState] = useState<{
+    isOpen: boolean;
+    gameId: string;
+    gameTitle: string;
+    ticketPrice: number;
+    currentName: string;
+    isSaving: boolean;
+  }>({
+    isOpen: false,
+    gameId: '',
+    gameTitle: '',
+    ticketPrice: 0,
+    currentName: '',
+    isSaving: false,
+  });
+
+  // Anti-Cheat Audit State
+  const [clawbackAuditState, setClawbackAuditState] = useState<{
+    isRunning: boolean;
+    lastResult: {
+      auditedCount: number;
+      clawbacks: any[];
+      totalClawbackAmount: number;
+      deductedUsersCount: number;
+    } | null;
+  }>({
+    isRunning: false,
+    lastResult: null,
+  });
+
+  // Game Selector for starting game
+  const [selectedGameToStartId, setSelectedGameToStartId] = useState<string>('');
+
+  // Pool filter: 'active_games' hides completed game tickets by default so new tickets can take their place!
+  const [ticketPoolFilter, setTicketPoolFilter] = useState<TicketPoolFilter>('active_games');
 
   // Search, Filter & Sort
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,6 +158,11 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   const [selectedBuyerFilter, setSelectedBuyerFilter] = useState('all');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<StatusFilter>('all');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
+
+  // Clear Completed Tickets Modal State
+  const [clearCompletedModalOpen, setClearCompletedModalOpen] = useState(false);
+  const [selectedGameToClear, setSelectedGameToClear] = useState<string>('all');
+  const [isClearingCompleted, setIsClearingCompleted] = useState(false);
 
   // Multi-selection for batch operations
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
@@ -178,6 +246,11 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     setTimeout(() => setNotificationMsg(null), 4500);
   };
 
+  // Completed games set for filtering old/finished tickets
+  const completedGameIds = useMemo(() => {
+    return new Set(games.filter((g) => g.status === 'completed').map((g) => g.id));
+  }, [games]);
+
   // Helper map of users by ID for quick profile lookup
   const userMap = useMemo(() => {
     const map = new Map<string, User>();
@@ -187,6 +260,19 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     });
     return map;
   }, [users]);
+
+  // Total completed tickets count across finished games or with isCompleted/isArchived
+  const completedTicketsList = useMemo(() => {
+    return tickets.filter(
+      (t) => Boolean(t.isCompleted) || Boolean(t.isArchived) || (t.gameId && completedGameIds.has(t.gameId))
+    );
+  }, [tickets, completedGameIds]);
+
+  const activeTicketsList = useMemo(() => {
+    return tickets.filter(
+      (t) => !t.isCompleted && !t.isArchived && (!t.gameId || !completedGameIds.has(t.gameId))
+    );
+  }, [tickets, completedGameIds]);
 
   // Unique Buyers Aggregation (किस यूजर ने कौन से गेम का कितना टिकट ले रखा है)
   const buyerSummary = useMemo(() => {
@@ -212,7 +298,15 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
 
     const activeLiveId = activeLiveGame?.id || '';
 
-    tickets.forEach((t) => {
+    // Tickets to consider based on pool filter
+    const poolTickets = tickets.filter((t) => {
+      const isTicketCompleted = Boolean(t.isCompleted) || Boolean(t.isArchived) || (t.gameId && completedGameIds.has(t.gameId));
+      if (ticketPoolFilter === 'active_games') return !isTicketCompleted;
+      if (ticketPoolFilter === 'completed_games') return isTicketCompleted;
+      return true;
+    });
+
+    poolTickets.forEach((t) => {
       const uId = t.userId || t.userName || 'unknown';
       const uProfile = t.userId ? userMap.get(t.userId) : undefined;
       const userName = uProfile?.name || t.userName || 'Unknown Player';
@@ -285,7 +379,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         };
       })
       .sort((a, b) => b.ticketCount - a.ticketCount);
-  }, [tickets, userMap, activeLiveGame]);
+  }, [tickets, userMap, activeLiveGame, completedGameIds, ticketPoolFilter]);
 
   // Distinct ticket prices sold across the platform
   const distinctTicketPrices = useMemo(() => {
@@ -319,7 +413,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
   const totalTicketsSold = tickets.length;
   const uniqueBuyersCount = buyerSummary.length;
   const totalTicketRevenue = tickets.reduce((acc, t) => acc + (Number(t.price) || 0), 0);
-  const activeTicketsCount = tickets.filter((t) => t.isActive !== false).length;
+  const activeTicketsCount = activeTicketsList.filter((t) => t.isActive !== false).length;
   const disabledTicketsCount = tickets.filter((t) => t.isActive === false).length;
   const winningTicketsCount = tickets.filter((t) => t.isWinningTicket || t.isWinner).length;
 
@@ -367,15 +461,206 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     };
   }, [games, tickets, activeLiveGame]);
 
+  // 🏷️ Ticket Name & Sales Aggregation (किस नाम का टिकट कितना बिका है)
+  const ticketNameSummary = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        key: string;
+        gameId: string;
+        ticketName: string;
+        gameTitle: string;
+        ticketPrice: number;
+        soldCount: number;
+        totalRevenue: number;
+        activeCount: number;
+        disabledCount: number;
+        winningCount: number;
+        status: string;
+        isCurrentLive: boolean;
+        isBookingOpen: boolean;
+        game?: TambolaGame;
+        tickets: TambolaTicket[];
+      }
+    >();
+
+    // 1. Scan games
+    games.forEach((g) => {
+      const name = g.ticketName || g.title || `टिकट ₹${g.ticketPrice}`;
+      const isLive = g.id === activeLiveGame?.id;
+      const isBooking = g.isBookingOpen !== false && g.bookingOpen !== false;
+      map.set(g.id, {
+        key: g.id,
+        gameId: g.id,
+        ticketName: name,
+        gameTitle: g.title,
+        ticketPrice: g.ticketPrice || 0,
+        soldCount: 0,
+        totalRevenue: 0,
+        activeCount: 0,
+        disabledCount: 0,
+        winningCount: 0,
+        status: g.status,
+        isCurrentLive: isLive,
+        isBookingOpen: isBooking,
+        game: g,
+        tickets: [],
+      });
+    });
+
+    // 2. Scan tickets and group
+    tickets.forEach((t) => {
+      const gId = t.gameId || 'unassigned';
+      let entry = map.get(gId);
+      const isActive = t.isActive !== false && t.status !== 'disabled';
+      const isWinning = Boolean(t.isWinner || t.isWinningTicket);
+      const price = Number(t.price) || (entry ? entry.ticketPrice : 0);
+
+      if (!entry) {
+        const name = t.ticketName || t.gameTitle || `अनअसाइंड टिकट ₹${price}`;
+        entry = {
+          key: gId,
+          gameId: gId,
+          ticketName: name,
+          gameTitle: t.gameTitle || 'Unnamed Match',
+          ticketPrice: price,
+          soldCount: 0,
+          totalRevenue: 0,
+          activeCount: 0,
+          disabledCount: 0,
+          winningCount: 0,
+          status: 'upcoming',
+          isCurrentLive: false,
+          isBookingOpen: true,
+          tickets: [],
+        };
+        map.set(gId, entry);
+      }
+
+      entry.soldCount += 1;
+      entry.totalRevenue += price;
+      entry.tickets.push(t);
+      if (isActive) entry.activeCount += 1;
+      else entry.disabledCount += 1;
+      if (isWinning) entry.winningCount += 1;
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.soldCount - a.soldCount);
+  }, [games, tickets, activeLiveGame]);
+
+  // Handle Save Custom Ticket Name
+  const handleSaveTicketName = async () => {
+    if (!ticketNameModalState.gameId || !ticketNameModalState.currentName.trim()) {
+      showNotification('कृपया टिकट का वैध नाम दर्ज करें', 'error');
+      return;
+    }
+    setTicketNameModalState((prev) => ({ ...prev, isSaving: true }));
+    try {
+      if (onSetTicketName) {
+        await onSetTicketName(ticketNameModalState.gameId, ticketNameModalState.currentName.trim());
+      } else if (onUpdateGame) {
+        await onUpdateGame(ticketNameModalState.gameId, {
+          ticketName: ticketNameModalState.currentName.trim(),
+          ticketLabel: ticketNameModalState.currentName.trim(),
+        });
+      }
+      showNotification(`🏷️ टिकट का नाम सफलतापूर्वक बदलकर "${ticketNameModalState.currentName.trim()}" कर दिया गया!`, 'success');
+      setTicketNameModalState({
+        isOpen: false,
+        gameId: '',
+        gameTitle: '',
+        ticketPrice: 0,
+        currentName: '',
+        isSaving: false,
+      });
+      if (onForceRefresh) onForceRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'टिकट नाम बदलने में त्रुटि आई', 'error');
+      setTicketNameModalState((prev) => ({ ...prev, isSaving: false }));
+    }
+  };
+
+  // Handle Run Anti-Cheat Clawback Audit
+  const handleExecuteClawbackAudit = async () => {
+    setClawbackAuditState((prev) => ({ ...prev, isRunning: true }));
+    try {
+      if (onRunClawbackAudit) {
+        const result = await onRunClawbackAudit();
+        setClawbackAuditState({ isRunning: false, lastResult: result });
+        if (result.clawbacks.length > 0) {
+          showNotification(
+            `🛡️ एंटी-चीट ऑडिट संपन्न: ${result.clawbacks.length} डुप्लीकेट फुलहाउस डिटेक्ट हुए! कुल ₹${result.totalClawbackAmount} की कटौती यूजर वॉलेट से सफलतापूर्वक की गई।`,
+            'success'
+          );
+        } else {
+          showNotification(
+            `✅ एंटी-चीट ऑडिट संपन्न: कोई डुप्लीकेट फुलहाउस नहीं मिला। सभी ${result.auditedCount} विजेता 100% नियमानुसार सुरक्षित हैं।`,
+            'info'
+          );
+        }
+      } else {
+        showNotification('ऑडिट फंक्शन उपलब्ध नहीं है', 'error');
+        setClawbackAuditState((prev) => ({ ...prev, isRunning: false }));
+      }
+      if (onForceRefresh) onForceRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'ऑडिट प्रक्रिया में त्रुटि आई', 'error');
+      setClawbackAuditState((prev) => ({ ...prev, isRunning: false }));
+    }
+  };
+
+  // Handle Start Selected Game (Admin Starts Selected Ticket Game)
+  const handleStartSelectedGame = async (targetGameId?: string) => {
+    const gameIdToStart = targetGameId || selectedGameToStartId || activeLiveGame?.id;
+    if (!gameIdToStart) {
+      showNotification('कृपया शुरू करने के लिए कोई गेम / टिकट चुनें', 'error');
+      return;
+    }
+    const targetGame = games.find((g) => g.id === gameIdToStart);
+    try {
+      if (onStartGame) {
+        await onStartGame(gameIdToStart);
+      }
+      if (onUpdateGame) {
+        await onUpdateGame(gameIdToStart, {
+          status: 'live',
+          isActive: true,
+          isGameEnabled: true,
+          isBookingOpen: true,
+          bookingOpen: true,
+        });
+      }
+      showNotification(
+        `🚀 चयनित टिकट गेम "${targetGame?.ticketName || targetGame?.title || 'Game'}" सफलतापूर्वक चालू (LIVE) कर दिया गया है!`,
+        'success'
+      );
+      if (onForceRefresh) onForceRefresh();
+    } catch (err: any) {
+      showNotification(err?.message || 'गेम शुरू करने में त्रुटि आई', 'error');
+    }
+  };
+
   const filteredTickets = useMemo(() => {
     let result = tickets.filter((t) => {
       if (!t) return false;
+      const isTicketCompleted = Boolean(t.isCompleted) || Boolean(t.isArchived) || (t.gameId && completedGameIds.has(t.gameId));
+
+      // 1. Ticket Pool filter (Default: active_games hides completed game tickets!)
+      if (ticketPoolFilter === 'active_games' && isTicketCompleted) return false;
+      if (ticketPoolFilter === 'completed_games' && !isTicketCompleted) return false;
+
+      // 2. Selected Game Filter
       if (selectedGameFilter !== 'all' && t.gameId !== selectedGameFilter) return false;
+
+      // 3. Selected Buyer Filter
       if (selectedBuyerFilter !== 'all' && t.userId !== selectedBuyerFilter && t.userName !== selectedBuyerFilter) return false;
+
+      // 4. Status Filter
       if (selectedStatusFilter === 'winning' && !t.isWinningTicket && !t.isWinner) return false;
       if (selectedStatusFilter === 'active' && t.isActive === false) return false;
       if (selectedStatusFilter === 'disabled' && t.isActive !== false) return false;
 
+      // 5. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const ticketId = (t.ticketId || '').toLowerCase();
@@ -420,7 +705,7 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
     });
 
     return result;
-  }, [tickets, selectedGameFilter, selectedBuyerFilter, selectedStatusFilter, searchQuery, sortBy, userMap]);
+  }, [tickets, selectedGameFilter, selectedBuyerFilter, selectedStatusFilter, searchQuery, sortBy, userMap, ticketPoolFilter, completedGameIds]);
 
   // Multi-select handlers
   const handleToggleSelectAll = () => {
@@ -782,6 +1067,100 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       console.error('Game update error:', err);
       showNotification('टिकट का गेम बदलने में त्रुटि आई। कृपया पुनः प्रयास करें।', 'error');
       setEditGameModalState((prev) => ({ ...prev, isUpdating: false }));
+    }
+  };
+
+  // Clear / Purge Completed Game Tickets (जो टिकट का गेम हो जाता है वह टिकट हट जाना चाहिए)
+  const handleConfirmClearCompletedTickets = async () => {
+    setIsClearingCompleted(true);
+    try {
+      if (onClearCompletedTickets) {
+        const res = await onClearCompletedTickets(selectedGameToClear);
+        showNotification(
+          `🧹 सफलतापूर्वक ${res.clearedCount} समाप्त/पुराने टिकट हटा दिए गए! अब नए टिकट सूची में आ सकते हैं।`,
+          'success'
+        );
+      } else {
+        showNotification('समाप्त टिकट हटा दिए गए हैं।', 'success');
+      }
+      setClearCompletedModalOpen(false);
+      setSelectedTicketIds([]);
+      if (onForceRefresh) onForceRefresh();
+    } catch (err: any) {
+      console.error('Clear completed tickets error:', err);
+      showNotification(`त्रुटि: ${err?.message || 'समाप्त टिकट हटाने में समस्या आई'}`, 'error');
+    } finally {
+      setIsClearingCompleted(false);
+    }
+  };
+
+  // Master Ticket Booking Start / Stop Toggle
+  const handleToggleGlobalBooking = async () => {
+    const nextState = siteSettings?.globalTicketBookingEnabled === false;
+    try {
+      if (onUpdateSettings) {
+        await onUpdateSettings({ globalTicketBookingEnabled: nextState });
+      }
+      showNotification(
+        `🎟️ मास्टर टिकट बुकिंग को ${nextState ? 'चालू (OPEN / ENABLED)' : 'बंद (STOPPED / CLOSED)'} कर दिया गया है!`,
+        nextState ? 'success' : 'info'
+      );
+    } catch {
+      showNotification('सेटिंग्स अपडेट करने में त्रुटि आई', 'error');
+    }
+  };
+
+  // Single Game Booking Start / Stop Toggle
+  const handleToggleGameBooking = async (gameId: string, currentBookingState: boolean) => {
+    const nextBookingState = !currentBookingState;
+    try {
+      if (onUpdateGame) {
+        await onUpdateGame(gameId, {
+          isBookingOpen: nextBookingState,
+          bookingOpen: nextBookingState,
+          isActive: true,
+          isGameEnabled: true,
+        });
+        showNotification(
+          `इस गेम की टिकट बुकिंग ${nextBookingState ? '🟢 चालू (OPEN)' : '🛑 बंद (CLOSED)'} कर दी गई है!`,
+          nextBookingState ? 'success' : 'info'
+        );
+      }
+    } catch {
+      showNotification('गेम बुकिंग अपडेट करने में त्रुटि आई', 'error');
+    }
+  };
+
+  // 1-Click Game & Tickets Start Handler
+  const handleStartGameFromTickets = async (gameId: string) => {
+    try {
+      if (onStartGame) {
+        await onStartGame(gameId);
+      }
+      if (onUpdateGame) {
+        await onUpdateGame(gameId, {
+          status: 'live',
+          isActive: true,
+          isGameEnabled: true,
+          isBookingOpen: true,
+          bookingOpen: true,
+        });
+      }
+      showNotification('🚀 टूर्नामेंट शुरू कर दिया गया है और टिकट बुकिंग लाइव हो गई है!', 'success');
+    } catch {
+      showNotification('गेम शुरू करने में त्रुटि आई', 'error');
+    }
+  };
+
+  // 1-Click Game Stop & Archive Old Tickets Handler
+  const handleStopGameFromTickets = async (gameId: string) => {
+    try {
+      if (onStopGame) {
+        await onStopGame(gameId, true);
+      }
+      showNotification('⏹️ गेम समाप्त हो गया है। इसके सभी टिकट समाप्त सूची में चले गए हैं ताकि नए टिकट आ सकें!', 'info');
+    } catch {
+      showNotification('गेम रोकने में त्रुटि आई', 'error');
     }
   };
 
@@ -1205,6 +1584,36 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
         </button>
 
         <button
+          onClick={() => setActiveSubTab('names_report')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'names_report'
+              ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20'
+              : 'bg-slate-900/80 hover:bg-slate-800 text-amber-300 border border-amber-500/30'
+          }`}
+        >
+          <Award className="w-4 h-4 text-amber-400" />
+          <span>🏷️ टिकट नाम व बिक्री रिपोर्ट (By Name)</span>
+          <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">
+            {ticketNameSummary.length} प्रकार
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveSubTab('anticheat_audit')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'anticheat_audit'
+              ? 'bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white shadow-lg shadow-red-500/20'
+              : 'bg-slate-900/80 hover:bg-slate-800 text-rose-300 border border-rose-500/30'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-rose-400" />
+          <span>🛡️ एंटी-चीट 1 फुलहाउस ऑडिट (Clawback)</span>
+          <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-bold">
+            1 टिकट = 1 फुलहाउस
+          </span>
+        </button>
+
+        <button
           onClick={() => setActiveSubTab('buyers')}
           className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
             activeSubTab === 'buyers'
@@ -1274,6 +1683,23 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
             {gameMigrationStats.totalNonLiveTickets > 0 ? `⚠️ ${gameMigrationStats.totalNonLiveTickets} शिफ्ट करें` : '✅ All Live'}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveSubTab('controller')}
+          className={`px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+            activeSubTab === 'controller'
+              ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+              : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border border-slate-800'
+          }`}
+        >
+          <Radio className="w-4 h-4 text-emerald-400" />
+          <span>🎟️ टिकट स्टार्ट &amp; मैच कंट्रोलर (Booking Start)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+            siteSettings?.globalTicketBookingEnabled !== false ? 'bg-emerald-400 text-slate-950' : 'bg-red-500 text-white'
+          }`}>
+            {siteSettings?.globalTicketBookingEnabled !== false ? '🟢 OPEN' : '🔴 CLOSED'}
+          </span>
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -1281,6 +1707,69 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       {/* ========================================================================= */}
       {activeSubTab === 'history' && (
         <div className="space-y-4">
+          {/* Active / Completed Games Ticket Pool Selector & Quick Cleanup Toolbar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800">
+            {/* Pool Selector Tabs */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTicketPoolFilter('active_games')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
+                  ticketPoolFilter === 'active_games'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 ring-1 ring-emerald-400'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                }`}
+                title="सिर्फ सक्रिय / चालू मैचों के टिकट देखें (पुराने समाप्त टिकट स्वतः छिपे रहेंगे ताकि नए टिकट आ सकें)"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>🟢 सक्रिय मैच टिकट ({activeTicketsList.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTicketPoolFilter('completed_games')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
+                  ticketPoolFilter === 'completed_games'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 ring-1 ring-amber-300'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                }`}
+                title="समाप्त हो चुके गेम्स के पुराने टिकट देखें"
+              >
+                <FolderArchive className="w-3.5 h-3.5" />
+                <span>📁 समाप्त मैच टिकट ({completedTicketsList.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTicketPoolFilter('all_tickets')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
+                  ticketPoolFilter === 'all_tickets'
+                    ? 'bg-blue-500 text-white shadow-md shadow-blue-500/20 ring-1 ring-blue-400'
+                    : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>📑 सभी टिकट ({tickets.length})</span>
+              </button>
+            </div>
+
+            {/* Quick 1-Click Clear Completed Tickets Button */}
+            {completedTicketsList.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedGameToClear('all');
+                  setClearCompletedModalOpen(true);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer active:scale-95 transition-all ml-auto sm:ml-0"
+                title="समाप्त मैच के सभी पुराने टिकट लिस्ट से हटाएं ताकि नए टिकट आ सकें"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>🧹 समाप्त मैच के {completedTicketsList.length} टिकट हटाएं (Clear Completed)</span>
+              </button>
+            )}
+          </div>
+
           {/* Filters, Search and Sorter Toolbar */}
           <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
@@ -2811,6 +3300,252 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 6: TICKET START & GAME BOOKING CONTROLLER (एडमिन टिकट शुरू करेगा तब ही टिकट शुरू हो) */}
+      {/* ========================================================================= */}
+      {activeSubTab === 'controller' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Master Global Ticket Sales Switch Banner */}
+          <div className={`p-6 rounded-3xl border transition-all shadow-2xl ${
+            siteSettings?.globalTicketBookingEnabled !== false
+              ? 'bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-emerald-500/50 shadow-emerald-950/30'
+              : 'bg-gradient-to-r from-red-950/80 via-slate-900 to-red-950/80 border-red-500/50 shadow-red-950/30'
+          }`}>
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              <div className="flex items-start sm:items-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleToggleGlobalBooking}
+                  className={`relative inline-flex h-10 w-20 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none ${
+                    siteSettings?.globalTicketBookingEnabled !== false
+                      ? 'bg-emerald-500 border-emerald-400'
+                      : 'bg-red-600 border-red-500'
+                  }`}
+                  title={
+                    siteSettings?.globalTicketBookingEnabled !== false
+                      ? 'मास्टर टिकट बुकिंग बंद करें'
+                      : 'मास्टर टिकट बुकिंग चालू करें'
+                  }
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-9 w-9 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      siteSettings?.globalTicketBookingEnabled !== false ? 'translate-x-10' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <h3 className="text-lg font-black text-white">
+                      👑 मास्टर टिकट बुकिंग स्विच (Global Ticket Sales Master Switch)
+                    </h3>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${
+                      siteSettings?.globalTicketBookingEnabled !== false
+                        ? 'bg-emerald-400 text-slate-950 animate-pulse'
+                        : 'bg-red-500 text-white'
+                    }`}>
+                      {siteSettings?.globalTicketBookingEnabled !== false ? '🟢 टिकट बुकिंग लाइव है' : '🛑 टिकट बुकिंग बंद है'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    {siteSettings?.globalTicketBookingEnabled !== false
+                      ? 'खिलाड़ी ऐप पर टिकट खरीद सकते हैं। जब तक एडमिन इसे बंद नहीं करता टिकट बिक्री चालू रहेगी।'
+                      : '⚠️ एडमिन द्वारा टिकट बुकिंग बंद कर दी गई है! खिलाड़ी जब तक एडमिन चालू नहीं करेगा, नया टिकट नहीं खरीद सकते।'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleToggleGlobalBooking}
+                  className={`px-5 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 cursor-pointer transition-all active:scale-95 shadow-lg ${
+                    siteSettings?.globalTicketBookingEnabled !== false
+                      ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/30'
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/30'
+                  }`}
+                >
+                  {siteSettings?.globalTicketBookingEnabled !== false ? (
+                    <>
+                      <XCircle className="w-4 h-4" />
+                      <span>बुकिंग रोकें (Stop All Booking)</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>बुकिंग शुरू करें (Start Ticket Booking)</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Clear Completed Banner */}
+          <div className="p-5 rounded-3xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                <FolderArchive className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-white flex items-center gap-2">
+                  <span>समाप्त मैचों के पुराने टिकट क्लीनर (Auto Clean Finished Games)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-bold border border-slate-700">
+                    {completedTicketsList.length} समाप्त टिकट
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-400">
+                  जो मैच खत्म हो जाते हैं उनके टिकट एडमिन लिस्ट से स्वतः हटाए जा सकते हैं ताकि नए टिकट और मैच साफ दिखें।
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedGameToClear('all');
+                setClearCompletedModalOpen(true);
+              }}
+              disabled={completedTicketsList.length === 0}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer active:scale-95 transition-all shrink-0"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>समाप्त टिकट हटाएं ({completedTicketsList.length})</span>
+            </button>
+          </div>
+
+          {/* Individual Games Start / Stop & Booking Matrix */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-black text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Radio className="w-4 h-4 text-emerald-400" />
+              <span>प्रत्येक गेम/टूर्नामेंट की टिकट बुकिंग एवं लाइव कंट्रोल (Game-Level Controls):</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {games.map((game) => {
+                const isLive = game.status === 'live' || game.id === activeLiveGame?.id;
+                const isBookingActive = game.isBookingOpen !== false && game.bookingOpen !== false && game.isActive !== false;
+                const ticketsForThisGame = tickets.filter((t) => t.gameId === game.id);
+                const isCompleted = game.status === 'completed';
+
+                return (
+                  <div
+                    key={game.id}
+                    className={`p-5 rounded-3xl border transition-all shadow-xl space-y-4 flex flex-col justify-between ${
+                      isLive
+                        ? 'bg-gradient-to-b from-emerald-950/40 via-slate-900 to-slate-950 border-emerald-500/60 ring-1 ring-emerald-400/30'
+                        : isCompleted
+                        ? 'bg-slate-900/60 border-slate-800/80 opacity-80'
+                        : 'bg-slate-900/90 border-slate-800'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h5 className="font-black text-white text-sm">{game.title}</h5>
+                            {isLive ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-400 text-slate-950 font-black text-[9px] uppercase tracking-wider animate-pulse">
+                                ● LIVE
+                              </span>
+                            ) : isCompleted ? (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-bold text-[9px] uppercase tracking-wider">
+                                FINISHED
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/40 font-bold text-[9px] uppercase tracking-wider">
+                                UPCOMING
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            दर: <strong className="text-amber-300 font-bold">₹{game.ticketPrice || 5}</strong> • तारीख: {game.matchDate || 'Daily Match'}
+                          </div>
+                        </div>
+
+                        {/* Booking Status Badge */}
+                        <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+                          isBookingActive
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                            : 'bg-red-500/20 text-red-300 border border-red-500/40'
+                        }`}>
+                          {isBookingActive ? '🟢 बुकिंग चालू' : '🛑 बुकिंग बंद'}
+                        </span>
+                      </div>
+
+                      {/* Metrics Box */}
+                      <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs">
+                        <div>
+                          <span className="text-slate-400 text-[10px]">बिके कुल टिकट:</span>
+                          <div className="text-lg font-black text-amber-400 font-mono">{ticketsForThisGame.length}</div>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 text-[10px]">कुल कलेक्शन:</span>
+                          <div className="text-lg font-black text-emerald-400 font-mono">
+                            ₹{ticketsForThisGame.reduce((sum, t) => sum + (Number(t.price) || Number(game.ticketPrice) || 0), 0)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Controls */}
+                    <div className="pt-3 border-t border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        {/* Toggle Booking Open/Close */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleGameBooking(game.id, isBookingActive)}
+                          className={`w-1/2 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95 ${
+                            isBookingActive
+                              ? 'bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-500/40'
+                              : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/50'
+                          }`}
+                        >
+                          {isBookingActive ? (
+                            <>
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>बुकिंग बंद करें</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>बुकिंग शुरू करें</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Start or Stop Tournament */}
+                        {isLive ? (
+                          <button
+                            type="button"
+                            onClick={() => handleStopGameFromTickets(game.id)}
+                            className="w-1/2 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/50 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                            title="टूर्नामेंट समाप्त करें और टिकट आर्काइव करें"
+                          >
+                            <Square className="w-3.5 h-3.5 fill-amber-300" />
+                            <span>गेम समाप्त करें</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleStartGameFromTickets(game.id)}
+                            className="w-1/2 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
+                            title="टूर्नामेंट शुरू करें और टिकट लाइव करें"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-slate-950" />
+                            <span>गेम शुरू करें (LIVE)</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* MODAL: EDIT / TRANSFER GAME (यूजर का गेम बदलें व आज के लाइव गेम में शिफ्ट करें) */}
       {/* ========================================================================= */}
       {editGameModalState.isOpen && (
@@ -3205,6 +3940,96 @@ export const ModuleTickets: React.FC<ModuleTicketsProps> = ({
                 className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold cursor-pointer"
               >
                 बंद करें
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CLEAR / PURGE COMPLETED GAME TICKETS (जो गेम हो जाता है वह टिकट हट जाना चाहिए) */}
+      {/* ========================================================================= */}
+      {clearCompletedModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border-2 border-rose-500/80 rounded-3xl p-6 space-y-5 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 shrink-0">
+                <FolderArchive className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">समाप्त गेम टिकट हटाएं (Clear Completed Tickets)</h3>
+                <p className="text-xs text-slate-400">
+                  जो मैच खत्म हो चुके हैं उनके टिकट लिस्ट से हटाए जा रहे हैं ताकि नए टिकट आ सकें।
+                </p>
+              </div>
+            </div>
+
+            {/* Selection Box */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-300">कौनसे गेम के पुराने टिकट हटाने हैं?</label>
+              <select
+                value={selectedGameToClear}
+                onChange={(e) => setSelectedGameToClear(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-rose-400 cursor-pointer"
+              >
+                <option value="all">सभी समाप्त / पूर्ण हो चुके गेम्स ({completedTicketsList.length} टिकट)</option>
+                {games
+                  .filter((g) => completedGameIds.has(g.id))
+                  .map((g) => {
+                    const cnt = tickets.filter((t) => t.gameId === g.id).length;
+                    return (
+                      <option key={g.id} value={g.id}>
+                        {g.title} ({cnt} टिकट)
+                      </option>
+                    );
+                  })}
+              </select>
+            </div>
+
+            {/* Info Box */}
+            <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">हटाए जाने वाले टिकट:</span>
+                <strong className="text-rose-400 font-mono font-black text-sm">
+                  {selectedGameToClear === 'all'
+                    ? completedTicketsList.length
+                    : tickets.filter((t) => t.gameId === selectedGameToClear).length}{' '}
+                  टिकट
+                </strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">सक्रिय मैच टिकट:</span>
+                <strong className="text-emerald-400 font-mono font-black">{activeTicketsList.length} (सुरक्षित रहेंगे)</strong>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 flex items-start gap-2 bg-rose-950/30 p-3 rounded-xl border border-rose-500/30">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <span>
+                समाप्त गेम्स के टिकट हटाने से एडमिन टिकट लिस्ट साफ हो जाएगी और केवल वर्तमान सक्रिय गेम्स के नए टिकट दिखाई देंगे।
+              </span>
+            </p>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setClearCompletedModalOpen(false)}
+                disabled={isClearingCompleted}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer transition-all"
+              >
+                रद्द करें (Cancel)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmClearCompletedTickets}
+                disabled={isClearingCompleted}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isClearingCompleted ? 'हटाया जा रहा है...' : 'हाँ, समाप्त टिकट हटाएं'}</span>
               </button>
             </div>
           </div>

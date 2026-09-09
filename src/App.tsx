@@ -65,7 +65,7 @@ import {
   SiteSettings,
 } from './types';
 import { generateTambolaTicketMatrix, generateTicketId, verifyClaim } from './utils/tambolaTicket';
-import { checkAndAutoTrackWinners } from './utils/autoWinnerTracker';
+import { checkAndAutoTrackWinners, auditDuplicateFullHouseWins } from './utils/autoWinnerTracker';
 import { LiveWinnerFlashTicker, FlashWinnerItem } from './components/LiveWinnerFlashTicker';
 import { WinnerFlashData } from './components/WinnerCelebrationModal';
 import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
@@ -3360,6 +3360,24 @@ export function App() {
       return;
     }
 
+    // 🛡️ Strict Anti-Cheat Rule: 1 Ticket can win ONLY 1 Full House!
+    // A ticket cannot win 2 Full Houses. If already claimed any Full House, reject immediately.
+    const isFullHousePrize = prizeCode === 'full_house' || prizeCode === 'second_full_house' || prizeCode === 'third_full_house';
+    if (isFullHousePrize) {
+      const alreadyWonFullHouse = liveGame.prizes.some(
+        (p) =>
+          (p.code === 'full_house' || p.code === 'second_full_house' || p.code === 'third_full_house') &&
+          Array.isArray(p.claimedWinners) &&
+          p.claimedWinners.some((w) => w && (w.ticketId === ticket.ticketId || (w.userId === currentUser.id && w.ticketNumber === ticket.ticketNumber)))
+      );
+      if (alreadyWonFullHouse) {
+        alert(
+          `⚠️ नियम उल्लंघन (Rule Violation):\n\nटिकट #${ticket.ticketNumber} (${ticket.ticketId}) पर पहले से 1 फुलहाउस जीता जा चुका है!\n\nतंबोला नियम अनुसार एक टिकट में केवल 1 ही फुलहाउस मान्य है, 2 फुलहाउस नहीं लग सकते।`
+        );
+        return;
+      }
+    }
+
     // Check validity against called numbers
     const result = verifyClaim(prizeCode, ticket.numbers, liveGame.calledNumbers || [], liveGame.currentNumber);
     if (!result.valid) {
@@ -4562,6 +4580,8 @@ export function App() {
               ...g,
               status: newStatus as any,
               autoCalling: false,
+              bookingOpen: markCompleted ? false : g.bookingOpen,
+              isBookingOpen: markCompleted ? false : g.isBookingOpen,
             }
           : g
       );
@@ -4570,6 +4590,20 @@ export function App() {
       } catch {}
       return next;
     });
+
+    if (markCompleted) {
+      setTickets((prev) => {
+        const next = prev.map((t) =>
+          t.gameId === gameId
+            ? { ...t, isCompleted: true, isArchived: true }
+            : t
+        );
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
 
     setSiteSettings((prev) => {
       const next = {
@@ -4584,10 +4618,20 @@ export function App() {
     });
 
     try {
-      setDoc(doc(db, 'games', gameId), { status: newStatus, autoCalling: false, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      setDoc(
+        doc(db, 'games', gameId),
+        {
+          status: newStatus,
+          autoCalling: false,
+          bookingOpen: markCompleted ? false : undefined,
+          isBookingOpen: markCompleted ? false : undefined,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      ).catch(() => {});
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         const bc = new BroadcastChannel('apna_tambola_sync');
-        bc.postMessage({ type: 'ADMIN_STOP_GAME', gameId });
+        bc.postMessage({ type: 'ADMIN_STOP_GAME', gameId, markCompleted });
         bc.close();
       }
     } catch {}
@@ -5325,6 +5369,70 @@ export function App() {
     }
   };
 
+  // 14g. Clear / Remove Completed Game Tickets (समाप्त मैचों के पुराने टिकट हटाना)
+  const handleClearCompletedTickets = async (gameId?: string): Promise<{ success: boolean; clearedCount: number }> => {
+    try {
+      const completedGameIds = new Set(
+        games.filter((g) => g.status === 'completed').map((g) => g.id)
+      );
+      if (gameId && gameId !== 'all') {
+        completedGameIds.add(gameId);
+      }
+
+      const ticketsToDelete = tickets.filter((t) => {
+        if (gameId && gameId !== 'all') {
+          return t.gameId === gameId;
+        }
+        return t.isCompleted || t.isArchived || (t.gameId && completedGameIds.has(t.gameId));
+      });
+
+      if (ticketsToDelete.length === 0) {
+        return { success: true, clearedCount: 0 };
+      }
+
+      const deletedIds = ticketsToDelete.map((t) => t.id);
+      const deletedSet = new Set(deletedIds);
+
+      // Record in deleted tickets cache in localStorage
+      try {
+        const storedDeleted: string[] = JSON.parse(localStorage.getItem('apna_tambola_deleted_ticket_ids') || '[]');
+        const updatedDeleted = Array.from(new Set([...storedDeleted, ...deletedIds]));
+        localStorage.setItem('apna_tambola_deleted_ticket_ids', JSON.stringify(updatedDeleted));
+      } catch (e) {}
+
+      // Remove from tickets state
+      setTickets((prev) => {
+        const next = prev.filter((t) => !deletedSet.has(t.id));
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // Cleanup Firestore
+      try {
+        const deletePromises = deletedIds.map((tid) =>
+          deleteDoc(doc(db, 'tickets', tid)).catch(() => {})
+        );
+        await Promise.all(deletePromises);
+      } catch (e) {}
+
+      // Broadcast sync
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'CLEAR_COMPLETED_TICKETS', deletedIds });
+          bc.close();
+        } catch (e) {}
+      }
+
+      return { success: true, clearedCount: deletedIds.length };
+    } catch (err) {
+      console.error('Error in handleClearCompletedTickets:', err);
+      return { success: false, clearedCount: 0 };
+    }
+  };
+
   // 14f. Delete Single Winner Record (विजेता रिमूव करें)
   const handleDeleteWinner = async (winnerId: string): Promise<boolean> => {
     try {
@@ -5422,6 +5530,201 @@ export function App() {
     } catch (err) {
       console.error('Error clearing winners:', err);
       return false;
+    }
+  };
+
+  // 14h. Admin Set Custom Ticket Name (पहचान के लिए टिकट का नाम सेट करना - e.g. "रॉयल सुपर ₹50", "धमाका ₹100")
+  const handleAdminSetTicketName = async (gameId: string, ticketName: string): Promise<boolean> => {
+    try {
+      if (!gameId) return false;
+      const cleanName = ticketName.trim();
+
+      // 1. Update Games state
+      setGames((prev) => {
+        const next = prev.map((g) => (g.id === gameId ? { ...g, ticketName: cleanName, ticketLabel: cleanName } : g));
+        try {
+          localStorage.setItem('apna_tambola_games', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // 2. Update Tickets of this game
+      setTickets((prev) => {
+        const next = prev.map((t) => (t.gameId === gameId ? { ...t, ticketName: cleanName, ticketLabel: cleanName } : t));
+        try {
+          localStorage.setItem('apna_tambola_tickets', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // 3. Persist to Firestore
+      try {
+        setDoc(doc(db, 'games', gameId), { ticketName: cleanName, ticketLabel: cleanName, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+      } catch {}
+
+      // 4. Broadcast
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel('apna_tambola_sync');
+          bc.postMessage({ type: 'TICKET_NAME_UPDATED', gameId, ticketName: cleanName });
+          bc.close();
+        } catch {}
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error setting ticket name:', err);
+      return false;
+    }
+  };
+
+  // 14i. 🛡️ Anti-Cheat: 1 Ticket = 1 Full House Audit & Automatic Clawback Engine
+  const handleAdminRunClawbackAudit = async (): Promise<{
+    auditedCount: number;
+    clawbacks: any[];
+    totalClawbackAmount: number;
+    deductedUsersCount: number;
+  }> => {
+    try {
+      const auditResult = auditDuplicateFullHouseWins(winners);
+      if (auditResult.clawbacks.length === 0) {
+        return {
+          auditedCount: auditResult.auditedCount,
+          clawbacks: [],
+          totalClawbackAmount: 0,
+          deductedUsersCount: 0,
+        };
+      }
+
+      const clawbackWinnerIds = new Set(auditResult.clawbacks.map((c) => c.duplicateWinnerId));
+      let deductedUsersCount = 0;
+
+      // Group deductions by user
+      const userDeductions = new Map<string, number>();
+      auditResult.clawbacks.forEach((c) => {
+        const current = userDeductions.get(c.userId) || 0;
+        userDeductions.set(c.userId, current + c.clawbackAmount);
+      });
+
+      // Deduct from users' winning and total balance
+      setUsers((prev) => {
+        const next = prev.map((u) => {
+          const deduction = userDeductions.get(u.id);
+          if (deduction && deduction > 0) {
+            deductedUsersCount++;
+            const newWin = Math.max(0, (u.winningBalance || 0) - deduction);
+            const newWal = Math.max(0, (u.walletBalance || 0) - deduction);
+            return {
+              ...u,
+              winningBalance: newWin,
+              walletBalance: newWal,
+            };
+          }
+          return u;
+        });
+        try {
+          localStorage.setItem('apna_tambola_registered_users', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // Update Current User if affected
+      if (currentUser && userDeductions.has(currentUser.id)) {
+        const ded = userDeductions.get(currentUser.id) || 0;
+        setCurrentUser((prev) => {
+          if (!prev) return null;
+          const newWin = Math.max(0, (prev.winningBalance || 0) - ded);
+          const newWal = Math.max(0, (prev.walletBalance || 0) - ded);
+          return {
+            ...prev,
+            winningBalance: newWin,
+            walletBalance: newWal,
+          };
+        });
+      }
+
+      // Record Clawback deduction transactions & Push notifications
+      const newTransactions: WalletTransaction[] = [];
+      const newNotifications: UserNotificationItem[] = [];
+
+      auditResult.clawbacks.forEach((c) => {
+        const txn: WalletTransaction = {
+          id: `txn_clawback_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          userId: c.userId,
+          type: 'withdrawal',
+          amount: -c.clawbackAmount,
+          balanceAfter: Math.max(0, (users.find((u) => u.id === c.userId)?.walletBalance || 0) - c.clawbackAmount),
+          description: `⚠️ एंटी-चीट कटौती: टिकट #${c.ticketNumber} (${c.ticketId}) पर 1 से अधिक फुलहाउस (${c.duplicatePrizeName}) अमान्य होने के कारण ₹${c.clawbackAmount} काटा गया।`,
+          referenceId: c.ticketId,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          status: 'completed',
+        };
+        newTransactions.push(txn);
+
+        const notif: UserNotificationItem = {
+          id: `un_clawback_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          category: 'wallet_credit',
+          title: `⚠️ अतिरिक्त फुलहाउस पेमेंट कटौती: -₹${c.clawbackAmount}`,
+          message: `नियम अनुसार: एक टिकट में केवल 1 ही फुलहाउस मान्य है। आपके टिकट #${c.ticketNumber} पर दर्ज दूसरा फुलहाउस अमान्य होने के कारण अतिरिक्त ₹${c.clawbackAmount} वॉलेट से स्वतः काटा गया है।`,
+          timestamp: 'Just now',
+          read: false,
+          actionTab: 'wallet',
+          amount: -c.clawbackAmount,
+        };
+        newNotifications.push(notif);
+
+        try {
+          setDoc(doc(db, 'transactions', txn.id), txn).catch(() => {});
+        } catch {}
+      });
+
+      setTransactions((prev) => [...newTransactions, ...prev]);
+      setUserNotifications((prev) => [...newNotifications, ...prev]);
+
+      // Remove duplicate winner records from state
+      setWinners((prev) => {
+        const next = prev.filter((w) => !clawbackWinnerIds.has(w.id));
+        try {
+          localStorage.setItem('apna_tambola_winners', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+
+      // Cleanup Firestore winners
+      for (const wid of clawbackWinnerIds) {
+        try {
+          deleteDoc(doc(db, 'winners', wid)).catch(() => {});
+        } catch {}
+      }
+
+      // Add Admin Activity Log
+      const auditLog: ActivityLog = {
+        id: `act_audit_${Date.now()}`,
+        adminName: currentUser?.name || 'Master Admin',
+        action: 'ANTI_CHEAT_CLAWBACK',
+        category: 'security',
+        ipAddress: '127.0.0.1',
+        device: 'Web Admin Dashboard',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'warning',
+        details: `सफलतापूर्वक ${auditResult.clawbacks.length} डुप्लीकेट फुलहाउस डिटेक्ट कर कुल ₹${auditResult.totalClawbackAmount} की कटौती की गई।`,
+      };
+      setActivityLogs((prev) => [auditLog, ...prev]);
+
+      return {
+        auditedCount: auditResult.auditedCount,
+        clawbacks: auditResult.clawbacks,
+        totalClawbackAmount: auditResult.totalClawbackAmount,
+        deductedUsersCount,
+      };
+    } catch (err) {
+      console.error('Clawback audit error:', err);
+      return {
+        auditedCount: 0,
+        clawbacks: [],
+        totalClawbackAmount: 0,
+        deductedUsersCount: 0,
+      };
     }
   };
 
@@ -6288,6 +6591,7 @@ export function App() {
             onAdminUpdateTicketGame={handleAdminUpdateTicketGame}
             onAdminBatchUpdateTicketGame={handleAdminBatchUpdateTicketGame}
             onAdminTransferAllTicketsToGame={handleAdminTransferAllTicketsToGame}
+            onClearCompletedTickets={handleClearCompletedTickets}
             onDeleteTicket={handleDeleteTicket}
             onBatchDeleteTickets={handleBatchDeleteTickets}
             onApproveCommission={handleApproveCommission}
@@ -6299,6 +6603,8 @@ export function App() {
             onUpdateUser={handleRegisterUser}
             onDeleteUser={handleDeleteUser}
             onBatchDeleteUsers={handleBatchDeleteUsers}
+            onSetTicketName={handleAdminSetTicketName}
+            onRunClawbackAudit={handleAdminRunClawbackAudit}
             onForceRefresh={handleForceRefresh}
             isSyncing={isSyncing}
           />
