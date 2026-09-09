@@ -38,12 +38,20 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
   onNavigate,
 }) => {
   const allGames = Array.isArray(games) && games.length > 0 ? games : [];
-  const activeGames = allGames.filter((g) => g.status !== 'completed');
+  // Only show games that are active, not completed/cancelled, and open for booking
+  const activeGames = allGames.filter((g) => 
+    g.status !== 'completed' && 
+    g.status !== 'cancelled' && 
+    g.isGameEnabled !== false && 
+    g.isActive !== false && 
+    g.isBookingOpen !== false && 
+    g.bookingOpen !== false
+  );
 
-  // Default to the first game that is enabled by admin, or the first game
+  // Default to the first active game, or selected game if valid
   const initialGame =
-    allGames.find((g) => g.id === selectedGameId) ||
-    allGames.find((g) => g.isGameEnabled !== false && g.isActive !== false && g.isBookingOpen !== false) ||
+    activeGames.find((g) => g.id === selectedGameId) ||
+    activeGames[0] ||
     allGames[0];
 
   const [chosenGameId, setChosenGameId] = useState<string>(initialGame?.id || '');
@@ -176,110 +184,95 @@ export const BuyTicketView: React.FC<BuyTicketViewProps> = ({
                   1. टिकट दर (Ticket Rate) व मैच चुनें
                 </label>
                 <span className="text-[11px] text-amber-400 font-bold">
-                  {allGames.filter((g) => g.isGameEnabled !== false && g.isActive !== false && g.isBookingOpen !== false).length} टिकट चालू हैं
+                  {activeGames.length} टिकट चालू हैं
                 </span>
               </div>
 
-              {/* Quick Rate Selector Pills */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {allGames
-                  .slice()
-                  .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
-                  .map((g) => {
-                    const gEnabled = g.isGameEnabled !== false && g.isActive !== false && g.status !== 'cancelled';
-                    const gBooking = g.isBookingOpen !== false && g.bookingOpen !== false;
-                    const isFullyActive = gEnabled && gBooking;
-                    const isSelected = chosenGameId === g.id;
+              {activeGames.length === 0 ? (
+                <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 text-center space-y-2">
+                  <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                  <p className="text-sm font-bold text-slate-200">फिलहाल कोई भी टिकट बुकिंग के लिए चालू नहीं है।</p>
+                  <p className="text-xs text-slate-400">कृपया एडमिन द्वारा नया गेम शुरू किए जाने की प्रतीक्षा करें।</p>
+                </div>
+              ) : (
+                <>
+                  {/* Quick Rate Selector Pills */}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {activeGames
+                      .slice()
+                      .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
+                      .map((g) => {
+                        const isSelected = chosenGameId === g.id;
 
-                    return (
-                      <button
-                        key={`pill-${g.id}`}
-                        type="button"
-                        onClick={() => setChosenGameId(g.id)}
-                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden ${
-                          isSelected
-                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-400/20 ring-2 ring-amber-400 font-black'
-                            : isFullyActive
-                            ? 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700 font-bold'
-                            : 'bg-red-950/30 border-red-500/30 text-slate-400 opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <div className="text-sm font-black font-mono">₹{g.ticketPrice}</div>
-                        <div className="text-[9px] truncate mt-0.5">
-                          {isFullyActive ? (
-                            <span className={isSelected ? 'text-slate-900 font-bold' : 'text-emerald-400 font-bold'}>🟢 चालू</span>
-                          ) : (
-                            <span className="text-red-400 font-bold">🔴 बंद</span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-              </div>
+                        return (
+                          <button
+                            key={`pill-${g.id}`}
+                            type="button"
+                            onClick={() => setChosenGameId(g.id)}
+                            className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer relative overflow-hidden ${
+                              isSelected
+                                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-400/20 ring-2 ring-amber-400 font-black'
+                                : 'bg-slate-900/90 hover:bg-slate-800 text-slate-200 border-slate-700 font-bold'
+                            }`}
+                          >
+                            <div className="text-sm font-black font-mono">₹{g.ticketPrice}</div>
+                            <div className="text-[9px] truncate mt-0.5 text-emerald-400 font-bold">
+                              🟢 चालू
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
 
-              {/* Detailed Game Cards List */}
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                {allGames
-                  .slice()
-                  .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
-                  .map((g) => {
-                    const gEnabled = g.isGameEnabled !== false && g.isActive !== false && g.status !== 'cancelled';
-                    const gBooking = g.isBookingOpen !== false && g.bookingOpen !== false;
-                    const isFullyActive = gEnabled && gBooking;
-                    const isSelected = chosenGameId === g.id;
+                  {/* Detailed Game Cards List */}
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {activeGames
+                      .slice()
+                      .sort((a, b) => (a.ticketPrice || 0) - (b.ticketPrice || 0))
+                      .map((g) => {
+                        const isSelected = chosenGameId === g.id;
 
-                    return (
-                      <div
-                        key={g.id}
-                        onClick={() => setChosenGameId(g.id)}
-                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                          isSelected
-                            ? 'bg-purple-900/40 border-amber-400 shadow-lg shadow-purple-900/30 ring-1 ring-amber-400/60'
-                            : isFullyActive
-                            ? 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
-                            : 'bg-[#1a0c0e] border-red-500/30 opacity-75 hover:opacity-90'
-                        }`}
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            {g.status === 'live' && isFullyActive && (
-                              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                            )}
-                            <span className="font-bold text-sm text-slate-100">{g.title}</span>
-                            {isFullyActive ? (
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-black">
-                                🟢 चालू (BOOK NOW)
+                        return (
+                          <div
+                            key={g.id}
+                            onClick={() => setChosenGameId(g.id)}
+                            className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                              isSelected
+                                ? 'bg-purple-900/40 border-amber-400 shadow-lg shadow-purple-900/30 ring-1 ring-amber-400/60'
+                                : 'bg-slate-900/70 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                {g.status === 'live' && (
+                                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                                )}
+                                <span className="font-bold text-sm text-slate-100">{g.title}</span>
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[9px] font-black">
+                                  🟢 चालू (BOOK NOW)
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                                <span className="text-amber-300 font-semibold">📅 {g.date || 'Today'}</span>
+                                <span>•</span>
+                                <span className="text-purple-300 font-semibold">⏰ {g.startTime || '09:00 PM'}</span>
+                                <span>•</span>
+                                <span>पूल: <strong className="text-amber-400">₹{(g.prizePool || 0).toLocaleString('en-IN')}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <span className={`font-black text-base font-mono block ${isSelected ? 'text-amber-300' : 'text-slate-100'}`}>
+                                ₹{g.ticketPrice}
                               </span>
-                            ) : !gEnabled ? (
-                              <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-[9px] font-black">
-                                🔴 एडमिन द्वारा बंद (OFF)
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[9px] font-black flex items-center gap-0.5">
-                                <Lock className="w-2.5 h-2.5" />
-                                <span>बुकिंग बंद</span>
-                              </span>
-                            )}
+                              <span className="text-[10px] text-slate-400">प्रति टिकट</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-xs text-slate-400 font-medium">
-                            <span className="text-amber-300 font-semibold">📅 {g.date || 'Today'}</span>
-                            <span>•</span>
-                            <span className="text-purple-300 font-semibold">⏰ {g.startTime || '09:00 PM'}</span>
-                            <span>•</span>
-                            <span>पूल: <strong className="text-amber-400">₹{(g.prizePool || 0).toLocaleString('en-IN')}</strong></span>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className={`font-black text-base font-mono block ${isSelected ? 'text-amber-300' : 'text-slate-100'}`}>
-                            ₹{g.ticketPrice}
-                          </span>
-                          <span className="text-[10px] text-slate-400">प्रति टिकट</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Admin Game / Booking Status Notices */}

@@ -349,23 +349,20 @@ export function App() {
             id: `notif_ref_${Date.now()}_${nu.id}`,
             category: 'referral_commission',
             title: '🎉 नया डायरेक्ट रेफरल तुरंत जुड़ा!',
-            message: `${nu.name} (${nu.phone || 'New Player'}) ने आपके रेफरल लिंक से अभी रजिस्टर किया है। आपका ₹10 बोनस क्रेडिट हो गया है!`,
+            message: `${nu.name} (${nu.phone || 'New Player'}) ने आपके रेफरल लिंक से अभी रजिस्टर किया है। जब वे टिकट खेलेंगे, तब आपको कमिशन मिलेगा।`,
             timestamp: 'Just now',
             read: false,
-            amount: 10,
             actionTab: 'referral',
           },
           ...prev,
         ]);
 
-        // Immediately update user's wallet balances and referral counts
+        // Immediately update user's referral counts (without bonus balance)
         setCurrentUser((prev) => {
           if (!prev) return null;
           const updated: User = {
             ...prev,
             referralCount: (prev.referralCount || 0) + 1,
-            referralBalance: (prev.referralBalance || 0) + 10,
-            walletBalance: (prev.walletBalance || 0) + 10,
           };
           try {
             localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
@@ -2197,58 +2194,27 @@ export function App() {
       return updated;
     });
 
-    // 7. If upline exists, credit bonus commission and immediately propagate tree
+    // 7. If upline exists, update referral count (no bonus on signup)
     if (matchedUpline) {
       const upline = matchedUpline;
-      const joinComm: ReferralCommission = {
-        id: `comm_join_${Date.now()}_${completeUser.id}`,
-        userId: upline.id,
-        userName: upline.name,
-        sourceUserId: completeUser.id,
-        sourceUserName: completeUser.name,
-        gameId: 'signup_bonus',
-        gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
-        ticketId: 'REG-DIRECT',
-        level: 1,
-        percentage: 10,
-        baseAmount: 10,
-        commissionAmount: 10,
-        transactionId: `TXN-REF-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        status: 'approved',
-      };
 
-      setCommissions((prev) => [joinComm, ...prev.filter((c) => c.id !== joinComm.id)]);
-      try {
-        setDoc(doc(db, 'commissions', joinComm.id), joinComm).catch(() => {});
-        fetch('/api/commissions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(joinComm),
-        }).catch(() => {});
-      } catch (e) {}
-
-      // Update upline balance & referral count in Firestore
+      // Update upline referral count in Firestore
       try {
         setDoc(
           doc(db, 'users', upline.id),
           {
-            referralBalance: (upline.referralBalance || 0) + 10,
-            walletBalance: (upline.walletBalance || 0) + 10,
             referralCount: (upline.referralCount || 0) + 1,
           },
           { merge: true }
         ).catch(() => {});
       } catch (e) {}
 
-      // Update upline balance in local users state
+      // Update upline referral count in local users state
       setUsers((prev) => {
         const updated = prev.map((u) =>
           u.id === upline.id
             ? {
                 ...u,
-                referralBalance: (u.referralBalance || 0) + 10,
-                walletBalance: (u.walletBalance || 0) + 10,
                 referralCount: (u.referralCount || 0) + 1,
               }
             : u
@@ -2262,8 +2228,8 @@ export function App() {
       const notif: UserNotificationItem = {
         id: `un_ref_${Date.now()}`,
         category: 'referral_commission',
-        title: '🎉 नया डायरेक्ट रेफरल!',
-        message: `${completeUser.name} आपके रेफरल कोड (${finalReferredByCode}) से सफलतापूर्वक रजिस्टर हो गए हैं! वे आपके डायरेक्ट (Level 1) टीम में शामिल हो गए हैं।`,
+        title: '🎉 नया डायरेक्ट रेफरल जुड़ा!',
+        message: `${completeUser.name} आपके रेफरल कोड (${finalReferredByCode}) से सफलतापूर्वक रजिस्टर हो गए हैं! जब वे टिकट खेलेंगे, तब आपको कमिशन मिलेगा।`,
         timestamp: 'Just now',
         read: false,
         actionTab: 'referral',
@@ -2276,8 +2242,6 @@ export function App() {
           if (!prev) return null;
           return {
             ...prev,
-            referralBalance: (prev.referralBalance || 0) + 10,
-            walletBalance: (prev.walletBalance || 0) + 10,
             referralCount: (prev.referralCount || 0) + 1,
           };
         });
@@ -3557,9 +3521,8 @@ export function App() {
 
     const cleanUtr = (utrNumber || '').trim();
 
-    // 1. One-time ₹10 Registration Bonus rule on 1st deposit:
-    const isFirstDeposit = !currentUser.hasDeposited && !currentUser.firstDepositBonusClaimed;
-    const registrationBonus = isFirstDeposit ? 10 : 0;
+    // 1. One-time ₹10 Registration Bonus rule on 1st deposit (Disabled as requested):
+    const registrationBonus = 0;
 
     const newDepositReq: DepositRequest = {
       id: `dep_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`,

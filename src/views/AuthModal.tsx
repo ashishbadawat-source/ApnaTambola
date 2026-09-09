@@ -955,44 +955,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         console.error('Firestore user save error:', err);
       }
 
-      // If referred by another user, update the referrer in Firestore and award direct referral bonus & commission doc
+      // If referred by another user, update the referrer in Firestore (increment referralCount only, no signup bonus)
       if (finalReferrer) {
         try {
           const updatedReferrer: User = {
             ...finalReferrer,
-            referralBalance: (finalReferrer.referralBalance || 0) + 10,
-            walletBalance: (finalReferrer.walletBalance || 0) + 10,
+            referralCount: (finalReferrer.referralCount || 0) + 1,
           };
           const sanitizedReferrer = JSON.parse(JSON.stringify(updatedReferrer));
           setDoc(doc(db, 'users', finalReferrer.id), sanitizedReferrer, { merge: true }).catch(() => {});
-
-          // Create direct commission record
-          const joinCommission: ReferralCommission = {
-            id: `comm_join_${Date.now()}_${newUser.id}`,
-            userId: finalReferrer.id,
-            userName: finalReferrer.name,
-            sourceUserId: newUser.id,
-            sourceUserName: newUser.name,
-            gameId: 'signup_bonus',
-            gameTitle: '🎁 New Direct Referral Join Bonus (Level 1)',
-            ticketId: 'REG-DIRECT',
-            level: 1,
-            percentage: 10,
-            baseAmount: 10,
-            commissionAmount: 10,
-            transactionId: `TXN-REF-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            status: 'approved',
-          };
-          const sanitizedComm = JSON.parse(JSON.stringify(joinCommission));
-          setDoc(doc(db, 'commissions', joinCommission.id), sanitizedComm).catch(() => {});
-
-          // Also post commission to server
-          fetch('/api/commissions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(sanitizedComm),
-          }).catch(() => {});
         } catch (err) {
           console.warn('Could not update referrer notice:', err);
         }
