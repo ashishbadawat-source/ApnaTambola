@@ -20,9 +20,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   const visitorItems = [
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'live', label: 'Play Live', icon: Flame, isLive: true },
     { id: 'games', label: 'Tournaments', icon: Gamepad2 },
-    { id: 'winners', label: 'Winners', icon: Trophy },
   ];
 
   const loggedInItems = [

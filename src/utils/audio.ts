@@ -5,6 +5,30 @@ import { getTambolaCallText, VoiceLanguage } from './tambolaNicknames';
 
 let audioCtx: AudioContext | null = null;
 let preferredVoiceLang: VoiceLanguage = 'both';
+let cachedVoices: SpeechSynthesisVoice[] = [];
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  const loadVoices = () => {
+    try {
+      cachedVoices = window.speechSynthesis.getVoices();
+    } catch {}
+  };
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+
+  // Auto-unlock audio and speech on user interaction
+  const unlockAudio = () => {
+    getAudioContext();
+    if ('speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.resume();
+        loadVoices();
+      } catch {}
+    }
+  };
+  window.addEventListener('click', unlockAudio, { passive: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true });
+}
 
 export function setCallerVoiceLanguage(lang: VoiceLanguage): void {
   preferredVoiceLang = lang;
@@ -163,31 +187,67 @@ export function speakNumberCall(
 ): void {
   if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
   try {
-    window.speechSynthesis.cancel();
-    const activeLang = language || getCallerVoiceLanguage();
+    const synth = window.speechSynthesis;
+    if (synth.speaking || synth.pending) {
+      synth.cancel();
+    }
+    if (synth.paused) {
+      synth.resume();
+    }
+
+    const activeLang = language || getCallerVoiceLanguage() || 'both';
     const text = getTambolaCallText(num, activeLang);
     const utterance = new SpeechSynthesisUtterance(text);
     
-    utterance.rate = 0.95;
-    utterance.pitch = 1.05;
+    utterance.rate = 0.92;
+    utterance.pitch = 1.02;
     utterance.volume = 1.0;
 
-    const voices = window.speechSynthesis.getVoices();
+    const voices = (cachedVoices && cachedVoices.length > 0) ? cachedVoices : synth.getVoices();
     if (activeLang === 'hi') {
       utterance.lang = 'hi-IN';
-      const hiVoice = voices.find(v => v.lang.includes('hi') || v.name.toLowerCase().includes('hindi') || v.lang.includes('IN'));
+      const hiVoice = voices.find(
+        (v) =>
+          v.lang.startsWith('hi') ||
+          v.name.toLowerCase().includes('hindi') ||
+          v.name.toLowerCase().includes('lekha') ||
+          v.name.toLowerCase().includes('kalpana')
+      );
       if (hiVoice) utterance.voice = hiVoice;
     } else if (activeLang === 'en') {
       utterance.lang = 'en-IN';
-      const enVoice = voices.find(v => v.lang.includes('en-IN') || v.lang.includes('en_US') || v.lang.includes('en-GB'));
+      const enVoice = voices.find(
+        (v) =>
+          v.lang.includes('en-IN') ||
+          v.name.toLowerCase().includes('india') ||
+          v.lang.includes('en_US') ||
+          v.lang.includes('en-GB')
+      );
       if (enVoice) utterance.voice = enVoice;
     } else {
+      // Bilingual (Default)
       utterance.lang = 'hi-IN';
-      const inVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('en-IN') || v.lang.includes('IN'));
+      const inVoice = voices.find(
+        (v) =>
+          v.lang.startsWith('hi') ||
+          v.name.toLowerCase().includes('hindi') ||
+          v.lang.includes('en-IN') ||
+          v.name.toLowerCase().includes('india')
+      );
       if (inVoice) utterance.voice = inVoice;
     }
 
-    window.speechSynthesis.speak(utterance);
+    // Small timeout ensures cancel doesn't abort the newly queued speak in Blink/WebKit
+    setTimeout(() => {
+      try {
+        if (synth.paused) {
+          synth.resume();
+        }
+        synth.speak(utterance);
+      } catch (e) {
+        console.warn('Speech error on speak call', e);
+      }
+    }, 40);
   } catch (err) {
     console.warn('Speech synthesis error', err);
   }
@@ -224,3 +284,36 @@ export function playUserRegisteredSound(): void {
     });
   } catch {}
 }
+
+/**
+ * Voice announcement for winners and co-winners in Hindi/Bilingual
+ */
+export function speakWinnerAnnouncement(
+  winnerNames: string[],
+  prizeName: string,
+  amountEach: number,
+  enabled: boolean = true
+): void {
+  if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  try {
+    const synth = window.speechSynthesis;
+    if (synth.paused) synth.resume();
+    let text = '';
+    const isSplit = winnerNames.length > 1;
+    if (isSplit) {
+      text = `बधाई हो! ${prizeName} के 2 विजेता हैं: ${winnerNames.join(' और ')}! दोनों को बराबर ${amountEach} रुपए मिले हैं! Congratulations to both winners!`;
+    } else {
+      text = `बधाई हो! ${winnerNames[0]} ने ${prizeName} जीत लिया है! Congratulations!`;
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.volume = 1.0;
+    utterance.lang = 'hi-IN';
+    setTimeout(() => {
+      try {
+        synth.speak(utterance);
+      } catch (e) {}
+    }, 700);
+  } catch (e) {}
+}
+

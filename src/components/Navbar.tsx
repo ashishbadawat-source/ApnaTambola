@@ -105,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleTabChange = (tabId: string) => {
     // If not logged in and user tries to access protected features, open login modal
-    const protectedTabs = ['dashboard', 'buy-ticket', 'my-tickets', 'wallet', 'referral', 'profile', 'daily-bonus'];
+    const protectedTabs = ['buy-ticket', 'my-tickets', 'wallet', 'referral', 'profile', 'daily-bonus'];
     if (!currentUser && protectedTabs.includes(tabId)) {
       onOpenAuth('login');
       setUserDropdownOpen(false);

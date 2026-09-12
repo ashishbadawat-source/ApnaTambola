@@ -185,14 +185,16 @@ export function calculateSplitWinning(
   explanation: string;
 } {
   const count = Math.max(1, totalWinnersCount);
-  const perWinnerAmount = Math.round(totalPrizeAmount / count);
+  const perWinnerAmount = Math.floor(totalPrizeAmount / count);
   const isSplit = count > 1;
 
   return {
     perWinnerAmount,
     isSplit,
     explanation: isSplit
-      ? `कुल ₹${totalPrizeAmount} का ईनाम ${count} विजेताओं में बराबर (₹${perWinnerAmount} प्रत्येक) बंटा है।`
+      ? (count === 2
+          ? `कुल ₹${totalPrizeAmount} का ईनाम दोनों विजेताओं में 50-50 बराबर (₹${perWinnerAmount} + ₹${perWinnerAmount}) बंटा है।`
+          : `कुल ₹${totalPrizeAmount} का ईनाम ${count} विजेताओं में बराबर (₹${perWinnerAmount} प्रत्येक) बंटा है।`)
       : `पूरा ईनाम ₹${totalPrizeAmount} एक विजेता को मिला है।`,
   };
 }

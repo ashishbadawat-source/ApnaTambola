@@ -103,7 +103,7 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: null,
     previousNumbers: [],
     autoCalling: false,
-    callIntervalSeconds: 6,
+    callIntervalSeconds: 10,
     rules: 'Low entry ₹5 ticket match with instant prize claims and 70% dynamic prize pool.',
     createdAt: '2026-08-14T18:00:00.000Z',
     prizes: [
@@ -135,7 +135,7 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: null,
     previousNumbers: [],
     autoCalling: false,
-    callIntervalSeconds: 6,
+    callIntervalSeconds: 10,
     rules: 'Affordable ₹10 match for all players with instant UPI withdrawal payouts.',
     createdAt: '2026-08-14T18:00:00.000Z',
     prizes: [
@@ -167,7 +167,7 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: null,
     previousNumbers: [],
     autoCalling: false,
-    callIntervalSeconds: 6,
+    callIntervalSeconds: 10,
     rules: 'Popular ₹15 ticket price with 7 exciting prizes and instant auto tracking.',
     createdAt: '2026-08-14T18:00:00.000Z',
     prizes: [
@@ -199,7 +199,7 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: 76,
     previousNumbers: [24, 90, 59, 41, 15],
     autoCalling: true,
-    callIntervalSeconds: 6,
+    callIntervalSeconds: 10,
     rules: 'Standard 7-Prize 90-ball Tambola. Dynamic 70% Prize Pool (30% Admin Margin). If multiple users win on the same ball, prizes are split equally!',
     createdAt: '2026-08-14T18:00:00.000Z',
     prizes: [
@@ -296,8 +296,8 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: null,
     previousNumbers: [],
     autoCalling: false,
-    callIntervalSeconds: 5,
-    rules: 'Fast-paced 5s interval drawing. Standard 7-Prize distribution with real-time dynamic pool scaling.',
+    callIntervalSeconds: 10,
+    rules: 'Fast-paced 10s interval drawing. Standard 7-Prize distribution with real-time dynamic pool scaling.',
     createdAt: '2026-08-14T19:00:00.000Z',
     prizes: [
       { id: 'prz_u_e5', code: 'early5', name: '1. जल्दी 5 (Early 5)', amount: 107, maxWinners: 2, claimedWinners: [], description: 'First 5 numbers (2.5%)' },
@@ -328,7 +328,7 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: null,
     previousNumbers: [],
     autoCalling: false,
-    callIntervalSeconds: 7,
+    callIntervalSeconds: 10,
     rules: 'The biggest weekend tournament with 7 prize categories and automatic pool scaling as tickets are sold.',
     createdAt: '2026-08-14T12:00:00.000Z',
     prizes: [
@@ -360,7 +360,7 @@ export const INITIAL_GAMES: TambolaGame[] = [
     currentNumber: 40,
     previousNumbers: [26, 10, 82, 74, 61],
     autoCalling: false,
-    callIntervalSeconds: 6,
+    callIntervalSeconds: 10,
     rules: 'Completed game.',
     createdAt: '2026-08-14T17:00:00.000Z',
     prizes: [

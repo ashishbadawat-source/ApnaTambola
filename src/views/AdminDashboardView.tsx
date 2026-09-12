@@ -23,6 +23,9 @@ import {
   Check,
   X,
   Building2,
+  Database,
+  Flame,
+  Zap,
 } from 'lucide-react';
 import {
   AdminStats,
@@ -63,6 +66,7 @@ import { ModuleReferralAnalytics } from './admin/ModuleReferralAnalytics';
 import { ModuleOfferPopups } from './admin/ModuleOfferPopups';
 import { ModuleFranchise } from './admin/ModuleFranchise';
 import { ModuleWinners } from './admin/ModuleWinners';
+import { FirebaseDiagnosticsModal } from '../components/FirebaseDiagnosticsModal';
 
 interface AdminDashboardViewProps {
   stats: AdminStats;
@@ -99,7 +103,14 @@ interface AdminDashboardViewProps {
   onApproveDeposit?: (depositId: string, remarks?: string) => Promise<boolean>;
   onRejectDeposit?: (depositId: string, reason?: string) => Promise<boolean>;
   onDeleteDeposit?: (depositId: string) => Promise<boolean>;
-  onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
+  onUpdateWalletBalance: (
+    userId: string,
+    amount: number,
+    type: 'credit' | 'debit',
+    reason?: string,
+    walletSource?: 'any' | 'deposit' | 'winning' | 'referral'
+  ) => Promise<boolean>;
+  onOpenAdjustModal?: (user?: User | null, type?: 'credit' | 'debit') => void;
   onToggleKYC: (userId: string) => Promise<boolean>;
   onToggleBlockUser?: (userId: string) => Promise<boolean>;
   onResetPassword?: (userId: string) => Promise<boolean>;
@@ -161,6 +172,7 @@ interface AdminDashboardViewProps {
   }) => Promise<boolean>;
   onToggleAutoTicket?: (enabled: boolean, gameId?: string) => Promise<boolean> | void;
   onRunAutoTicketDispatch?: (gameId?: string) => Promise<{ success: boolean; dispatchedCount: number; totalDeducted: number; message: string; details?: any[] }>;
+  onOpenFirebaseDiagnostics?: () => void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -180,6 +192,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   offers = [],
   latestRegisteredUser,
   onClearLatestUser,
+  onOpenFirebaseDiagnostics,
   onSaveOffer,
   onDeleteOffer,
   onToggleOfferStatus,
@@ -204,6 +217,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onRejectDeposit,
   onDeleteDeposit,
   onUpdateWalletBalance,
+  onOpenAdjustModal,
   onToggleKYC,
   onToggleBlockUser,
   onResetPassword,
@@ -242,6 +256,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 }) => {
   const [internalTab, setInternalTab] = useState<string>('dashboard');
   const [copiedLatestId, setCopiedLatestId] = useState<boolean>(false);
+  const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState<boolean>(false);
   const activeTab = activeModule || internalTab;
 
   const handleCopyLatestUserId = (id: string) => {
@@ -288,6 +303,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
     { id: 'settings', label: '15. Site & Security', icon: Settings, badge: null },
     { id: 'email_settings', label: '16. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
     { id: 'franchise', label: '17. Fund Franchise', icon: Building2, badge: 'ID & FUND', badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black' },
+    { id: 'firebase_diagnostics', label: '18. Firebase DB & Sync', icon: Flame, badge: 'REALTIME', badgeColor: 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black animate-pulse' },
   ];
 
   return (
@@ -311,6 +327,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
         {/* Global Quick Action Chips */}
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => onOpenFirebaseDiagnostics ? onOpenFirebaseDiagnostics() : setIsDiagnosticsModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-orange-500/20 active:scale-95 transition-all cursor-pointer"
+            title="Firebase Firestore Direct Live Sync & Realtime Testing Tool"
+          >
+            <Flame className="w-4 h-4 text-slate-950 animate-bounce" />
+            <span>🔥 Firebase DB & Sync</span>
+          </button>
           <button
             onClick={() => handleSetActiveTab('games')}
             className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
@@ -466,6 +490,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
             onViewUserWallet={onViewUserWallet}
+            onOpenAdjustModal={onOpenAdjustModal}
           />
         )}
 
@@ -578,6 +603,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onForceRefresh={onForceRefresh}
             isSyncing={isSyncing}
             onViewUserWallet={onViewUserWallet}
+            onOpenAdjustModal={onOpenAdjustModal}
           />
         )}
 
@@ -586,6 +612,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             withdrawals={withdrawals}
             onApproveWithdrawal={onApproveWithdrawal}
             onRejectWithdrawal={onRejectWithdrawal}
+            onOpenAdjustModal={onOpenAdjustModal}
           />
         )}
 
@@ -647,7 +674,44 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onCreateDirectFranchise={onCreateDirectFranchise}
           />
         )}
+
+        {activeTab === 'firebase_diagnostics' && (
+          <div className="rounded-3xl bg-slate-900 border border-amber-400/40 p-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center mx-auto text-amber-400">
+              <Flame className="w-8 h-8 animate-bounce text-amber-400" />
+            </div>
+            <h2 className="text-xl font-black text-white">Firebase Firestore Database Live Diagnostics</h2>
+            <p className="text-slate-300 text-sm max-w-xl mx-auto">
+              Real-time synchronization engine is connected to your Firestore cluster. Test live updates, push instant ball calls, modify user wallets, and inspect Firestore collections.
+            </p>
+            <button
+              onClick={() => onOpenFirebaseDiagnostics ? onOpenFirebaseDiagnostics() : setIsDiagnosticsModalOpen(true)}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-slate-950 font-black text-sm inline-flex items-center gap-2 shadow-xl cursor-pointer"
+            >
+              <Zap className="w-5 h-5 text-slate-950" />
+              <span>Launch Full Firebase Diagnostics Lab & Live Push</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Embedded / Fallback Diagnostics Modal if opened directly in AdminDashboardView */}
+      <FirebaseDiagnosticsModal
+        isOpen={isDiagnosticsModalOpen}
+        onClose={() => setIsDiagnosticsModalOpen(false)}
+        games={games}
+        users={users}
+        tickets={tickets}
+        winners={winners}
+        deposits={deposits}
+        withdrawals={withdrawals}
+        transactions={transactions}
+        siteSettings={siteSettings}
+        onUpdateGame={onUpdateGame}
+        onUpdateWalletBalance={onUpdateWalletBalance}
+        onUpdateSettings={onUpdateSettings}
+        onForceRefresh={onForceRefresh}
+      />
     </div>
   );
 };

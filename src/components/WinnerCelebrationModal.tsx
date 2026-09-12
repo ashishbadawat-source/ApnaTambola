@@ -8,6 +8,7 @@ import { getTicketTheme } from '../utils/ticketColors';
 export interface WinnerFlashData {
   prizeName: string;
   prizeAmount: number;
+  totalPrizePool?: number;
   userName: string;
   userAvatar?: string;
   ticketId: string;
@@ -16,6 +17,15 @@ export interface WinnerFlashData {
   ticket?: TambolaTicket;
   calledNumbers?: number[];
   isCurrentUser?: boolean;
+  isEqualSplit?: boolean;
+  coWinners?: Array<{
+    userId?: string;
+    userName: string;
+    prizeAmount: number;
+    ticketNumber?: number;
+    ticketId?: string;
+    isCurrentUser?: boolean;
+  }>;
 }
 
 interface WinnerCelebrationModalProps {
@@ -79,10 +89,18 @@ export const WinnerCelebrationModal: React.FC<WinnerCelebrationModalProps> = ({
         </button>
 
         {/* ⚡ Flashing Header Alert Banner */}
-        <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-gradient-to-r from-amber-500 via-red-500 to-amber-500 text-slate-950 font-black text-xs uppercase tracking-widest animate-pulse shadow-lg shadow-amber-500/30">
-          <Zap className="w-4 h-4 fill-slate-950" />
-          <span>⚡ LIVE WINNER FLASH • लाइव विजेता फ़्लैश ⚡</span>
-          <Radio className="w-4 h-4" />
+        <div className="flex flex-col items-center gap-1.5">
+          <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-gradient-to-r from-amber-500 via-red-500 to-amber-500 text-slate-950 font-black text-xs uppercase tracking-widest animate-pulse shadow-lg shadow-amber-500/30">
+            <Zap className="w-4 h-4 fill-slate-950" />
+            <span>⚡ LIVE WINNER FLASH • लाइव विजेता फ़्लैश ⚡</span>
+            <Radio className="w-4 h-4" />
+          </div>
+
+          {winnerData.isEqualSplit && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black bg-amber-400 text-slate-950 shadow-md">
+              ⚖️ 50-50 समान बंटवारा (2 सह-विजेता)
+            </span>
+          )}
         </div>
 
         {/* Winner Hero Block */}
@@ -92,32 +110,73 @@ export const WinnerCelebrationModal: React.FC<WinnerCelebrationModalProps> = ({
             <Crown className="w-6 h-6 text-amber-200 absolute -top-2 -right-1 animate-bounce" />
           </div>
 
-          <div className="space-y-0.5">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
-              <span>{winnerData.userName}</span>
-              {isSelf && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black">
-                  YOU! (आप)
-                </span>
-              )}
-            </h2>
-            <p className="text-xs sm:text-sm font-bold text-amber-300">
-              Claimed: <span className="text-white underline">{winnerData.prizeName}</span>
-            </p>
+          <div className="space-y-1">
+            {winnerData.coWinners && winnerData.coWinners.length > 1 ? (
+              <div className="space-y-1">
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  {winnerData.coWinners.map((cw, idx) => (
+                    <div
+                      key={idx}
+                      className={`px-3 py-1 rounded-xl border flex items-center gap-1.5 ${
+                        cw.isCurrentUser
+                          ? 'bg-amber-400 text-slate-950 border-amber-300 font-black'
+                          : 'bg-slate-900/90 text-amber-200 border-amber-500/40 font-bold'
+                      }`}
+                    >
+                      <span className="text-base">{cw.userName}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-md bg-black/30 text-emerald-300 font-black">
+                        ₹{cw.prizeAmount.toLocaleString('en-IN')}
+                      </span>
+                      {cw.isCurrentUser && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-700 text-white font-black">
+                          YOU!
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs sm:text-sm font-bold text-amber-300">
+                  Claimed: <span className="text-white underline">{winnerData.prizeName}</span> (50-50 समान बंटवारा)
+                </p>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-100 flex items-center justify-center gap-2">
+                  <span>{winnerData.userName}</span>
+                  {isSelf && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black">
+                      YOU! (आप)
+                    </span>
+                  )}
+                </h2>
+                <p className="text-xs sm:text-sm font-bold text-amber-300">
+                  Claimed: <span className="text-white underline">{winnerData.prizeName}</span>
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Prize Cash Box */}
         <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/25 via-yellow-500/20 to-amber-500/25 border-2 border-amber-400/60 space-y-1">
           <span className="text-[11px] text-amber-300 uppercase font-black tracking-wider">
-            🏆 WINNING PRIZE AMOUNT 🏆
+            🏆 {winnerData.isEqualSplit ? 'बराबर ईनाम राशि (EQUAL SHARE)' : 'WINNING PRIZE AMOUNT'} 🏆
           </span>
           <div className="text-3xl sm:text-4xl font-black text-amber-300 text-glow-gold">
             ₹{(winnerData?.prizeAmount || 0).toLocaleString('en-IN')}
+            {winnerData.isEqualSplit && (
+              <span className="text-sm font-normal text-slate-300 ml-2">
+                (प्रत्येक विजेता को)
+              </span>
+            )}
           </div>
           <div className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-400 font-semibold">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{isSelf ? 'Credited to Your Winning Wallet instantly!' : 'Verified & Credited via Secure RNG!'}</span>
+            <span>
+              {winnerData.isEqualSplit
+                ? 'दोनों विजेताओं के विथड्रॉल वॉलेट में 50-50 राशि क्रेडिट कर दी गई है!'
+                : (isSelf ? 'Credited to Your Winning Wallet instantly!' : 'Verified & Credited via Secure RNG!')}
+            </span>
           </div>
         </div>
 

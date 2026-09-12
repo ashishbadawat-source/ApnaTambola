@@ -276,9 +276,16 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                   <span className="text-lg font-black text-amber-400 font-mono block">
                     +₹{(w?.prizeAmount || 0).toLocaleString('en-IN')}
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/80 px-2 py-0.2 rounded-full border border-emerald-500/30 inline-block">
-                    ✓ Paid
-                  </span>
+                  <div className="flex items-center gap-1 justify-end flex-wrap mt-0.5">
+                    {winners.filter((o) => o.gameId === w.gameId && o.prizeCode === w.prizeCode).length > 1 && (
+                      <span className="text-[9px] text-cyan-300 font-bold bg-cyan-950/80 px-1.5 py-0.2 rounded border border-cyan-500/30">
+                        ⚖️ 50-50 बंटवारा
+                      </span>
+                    )}
+                    <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/80 px-2 py-0.2 rounded-full border border-emerald-500/30 inline-block">
+                      ✓ Paid
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -390,9 +397,14 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                       </span>
                     </td>
                     <td className="p-3 text-right">
-                      <span className="font-black text-emerald-400 font-mono text-sm">
+                      <span className="font-black text-emerald-400 font-mono text-sm block">
                         +₹{(w.prizeAmount || 0).toLocaleString('en-IN')}
                       </span>
+                      {winners.filter((o) => o.gameId === w.gameId && o.prizeCode === w.prizeCode).length > 1 && (
+                        <span className="text-[9px] text-cyan-300 font-bold bg-cyan-950/80 px-1 py-0.2 rounded border border-cyan-500/30 inline-block mt-0.5">
+                          50-50 बंटवारा
+                        </span>
+                      )}
                     </td>
                     <td className="p-3 text-center">
                       <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black text-xs">

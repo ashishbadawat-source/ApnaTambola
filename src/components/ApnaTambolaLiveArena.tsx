@@ -57,15 +57,35 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
   const [markedNumbers, setMarkedNumbers] = useState<number[]>([2, 17, 34, 49, 61, 75, 88]);
   const [claimedPatterns, setClaimedPatterns] = useState<string[]>(['Early Five']);
 
-  const liveGame = (games || []).find((g) => g && g.status === 'live') || (games || [])[0];
-  const lastCalledNumber = liveGame?.currentNumber || 75;
+  const activeLiveGame = (games || []).find((g) => g && g.status === 'live') || (games || [])[0];
+  const lastCalledNumber = activeLiveGame?.currentNumber || 
+    (activeLiveGame?.calledNumbers && activeLiveGame.calledNumbers.length > 0 
+      ? activeLiveGame.calledNumbers[activeLiveGame.calledNumbers.length - 1] 
+      : 75);
+
+  const myActiveTickets = (tickets || []).filter((t) => {
+    if (!t) return false;
+    const matchedGame = (games || []).find((g) => g && g.id === t.gameId);
+    return matchedGame && matchedGame.status !== 'completed';
+  });
+
+  const displayTicket = myActiveTickets[0];
+  const ticketMatrix = displayTicket && Array.isArray(displayTicket.numbers) && displayTicket.numbers.length > 0
+    ? displayTicket.numbers
+    : sampleTicketNumbers;
+
+  const currentMarkedNumbers = displayTicket && Array.isArray(displayTicket.markedNumbers)
+    ? Array.from(new Set([...displayTicket.markedNumbers, ...markedNumbers]))
+    : markedNumbers;
+
+  const [customMarked, setCustomMarked] = useState<number[]>([]);
 
   const toggleMarkNumber = (num: number) => {
     if (!num) return;
-    if (markedNumbers.includes(num)) {
-      setMarkedNumbers(markedNumbers.filter((n) => n !== num));
+    if (customMarked.includes(num)) {
+      setCustomMarked(customMarked.filter((n) => n !== num));
     } else {
-      setMarkedNumbers([...markedNumbers, num]);
+      setCustomMarked([...customMarked, num]);
     }
   };
 
@@ -75,11 +95,9 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
     }
   };
 
-  const myActiveTickets = (tickets || []).filter((t) => {
-    if (!t) return false;
-    const matchedGame = (games || []).find((g) => g && g.id === t.gameId);
-    return matchedGame && matchedGame.status !== 'completed';
-  });
+  const isNumberMarked = (num: number) => {
+    return currentMarkedNumbers.includes(num) || customMarked.includes(num);
+  };
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-[#0e0725] via-[#120a33] to-[#08041a] border-2 border-amber-400/80 p-4 sm:p-6 lg:p-7 shadow-2xl shadow-purple-950/80">
@@ -275,7 +293,7 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
               </span>
 
               <button
-                onClick={() => onNavigate('live', liveGame?.id)}
+                onClick={() => onNavigate('live', activeLiveGame?.id)}
                 className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 via-red-500 to-pink-500 hover:from-rose-400 hover:to-red-400 text-white font-black text-xs shadow-lg shadow-red-500/50 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider animate-pulse hover:scale-105 transition-all"
               >
                 <Play className="w-3 h-3 fill-current" />
@@ -361,12 +379,12 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
 
             {/* 3x9 Ticket Grid Table */}
             <div className="bg-white rounded-xl p-1.5 shadow-inner overflow-x-auto">
-              <div className="grid grid-rows-4 gap-1 min-w-[280px]">
-                {sampleTicketNumbers.map((row, rIdx) => (
-                  <div key={rIdx} className="grid grid-cols-10 gap-1">
+              <div className="grid grid-rows-3 sm:grid-rows-4 gap-1 min-w-[280px]">
+                {ticketMatrix.map((row, rIdx) => (
+                  <div key={rIdx} className="grid grid-cols-9 sm:grid-cols-10 gap-1">
                     {row.map((num, cIdx) => {
-                      const isMarked = markedNumbers.includes(num);
-                      const isCurrentDraw = num === lastCalledNumber;
+                      const isMarked = isNumberMarked(num);
+                      const isCurrentDraw = num === lastCalledNumber && lastCalledNumber > 0;
                       return (
                         <button
                           key={cIdx}
@@ -426,7 +444,7 @@ export const ApnaTambolaLiveArena: React.FC<ApnaTambolaLiveArenaProps> = ({
                 </button>
 
                 <button
-                  onClick={() => onNavigate('live', liveGame?.id)}
+                  onClick={() => onNavigate('live', activeLiveGame?.id)}
                   className="py-2 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-purple-600/40 flex items-center justify-center gap-1.5 cursor-pointer uppercase"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />

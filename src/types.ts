@@ -218,6 +218,7 @@ export type TransactionType =
   | 'withdrawal'
   | 'ticket_purchase'
   | 'prize_won'
+  | 'system_adjustment'
   | 'referral_commission'
   | 'signup_bonus'
   | 'refund'

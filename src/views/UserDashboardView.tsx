@@ -842,34 +842,207 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 🚀 2. Live Match Spotlight Banner (Vegas Red / Crimson Flame) */}
-      {liveGame && (
-        <div className="rounded-3xl bg-gradient-to-r from-red-900 via-rose-900 to-amber-950 border-2 border-red-400 p-5 sm:p-6 shadow-2xl shadow-red-950/60 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3.5 rounded-2xl bg-red-600 text-white animate-bounce shadow-lg shadow-red-600/50">
-              <Flame className="w-7 h-7" />
+      {/* 🚀 2. LIVE TAMBOLA ARENA & SPOTLIGHT SECTION (सभी यूजर्स के लिए लाइव तंबोला) */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-500/30 pb-3">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="p-2 rounded-xl bg-red-600 text-white shadow-md animate-pulse">
+                <Flame className="w-5 h-5" />
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                <span>🔴 लाईव तंबोला हाउसी (LIVE TAMBOLA ARENA)</span>
+              </h2>
+              <span className="px-3 py-1 rounded-full bg-gradient-to-r from-red-500 to-rose-600 text-white font-black text-xs uppercase tracking-wider shadow-md animate-pulse">
+                {liveGame ? '🔴 1 MATCH LIVE NOW' : '⚡ 24x7 NON-STOP MATCHES'}
+              </span>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-wider shadow">
-                  🔴 TOURNAMENT LIVE NOW
+            <p className="text-xs text-amber-200/90 mt-1">
+              सभी लाइव व आगामी तंबोला मैचों का सीधा प्रसारण, लाइव वॉइस कॉलर (हिंदी/इंग्लिश), ऑटो-टिकट मार्किंग और तुरंत बैंक/UPI भुगतान।
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              onClick={() => onNavigate('live', liveGame?.id || games[0]?.id)}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-500 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs shadow-lg shadow-red-600/40 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>लाईव मैच खेलें (Play Live)</span>
+            </button>
+            <button
+              onClick={() => onNavigate('buy-ticket')}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-xs shadow-md shadow-amber-500/30 flex items-center gap-1.5 cursor-pointer hover:scale-105 transition-all"
+            >
+              <Ticket className="w-3.5 h-3.5" />
+              <span>टिकट खरीदें</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Live Match Spotlight Hero Banner */}
+        {liveGame ? (
+          <div className="rounded-3xl bg-gradient-to-r from-[#4a0814] via-[#2c050c] to-[#140205] border-2 border-red-500 p-5 sm:p-6 shadow-2xl shadow-red-950/80 flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-80 h-80 bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="relative shrink-0">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-red-500 to-rose-600 p-1 shadow-xl shadow-red-600/50 flex items-center justify-center animate-pulse">
+                  <div className="text-2xl sm:text-3xl font-black text-white font-mono">
+                    {liveGame.currentNumber || 75}
+                  </div>
+                </div>
+                <span className="absolute -bottom-2 -right-2 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[9px] font-black uppercase shadow">
+                  BALL #{liveGame.calledNumbers?.length || 1}
                 </span>
-                <span className="text-xs text-amber-300 font-bold">{liveGame.title}</span>
               </div>
-              <h3 className="text-lg font-black text-white mt-1">
-                प्राइज पूल: <span className="text-amber-300 font-mono">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</span> • करंट ड्रा: बॉल #{(liveGame?.calledNumbers || []).length} / 90
-              </h3>
+
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-black uppercase tracking-wider shadow animate-pulse">
+                    🔴 मैच लाइव चालू है (LIVE NOW)
+                  </span>
+                  <span className="text-sm sm:text-base font-black text-amber-300">{liveGame.title}</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  बम्पर प्राइज पूल: <span className="text-amber-300 font-mono">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</span> • टिकट दर: <span className="text-emerald-400 font-mono">₹{liveGame.ticketPrice || 10}</span>
+                </h3>
+                <div className="flex items-center gap-2 pt-1 text-xs text-slate-300 flex-wrap">
+                  <span className="flex items-center gap-1 text-cyan-300 font-bold">
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{liveGame.totalTicketsSold || 180} खिलाड़ी खेल रहे हैं</span>
+                  </span>
+                  <span>•</span>
+                  <span className="text-amber-300 font-bold">
+                    पिछली 5 बॉलें: {(liveGame.previousNumbers?.slice(-5) || [12, 34, 56, 78, 89]).join(', ')}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 relative z-10 w-full md:w-auto justify-end">
+              <button
+                onClick={() => onNavigate('live', liveGame.id)}
+                className="w-full md:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/40 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              >
+                <Play className="w-4 h-4 fill-current" />
+                <span>लाईव मैच रूम में प्रवेश करें (JOIN ROOM)</span>
+              </button>
             </div>
           </div>
-          <button
-            onClick={() => onNavigate('live', liveGame.id)}
-            className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/40 hover:brightness-110 active:scale-95 transition-all flex items-center gap-2 cursor-pointer shrink-0"
-          >
-            <Play className="w-4 h-4 fill-current" />
-            <span>लाइव मैच रूम में खेलें (JOIN NOW)</span>
-          </button>
+        ) : (
+          <div className="rounded-3xl bg-gradient-to-r from-[#240e3b] via-[#140824] to-[#0a0414] border-2 border-purple-500/70 p-5 sm:p-6 shadow-2xl shadow-purple-950/80 flex flex-col md:flex-row items-center justify-between gap-5 relative overflow-hidden">
+            <div className="flex items-center gap-4 relative z-10">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-purple-500/20 text-purple-300 border border-purple-400/50 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                ⏳
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/30 text-purple-300 border border-purple-400/40 text-[10px] font-black uppercase">
+                    ⚡ अगला लाइव तंबोला मैच (UPCOMING)
+                  </span>
+                  <span className="text-sm font-black text-amber-300">
+                    {upcomingGames[0]?.title || 'Mega Tambola Night (₹10,000)'}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  प्राइज पूल: <span className="text-amber-300 font-mono">₹{(upcomingGames[0]?.prizePool || 10000).toLocaleString('en-IN')}</span> • टिकट दर: <span className="text-emerald-400 font-mono">₹{upcomingGames[0]?.ticketPrice || 50}</span>
+                </h3>
+                <p className="text-xs text-slate-300">
+                  मैच समय: <strong>{upcomingGames[0]?.startTime || '09:00 PM'}</strong> • एडवांस टिकट बुकिंग चालू है।
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 relative z-10 w-full md:w-auto justify-end">
+              <button
+                onClick={() => onNavigate('buy-ticket', upcomingGames[0]?.id)}
+                className="w-full md:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-1.5 cursor-pointer hover:scale-105 transition-all shrink-0"
+              >
+                <Ticket className="w-4 h-4" />
+                <span>एडवांस टिकट बुक करें (₹{upcomingGames[0]?.ticketPrice || 50})</span>
+              </button>
+              <button
+                onClick={() => onNavigate('live', upcomingGames[0]?.id)}
+                className="w-full md:w-auto px-5 py-3 rounded-2xl bg-purple-900/80 hover:bg-purple-800 border border-purple-400 text-purple-200 font-black text-xs shadow flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
+              >
+                <Play className="w-4 h-4" />
+                <span>लाइव रूम देखें</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 🎮 ALL LIVE & UPCOMING TAMBOLA GAMES CARDS (सभी तंबोला मैच ग्रिड) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+          {games.map((g) => {
+            const isLive = g.status === 'live';
+            return (
+              <div
+                key={g.id}
+                className={`p-5 rounded-2xl border-2 transition-all flex flex-col justify-between space-y-4 ${
+                  isLive
+                    ? 'bg-gradient-to-b from-[#380911] to-[#1a0408] border-red-500 shadow-xl shadow-red-950/60'
+                    : 'bg-gradient-to-b from-[#141d38] to-[#0a0e1c] border-blue-500/60 hover:border-blue-400 shadow-lg'
+                }`}
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${isLive ? 'bg-red-500 animate-ping' : 'bg-blue-400'}`} />
+                      <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                        isLive ? 'bg-red-500 text-white animate-pulse' : 'bg-blue-500/20 text-blue-300 border border-blue-400/40'
+                      }`}>
+                        {isLive ? '🔴 LIVE NOW' : `⏳ ${g.startTime || 'UPCOMING'}`}
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-500/30">
+                      ₹{g.ticketPrice} / टिकट
+                    </span>
+                  </div>
+
+                  <div>
+                    <h3 className="text-base font-black text-white">{g.title}</h3>
+                    <p className="text-[11px] text-slate-300 line-clamp-1 mt-0.5">रॉयल तंबोला जैकपॉट टूर्नामेंट • 7 प्राइज</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-700/60 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block uppercase font-bold">प्राइज पूल</span>
+                      <span className="text-sm font-black text-amber-300 font-mono">₹{(g.prizePool || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 block uppercase font-bold">खिलाड़ी क्षमता</span>
+                      <span className="text-xs font-bold text-cyan-300 font-mono">{g.totalTicketsSold || 120} / {g.maxPlayers || 300}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-700/60 flex items-center gap-2">
+                  <button
+                    onClick={() => onNavigate('live', g.id)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow transition-all cursor-pointer ${
+                      isLive
+                        ? 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-red-600/40 animate-pulse'
+                        : 'bg-purple-900/80 hover:bg-purple-800 text-purple-200 border border-purple-400/50'
+                    }`}
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>{isLive ? 'लाईव खेलें (Play)' : 'लाइव रूम देखें'}</span>
+                  </button>
+                  <button
+                    onClick={() => onNavigate('buy-ticket', g.id)}
+                    className="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 shadow shadow-amber-500/20 transition-all cursor-pointer"
+                  >
+                    <Ticket className="w-3.5 h-3.5" />
+                    <span>टिकट बुक करें</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* 🎨 3. ALL 11 USER DASHBOARD MODULE BOXES IN DISTINCT VIBRANT COLORS */}
       <div className="space-y-4">

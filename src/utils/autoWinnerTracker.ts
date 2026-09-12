@@ -27,6 +27,32 @@ export interface DetectedWinEvent {
   isAutoClaimed: boolean;
   ticket: TambolaTicket;
   reason: string;
+  coWinners?: Array<{
+    userId: string;
+    userName: string;
+    prizeAmount: number;
+    ticketNumber: number;
+    ticketId: string;
+    isCurrentUser: boolean;
+  }>;
+  allWinnerNames?: string[];
+}
+
+export interface PrizeSplitAdjustment {
+  id: string;
+  gameId: string;
+  gameTitle: string;
+  prizeCode: PrizeCode;
+  prizeName: string;
+  totalPrizeAmount: number;
+  totalWinnersCount: number;
+  newPerWinnerAmount: number;
+  previousPerWinnerAmount: number;
+  adjustmentDeduction: number;
+  affectedUserId: string;
+  affectedUserName: string;
+  affectedTicketId: string;
+  affectedTicketNumber: number;
 }
 
 export interface CheckAutoTrackOptions {
@@ -53,6 +79,13 @@ const PRIZE_CHECK_ORDER: PrizeCode[] = [
 /**
  * Evaluates all tickets for a game when a number is called.
  * Detects prizes that are fulfilled and can be claimed (especially for Auto Mode / Offline tickets).
+ *
+ * ⚖️ Strict Equal Split Rule (50-50 समान बंटवारा नियम):
+ * If multiple players win any prize (e.g. ₹100 Full House claimed by 2 users),
+ * each winner receives an exact equal split (₹50 and ₹50, totaling ₹100).
+ * Neither player receives an unequal payout (never 100 to one and 50 to another).
+ * If a co-winner qualifies after the first winner was already credited,
+ * the previous winner's payout is adjusted to match the equal share.
  */
 export function checkAndAutoTrackWinners(
   gameOrOptions: TambolaGame | CheckAutoTrackOptions,
@@ -62,6 +95,7 @@ export function checkAndAutoTrackWinners(
 ): {
   newWins: DetectedWinEvent[];
   updatedPrizes: GamePrize[];
+  splitAdjustments: PrizeSplitAdjustment[];
 } {
   let gameId: string;
   let gameTitle: string;
@@ -94,10 +128,11 @@ export function checkAndAutoTrackWinners(
   }
 
   const newWins: DetectedWinEvent[] = [];
+  const splitAdjustments: PrizeSplitAdjustment[] = [];
   const updatedPrizes: GamePrize[] = JSON.parse(JSON.stringify(prizesList));
 
   if (!currentNum || !Array.isArray(ticketsList) || ticketsList.length === 0) {
-    return { newWins, updatedPrizes };
+    return { newWins, updatedPrizes, splitAdjustments };
   }
 
   const calledSet = new Set(calledNumbersList);
@@ -111,8 +146,12 @@ export function checkAndAutoTrackWinners(
     if (prizeIndex === -1) continue;
 
     const prize = updatedPrizes[prizeIndex];
-    const claimedCount = Array.isArray(prize.claimedWinners) ? prize.claimedWinners.length : 0;
-    const remainingSlots = prize.maxWinners - claimedCount;
+    if (!Array.isArray(prize.claimedWinners)) {
+      prize.claimedWinners = [];
+    }
+    const previousClaimedWinners = [...prize.claimedWinners];
+    const previousClaimedCount = previousClaimedWinners.length;
+    const remainingSlots = prize.maxWinners - previousClaimedCount;
     if (remainingSlots <= 0) continue;
 
     // Special condition for 2nd Full House: Only open if 1st Full House has already been claimed!
@@ -124,7 +163,9 @@ export function checkAndAutoTrackWinners(
       }
     }
 
-    // Check all tickets for this game
+    // Step 1: Scan all tickets to find ALL that qualify for this prize in THIS number call
+    const qualifyingTicketsThisRound: { ticket: TambolaTicket; reason: string }[] = [];
+
     for (const ticket of ticketsList) {
       if (!ticket) continue;
       // Skip tickets that are turned OFF / disabled by admin
@@ -132,18 +173,16 @@ export function checkAndAutoTrackWinners(
         continue;
       }
 
-      // Check if prize slots are still available in this iteration
-      const currentClaimedCount = Array.isArray(prize.claimedWinners) ? prize.claimedWinners.length : 0;
-      if (currentClaimedCount >= prize.maxWinners) break;
+      // Check if prize slots available
+      if (qualifyingTicketsThisRound.length >= remainingSlots) break;
 
       // Check if ticket or user already claimed this prize
-      const alreadyClaimed = Array.isArray(prize.claimedWinners) && prize.claimedWinners.some(
+      const alreadyClaimed = prize.claimedWinners.some(
         (w) => w && (w.ticketId === ticket.ticketId || (w.userId === ticket.userId && w.ticketNumber === ticket.ticketNumber))
       );
       if (alreadyClaimed) continue;
 
       // 🛡️ Strict Anti-Cheat Rule: 1 Ticket can win ONLY 1 Full House!
-      // If a ticket already claimed 'full_house', 'second_full_house', or 'third_full_house', it CANNOT claim any other Full House.
       const isFullHousePrize = prizeCode === 'full_house' || prizeCode === 'second_full_house' || prizeCode === 'third_full_house';
       if (isFullHousePrize) {
         const hasAlreadyWonFullHouse = updatedPrizes.some(
@@ -153,7 +192,6 @@ export function checkAndAutoTrackWinners(
             p.claimedWinners.some((w) => w && (w.ticketId === ticket.ticketId || (w.userId === ticket.userId && w.ticketNumber === ticket.ticketNumber)))
         );
         if (hasAlreadyWonFullHouse) {
-          // Skip ticket: Duplicate Full House on the same ticket is strictly forbidden by game rules!
           continue;
         }
       }
@@ -167,19 +205,29 @@ export function checkAndAutoTrackWinners(
       );
 
       if (verification.valid) {
-        // Winning detected!
-        if (!Array.isArray(prize.claimedWinners)) {
-          prize.claimedWinners = [];
-        }
-        const existingCount = prize.claimedWinners.length;
-        const totalWinnersCount = existingCount + 1;
-        const splitInfo = calculateSplitWinning(prize.amount, totalWinnersCount);
+        qualifyingTicketsThisRound.push({
+          ticket,
+          reason: verification.reason,
+        });
+      }
+    }
 
-        const isCurrentUser = ticket.userId === userIdStr;
+    // Step 2: If any tickets qualified, calculate winning share without touching previous winners
+    if (qualifyingTicketsThisRound.length > 0) {
+      const newWinnersCount = qualifyingTicketsThisRound.length;
+      const totalWinnersCount = previousClaimedCount + newWinnersCount;
+      const targetWinnersCapacity = Math.max(1, prize.maxWinners || 1, totalWinnersCount);
+
+      // Equal share per winner for this category:
+      const perWinnerAmount = Math.floor(prize.amount / targetWinnersCapacity);
+      const isSplit = totalWinnersCount > 1;
+
+      // 🛡️ Strict Policy: Never deduct money backwards from previous winners' wallets!
+      // Once credited, user funds are permanent and 100% safe.
+
+      // Step 2b: First register all newly qualified tickets into prize.claimedWinners
+      qualifyingTicketsThisRound.forEach(({ ticket }) => {
         const nowIso = new Date().toISOString();
-        const winId = `win_${Date.now()}_${Math.floor(Math.random() * 100000)}_${prizeCode}`;
-
-        // Record winner inside prize
         prize.claimedWinners.push({
           userId: ticket.userId,
           userName: ticket.userName,
@@ -188,6 +236,23 @@ export function checkAndAutoTrackWinners(
           winningNumber: currentNum,
           claimedAt: nowIso,
         });
+      });
+
+      // Build coWinners list of all winners for this prize (both previous and new)
+      const coWinnersList = prize.claimedWinners.map((cw) => ({
+        userId: cw.userId,
+        userName: cw.userName,
+        prizeAmount: perWinnerAmount,
+        ticketNumber: cw.ticketNumber,
+        ticketId: cw.ticketId,
+        isCurrentUser: cw.userId === userIdStr,
+      }));
+      const allWinnerNames = prize.claimedWinners.map((cw) => cw.userName);
+
+      // Award every qualifying ticket in this round
+      qualifyingTicketsThisRound.forEach(({ ticket, reason }) => {
+        const isCurrentUser = ticket.userId === userIdStr;
+        const winId = `win_${Date.now()}_${Math.floor(Math.random() * 100000)}_${prizeCode}`;
 
         newWins.push({
           id: winId,
@@ -197,10 +262,10 @@ export function checkAndAutoTrackWinners(
           prizeId: prize.id,
           prizeName: prize.name,
           prizeTotalAmount: prize.amount,
-          splitPrizeAmount: splitInfo.perWinnerAmount,
-          perWinnerAmount: splitInfo.perWinnerAmount,
-          isEqualSplit: splitInfo.isSplit,
-          isSplit: splitInfo.isSplit,
+          splitPrizeAmount: perWinnerAmount,
+          perWinnerAmount,
+          isEqualSplit: isSplit,
+          isSplit,
           totalSplitWinners: totalWinnersCount,
           totalWinnersCount,
           userId: ticket.userId,
@@ -211,17 +276,20 @@ export function checkAndAutoTrackWinners(
           ticketNumber: ticket.ticketNumber,
           winningNumber: currentNum,
           isCurrentUser,
-          isAutoClaimed: ticket.autoMode !== false, // Defaults to auto-claim tracking
+          isAutoClaimed: ticket.autoMode !== false,
           ticket,
-          reason: verification.reason,
+          reason,
+          coWinners: coWinnersList,
+          allWinnerNames,
         });
-      }
+      });
     }
   }
 
   return {
     newWins,
     updatedPrizes,
+    splitAdjustments,
   };
 }
 

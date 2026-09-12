@@ -225,28 +225,33 @@ export const TAMBOLA_NICKNAMES = TAMBOLA_NICKNAMES_EN;
 export type VoiceLanguage = 'en' | 'hi' | 'both';
 
 export function getTambolaCallText(num: number, lang: VoiceLanguage = 'both'): string {
+  const hiWord = HINDI_NUMBERS[num] || `${num}`;
   const enName = TAMBOLA_NICKNAMES_EN[num] || `Number ${num}`;
   const hiName = TAMBOLA_NICKNAMES_HI[num] || `नंबर ${num}`;
-  const hiWord = HINDI_NUMBERS[num] || `${num}`;
+
+  if (num < 10) {
+    if (lang === 'hi') {
+      return `सिंगल नंबर ${num}, ${hiWord}!`;
+    }
+    if (lang === 'en') {
+      return `Single number ${num}, ${enName}!`;
+    }
+    return `सिंगल नंबर ${num}, ${hiWord}! Single number ${num}!`;
+  }
+
+  const d1 = Math.floor(num / 10);
+  const d2 = num % 10;
+  const d1Hi = HINDI_NUMBERS[d1] || `${d1}`;
+  const d2Hi = HINDI_NUMBERS[d2] || `${d2}`;
 
   if (lang === 'hi') {
-    if (num < 10) {
-      return `सिंगल नंबर ${num} (${hiWord})। ${hiName}!`;
-    }
-    return `नंबर ${num}, ${hiWord}। ${hiName}!`;
+    return `नंबर ${num}, ${d1Hi} और ${d2Hi}, ${hiWord}!`;
   }
 
   if (lang === 'en') {
-    if (num < 10) {
-      return `Single number ${num}. ${enName}!`;
-    }
-    const digits = `${Math.floor(num / 10)}, ${num % 10}`;
-    return `Number ${num}. ${digits}. ${enName}!`;
+    return `Number ${num}, ${d1} and ${d2}, ${num}! ${enName}`;
   }
 
-  // Both / Bilingual mode (English + Hindi)
-  if (num < 10) {
-    return `Number ${num}, ${hiWord}. ${enName}!`;
-  }
-  return `Number ${num}, ${hiWord} (${num}). ${enName}!`;
+  // Both / Bilingual mode (Hindi announcement first + English clarity)
+  return `नंबर ${num}, ${d1Hi} और ${d2Hi}, ${hiWord}! Number ${num}!`;
 }

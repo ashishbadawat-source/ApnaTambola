@@ -34,6 +34,7 @@ import {
   UserX,
   Copy,
   Ticket,
+  Scissors,
 } from 'lucide-react';
 import { User, WalletTransaction, TambolaTicket } from '../../types';
 import {
@@ -48,7 +49,13 @@ interface ModuleUsersProps {
   users: User[];
   tickets?: TambolaTicket[];
   onToggleKYC: (userId: string) => Promise<boolean>;
-  onUpdateWalletBalance: (userId: string, amount: number, type: 'credit' | 'debit') => Promise<boolean>;
+  onUpdateWalletBalance: (
+    userId: string,
+    amount: number,
+    type: 'credit' | 'debit',
+    reason?: string,
+    walletSource?: 'any' | 'deposit' | 'winning' | 'referral'
+  ) => Promise<boolean>;
   onToggleBlockUser?: (userId: string) => void;
   onResetPassword?: (userId: string) => void;
   onRegisterUser?: (newUser: User) => void;
@@ -58,6 +65,7 @@ interface ModuleUsersProps {
   onForceRefresh?: () => void;
   isSyncing?: boolean;
   onViewUserWallet?: (user: User) => void;
+  onOpenAdjustModal?: (user: User, type?: 'credit' | 'debit') => void;
 }
 
 export const ModuleUsers: React.FC<ModuleUsersProps> = ({
@@ -74,6 +82,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   onForceRefresh,
   isSyncing = false,
   onViewUserWallet,
+  onOpenAdjustModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'newest' | 'active' | 'inactive' | 'blocked' | 'kyc_pending' | 'kyc_verified' | 'vip'>('all');
@@ -85,8 +94,9 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
   // Wallet Adjust Modal
   const [adjustingUser, setAdjustingUser] = useState<User | null>(null);
   const [adjustAmount, setAdjustAmount] = useState<number>(100);
-  const [adjustType, setAdjustType] = useState<'credit' | 'debit'>('credit');
-  const [adjustReason, setAdjustReason] = useState<string>('Bonus / Manual adjustment');
+  const [adjustType, setAdjustType] = useState<'credit' | 'debit'>('debit');
+  const [adjustWalletSource, setAdjustWalletSource] = useState<'any' | 'deposit' | 'winning' | 'referral'>('any');
+  const [adjustReason, setAdjustReason] = useState<string>('एडमिन द्वारा डायरेक्ट कटौती');
   const [adjustLoading, setAdjustLoading] = useState(false);
   const [adjustSuccess, setAdjustSuccess] = useState<string | null>(null);
 
@@ -245,8 +255,18 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
     if (!adjustingUser || adjustAmount <= 0) return;
     setAdjustLoading(true);
     try {
-      await onUpdateWalletBalance(adjustingUser.id, adjustAmount, adjustType);
-      setAdjustSuccess(`Successfully ${adjustType === 'credit' ? 'credited' : 'debited'} ₹${adjustAmount} to ${adjustingUser.name}`);
+      await onUpdateWalletBalance(
+        adjustingUser.id,
+        adjustAmount,
+        adjustType,
+        adjustReason || (adjustType === 'debit' ? 'एडमिन द्वारा कटौती' : 'एडमिन क्रेडिट'),
+        adjustWalletSource
+      );
+      setAdjustSuccess(
+        `✓ सफलता: ${adjustingUser.name} के वॉलेट से ₹${adjustAmount} ${
+          adjustType === 'credit' ? 'जोड़ दिया गया (Credited)' : 'काट लिया गया (Debited)'
+        }!`
+      );
       setTimeout(() => {
         setAdjustSuccess(null);
         setAdjustingUser(null);
@@ -860,33 +880,69 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                       {/* Actions Cell */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* DIRECT CUT / DEDUCT BUTTON */}
                           <button
+                            type="button"
+                            onClick={() => {
+                              if (onOpenAdjustModal) {
+                                onOpenAdjustModal(user, 'debit');
+                              } else {
+                                setAdjustingUser(user);
+                                setAdjustType('debit');
+                                setAdjustAmount(100);
+                                setAdjustWalletSource('any');
+                                setAdjustReason('एडमिन द्वारा डायरेक्ट कटौती');
+                              }
+                            }}
+                            className="px-2 py-1.5 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-black flex items-center gap-1 transition-colors cursor-pointer"
+                            title="एडमिन द्वारा फण्ड कटौती (Deduct Fund)"
+                          >
+                            <Scissors className="w-3.5 h-3.5" />
+                            <span>कट</span>
+                          </button>
+
+                          {/* DIRECT CREDIT / ADD MONEY BUTTON */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onOpenAdjustModal) {
+                                onOpenAdjustModal(user, 'credit');
+                              } else {
+                                setAdjustingUser(user);
+                                setAdjustType('credit');
+                                setAdjustAmount(100);
+                                setAdjustWalletSource('any');
+                                setAdjustReason('एडमिन डायरेक्ट पेमेंट क्रेडिट');
+                              }
+                            }}
+                            className="px-2 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-xs font-black flex items-center gap-1 transition-colors cursor-pointer"
+                            title="एडमिन द्वारा फण्ड जमा (Add Fund)"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>जमा</span>
+                          </button>
+
+                          <button
+                            type="button"
                             onClick={() => setSelectedUser(user)}
                             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors cursor-pointer"
                             title="View Full Profile"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+
                           <button
-                            onClick={() => {
-                              setAdjustingUser(user);
-                              setAdjustAmount(100);
-                              setAdjustType('credit');
-                            }}
-                            className="p-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/30 transition-colors cursor-pointer"
-                            title="Direct Wallet Credit / Debit"
-                          >
-                            <DollarSign className="w-3.5 h-3.5" />
-                          </button>
-                          <button
+                            type="button"
                             onClick={() => handleResetPassword(user)}
                             className="p-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-400/30 transition-colors cursor-pointer"
                             title="Reset PIN / Password"
                           >
                             <Key className="w-3.5 h-3.5" />
                           </button>
+
                           {/* DELETE USER ACTION BUTTON */}
                           <button
+                            type="button"
                             onClick={() => setUserToDelete(user)}
                             className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 transition-colors cursor-pointer"
                             title="ID डिलीट करें (Delete User ID)"
@@ -1028,11 +1084,11 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
       {/* Modal: Direct Wallet Adjustment */}
       {adjustingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-900 border-2 border-amber-400 rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="w-full max-w-md bg-slate-900 border-2 border-amber-400 rounded-3xl p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-amber-400" />
-                <h3 className="text-lg font-black text-white">Adjust User Wallet</h3>
+                <Scissors className="w-5 h-5 text-amber-400" />
+                <h3 className="text-lg font-black text-white">एडमिन वॉलेट फंड समायोजन</h3>
               </div>
               <button
                 onClick={() => setAdjustingUser(null)}
@@ -1042,17 +1098,36 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
               </button>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-3">
-              <img
-                src={adjustingUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
-                alt={adjustingUser.name}
-                className="w-12 h-12 rounded-xl object-cover border border-amber-400/40"
-              />
-              <div>
-                <div className="text-white font-black text-sm">{adjustingUser.name}</div>
-                <div className="text-xs text-slate-400">{adjustingUser.phone}</div>
-                <div className="text-xs text-amber-300 font-bold mt-0.5">
-                  Current Balance: ₹{(adjustingUser.walletBalance || 0).toLocaleString('en-IN')}
+            {/* Target User Info & Balances */}
+            <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+              <div className="flex items-center gap-3">
+                <img
+                  src={adjustingUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80'}
+                  alt={adjustingUser.name}
+                  className="w-12 h-12 rounded-xl object-cover border border-amber-400/40"
+                />
+                <div>
+                  <div className="text-white font-black text-sm">{adjustingUser.name}</div>
+                  <div className="text-xs text-slate-400">{adjustingUser.phone}</div>
+                  <div className="text-xs text-amber-300 font-black mt-0.5">
+                    कुल वॉलेट बैलेंस: ₹{(adjustingUser.walletBalance || 0).toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Wallet Breakdown Pills */}
+              <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px]">
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-center">
+                  <span className="text-[9px] text-slate-400 block font-bold">डिपॉजिट</span>
+                  <strong className="text-blue-300 font-mono">₹{adjustingUser.depositBalance || 0}</strong>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-center">
+                  <span className="text-[9px] text-slate-400 block font-bold">विनिंग</span>
+                  <strong className="text-amber-300 font-mono">₹{adjustingUser.winningBalance || 0}</strong>
+                </div>
+                <div className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-center">
+                  <span className="text-[9px] text-slate-400 block font-bold">रेफरल</span>
+                  <strong className="text-emerald-400 font-mono">₹{adjustingUser.referralBalance || 0}</strong>
                 </div>
               </div>
             </div>
@@ -1061,56 +1136,158 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setAdjustType('credit')}
+                onClick={() => {
+                  setAdjustType('debit');
+                  if (!adjustReason || adjustReason === 'एडमिन डायरेक्ट पेमेंट क्रेडिट') {
+                    setAdjustReason('एडमिन द्वारा डायरेक्ट कटौती');
+                  }
+                }}
                 className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  adjustType === 'credit'
-                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
-                    : 'bg-slate-800 text-slate-400'
+                  adjustType === 'debit'
+                    ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-600/30 ring-2 ring-red-400'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
-                <Plus className="w-4 h-4" />
-                <span>CREDIT (ADD MONEY)</span>
+                <Scissors className="w-4 h-4" />
+                <span>✂️ DEBIT (पैसे काटें)</span>
               </button>
               <button
                 type="button"
-                onClick={() => setAdjustType('debit')}
+                onClick={() => {
+                  setAdjustType('credit');
+                  if (!adjustReason || adjustReason === 'एडमिन द्वारा डायरेक्ट कटौती') {
+                    setAdjustReason('एडमिन डायरेक्ट पेमेंट क्रेडिट');
+                  }
+                }}
                 className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  adjustType === 'debit'
-                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/20'
-                    : 'bg-slate-800 text-slate-400'
+                  adjustType === 'credit'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/30 ring-2 ring-emerald-400'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
-                <Minus className="w-4 h-4" />
-                <span>DEBIT (DEDUCT)</span>
+                <Plus className="w-4 h-4" />
+                <span>➕ CREDIT (पैसे जोड़ें)</span>
               </button>
             </div>
 
-            {/* Amount Input */}
-            <div className="space-y-1">
-              <label className="text-xs text-slate-300 font-bold">Amount (₹)</label>
+            {/* Source selector: Any vs Deposit vs Winning vs Referral */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-300 font-bold flex items-center justify-between">
+                <span>किस वॉलेट से काटें / जोड़ें:</span>
+                <span className="text-[10px] text-amber-400 font-mono">
+                  {adjustWalletSource === 'any' ? 'कहीं से भी (Smart Cascading)' : adjustWalletSource.toUpperCase()}
+                </span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {[
+                  { id: 'any', label: 'कहीं से भी (Any)', desc: 'Auto Cascading' },
+                  { id: 'winning', label: 'विनिंग वॉलेट', desc: `₹${adjustingUser.winningBalance || 0}` },
+                  { id: 'deposit', label: 'डिपॉजिट वॉलेट', desc: `₹${adjustingUser.depositBalance || 0}` },
+                  { id: 'referral', label: 'रेफरल वॉलेट', desc: `₹${adjustingUser.referralBalance || 0}` },
+                ].map((src) => (
+                  <button
+                    key={src.id}
+                    type="button"
+                    onClick={() => setAdjustWalletSource(src.id as any)}
+                    className={`p-2 rounded-xl text-left transition-all border cursor-pointer ${
+                      adjustWalletSource === src.id
+                        ? 'bg-amber-400/20 border-amber-400 text-amber-300 ring-1 ring-amber-400'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <div className="text-[11px] font-black">{src.label}</div>
+                    <div className="text-[9px] font-mono text-slate-400">{src.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Amount Input & Quick Chips */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-300 font-bold">राशि (Amount ₹)</label>
+                {adjustType === 'debit' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const maxBal =
+                        adjustWalletSource === 'winning'
+                          ? adjustingUser.winningBalance || 0
+                          : adjustWalletSource === 'deposit'
+                          ? adjustingUser.depositBalance || 0
+                          : adjustWalletSource === 'referral'
+                          ? adjustingUser.referralBalance || 0
+                          : adjustingUser.walletBalance || 0;
+                      setAdjustAmount(Math.max(1, maxBal));
+                    }}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-black cursor-pointer underline"
+                  >
+                    पूरा बैलेंस काटें (Cut Max)
+                  </button>
+                )}
+              </div>
               <input
                 type="number"
                 value={adjustAmount}
-                onChange={(e) => setAdjustAmount(Number(e.target.value))}
+                onChange={(e) => setAdjustAmount(Math.max(0, Number(e.target.value)))}
                 min={1}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white font-black text-lg focus:outline-none focus:border-amber-400"
+                className="w-full bg-slate-950 border-2 border-amber-400/50 rounded-xl px-4 py-2 text-white font-black text-xl focus:outline-none focus:border-amber-400 font-mono"
               />
+              <div className="flex flex-wrap gap-1.5">
+                {[50, 100, 200, 500, 1000, 2000, 5000].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setAdjustAmount(amt)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-slate-300 hover:text-amber-300 text-xs font-mono font-bold transition-colors cursor-pointer"
+                  >
+                    ₹{amt}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* Reason */}
-            <div className="space-y-1">
-              <label className="text-xs text-slate-300 font-bold">Reason / Admin Audit Note</label>
+            {/* Reason Input & Presets */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-300 font-bold">कटौती / क्रेडिट का कारण (Reason)</label>
               <input
                 type="text"
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
-                placeholder="E.g. Festival Bonus, Game compensation, etc."
+                placeholder="Reason note for audit & user notification"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
               />
+              <div className="flex flex-wrap gap-1">
+                {(adjustType === 'debit'
+                  ? [
+                      'एडमिन द्वारा डायरेक्ट कटौती',
+                      'गलत क्रेडिट रिवर्सल',
+                      'फर्जी UTR / क्लेम पेनल्टी',
+                      'नियम उल्लंघन कटौती',
+                      'गेम रिफंड समायोजन',
+                    ]
+                  : [
+                      'एडमिन डायरेक्ट पेमेंट क्रेडिट',
+                      'त्यौहार स्पेशल बोनस',
+                      'गेम कैंसलेशन रिफंड',
+                      'VIP रिवॉर्ड बैलेंस',
+                      'UTR वेरिफिकेशन अप्रूवल',
+                    ]
+                ).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setAdjustReason(preset)}
+                    className="px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-[10px] text-slate-400 hover:text-amber-300 hover:border-amber-400/40 transition-colors cursor-pointer"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {adjustSuccess && (
-              <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold">
+              <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold animate-in fade-in">
                 {adjustSuccess}
               </div>
             )}
@@ -1121,15 +1298,23 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 onClick={() => setAdjustingUser(null)}
                 className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer"
               >
-                Cancel
+                रद्द करें (Cancel)
               </button>
               <button
                 type="button"
                 onClick={handleExecuteWalletAdjust}
-                disabled={adjustLoading}
-                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black text-xs shadow cursor-pointer active:scale-95 transition-all"
+                disabled={adjustLoading || adjustAmount <= 0}
+                className={`flex-1 py-2.5 rounded-xl font-black text-xs shadow cursor-pointer active:scale-95 transition-all ${
+                  adjustType === 'debit'
+                    ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-red-600/30'
+                    : 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-amber-400/30'
+                }`}
               >
-                {adjustLoading ? 'Processing...' : `Confirm ${adjustType.toUpperCase()}`}
+                {adjustLoading
+                  ? 'Processing...'
+                  : adjustType === 'debit'
+                  ? `✂️ ₹${adjustAmount} तुरंत काटें (Confirm Debit)`
+                  : `➕ ₹${adjustAmount} तुरंत जोड़ें (Confirm Credit)`}
               </button>
             </div>
           </div>
@@ -1191,6 +1376,46 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                 <div className="text-[10px] text-slate-400 uppercase font-bold">Referral Wallet</div>
                 <div className="text-base font-black text-emerald-400">₹{selectedUser.referralBalance || 0}</div>
               </div>
+            </div>
+
+            {/* Direct Admin Fund Action Buttons for Profile Drawer */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenAdjustModal) {
+                    onOpenAdjustModal(selectedUser, 'debit');
+                  } else {
+                    setAdjustingUser(selectedUser);
+                    setAdjustType('debit');
+                    setAdjustAmount(100);
+                    setAdjustWalletSource('any');
+                    setAdjustReason('एडमिन द्वारा डायरेक्ट कटौती');
+                  }
+                }}
+                className="py-2.5 px-3 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+              >
+                <Scissors className="w-4 h-4" />
+                <span>✂️ फण्ड काटें (Deduct Fund)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenAdjustModal) {
+                    onOpenAdjustModal(selectedUser, 'credit');
+                  } else {
+                    setAdjustingUser(selectedUser);
+                    setAdjustType('credit');
+                    setAdjustAmount(100);
+                    setAdjustWalletSource('any');
+                    setAdjustReason('एडमिन डायरेक्ट क्रेडिट');
+                  }
+                }}
+                className="py-2.5 px-3 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>➕ फण्ड जोड़ें (Add Fund)</span>
+              </button>
             </div>
 
             {/* User Login Password Display Box */}

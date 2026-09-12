@@ -166,15 +166,25 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
           (latestClaimedPrize && latestClaimedPrize.claimedWinners && latestClaimedPrize.claimedWinners[0]
             ? {
                 id: latestClaimedPrize.id,
-                winnerName: latestClaimedPrize.claimedWinners[0].userName,
+                winnerName: latestClaimedPrize.claimedWinners.map((w) => w.userName).join(' & '),
                 prizeName: latestClaimedPrize.name,
-                prizeAmount: latestClaimedPrize.amount,
+                prizeAmount: Math.floor(latestClaimedPrize.amount / Math.max(1, latestClaimedPrize.claimedWinners.length)),
+                totalPrizePool: latestClaimedPrize.amount,
                 winningNumber: latestClaimedPrize.claimedWinners[0].winningNumber || 47,
                 ticketNumber: latestClaimedPrize.claimedWinners[0].ticketNumber,
                 ticketId: latestClaimedPrize.claimedWinners[0].ticketId,
-                isCurrentUser: latestClaimedPrize.claimedWinners[0].userId === currentUser?.id,
+                isCurrentUser: latestClaimedPrize.claimedWinners.some((w) => w.userId === currentUser?.id),
                 isAutoClaimed: true,
                 timestamp: 'Just now',
+                isEqualSplit: latestClaimedPrize.claimedWinners.length > 1,
+                coWinners: latestClaimedPrize.claimedWinners.map((w) => ({
+                  userId: w.userId,
+                  userName: w.userName,
+                  prizeAmount: Math.floor(latestClaimedPrize.amount / Math.max(1, latestClaimedPrize.claimedWinners.length)),
+                  ticketNumber: w.ticketNumber,
+                  ticketId: w.ticketId,
+                  isCurrentUser: w.userId === currentUser?.id,
+                })),
               }
             : null)
         }
@@ -566,7 +576,15 @@ export const LiveGameView: React.FC<LiveGameViewProps> = ({
                       <span className="text-slate-400 text-[10px]">{prize.description}</span>
                       {isClaimed ? (
                         <span className="text-emerald-400 font-semibold text-[10px] flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Won by {winner?.userName || 'Player'}
+                          <CheckCircle2 className="w-3 h-3" />
+                          {claimedWinnersList.length > 1
+                            ? `विजेता: ${claimedWinnersList.map((w) => `${w.userName} (₹${Math.floor(prize.amount / claimedWinnersList.length)})`).join(' & ')}`
+                            : `Won by ${winner?.userName || 'Player'}`}
+                        </span>
+                      ) : claimedWinnersList.length > 0 ? (
+                        <span className="text-amber-300 font-semibold text-[10px] flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          {claimedWinnersList[0]?.userName} (1/2 स्लॉट) • 1 शेष
                         </span>
                       ) : (
                         <span className="text-amber-400 font-bold text-[10px] animate-pulse">

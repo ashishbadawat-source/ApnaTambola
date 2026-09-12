@@ -13,19 +13,22 @@ import {
   AlertCircle,
   Copy,
   Check,
+  Scissors,
 } from 'lucide-react';
-import { WithdrawalRequest } from '../../types';
+import { WithdrawalRequest, User } from '../../types';
 
 interface ModuleWithdrawalsProps {
   withdrawals: WithdrawalRequest[];
   onApproveWithdrawal: (id: string) => Promise<boolean>;
   onRejectWithdrawal: (id: string) => Promise<boolean>;
+  onOpenAdjustModal?: (userOrId: string | User, type?: 'credit' | 'debit') => void;
 }
 
 export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
   withdrawals,
   onApproveWithdrawal,
   onRejectWithdrawal,
+  onOpenAdjustModal,
 }) => {
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
@@ -322,26 +325,45 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
 
                   {/* Actions */}
                   <td className="px-4 py-3.5 text-right">
-                    {req.status === 'pending' ? (
-                      <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {req.status === 'pending' ? (
+                        <>
+                          <button
+                            onClick={() => onApproveWithdrawal(req.id)}
+                            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow cursor-pointer active:scale-95 transition-transform"
+                          >
+                            ✓ Pay
+                          </button>
+                          <button
+                            onClick={() => setRejectingId(req.id)}
+                            className="px-2 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold cursor-pointer"
+                          >
+                            Reject
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {req.adminRemarks || (req.status === 'approved' ? 'Settled' : 'Declined')}
+                        </span>
+                      )}
+
+                      {onOpenAdjustModal && (
                         <button
-                          onClick={() => onApproveWithdrawal(req.id)}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black text-xs shadow cursor-pointer active:scale-95 transition-transform"
+                          type="button"
+                          onClick={() =>
+                            onOpenAdjustModal(
+                              { id: req.userId, name: req.userName, phone: req.userPhone } as User,
+                              'debit'
+                            )
+                          }
+                          className="px-2 py-1.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                          title="इस प्लेयर का बैलेंस कट करें (Deduct Balance)"
                         >
-                          ✓ Approve & Pay
+                          <Scissors className="w-3.5 h-3.5" />
+                          <span>कट</span>
                         </button>
-                        <button
-                          onClick={() => setRejectingId(req.id)}
-                          className="px-2.5 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold cursor-pointer"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {req.adminRemarks || (req.status === 'approved' ? 'Settled via IMPS' : 'Declined')}
-                      </span>
-                    )}
+                      )}
+                    </div>
                   </td>
                 </tr>
                 );

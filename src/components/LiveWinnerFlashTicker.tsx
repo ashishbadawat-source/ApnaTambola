@@ -3,11 +3,21 @@ import { Trophy, Sparkles, Zap, Flame, CheckCircle, Volume2, X } from 'lucide-re
 import { GamePrize, TambolaTicket } from '../types';
 import { WinnerFlashData } from './WinnerCelebrationModal';
 
+export interface CoWinnerInfo {
+  userId?: string;
+  userName: string;
+  prizeAmount: number;
+  ticketNumber: number;
+  ticketId?: string;
+  isCurrentUser?: boolean;
+}
+
 export interface FlashWinnerItem {
   id: string;
   winnerName: string;
   prizeName: string;
   prizeAmount: number;
+  totalPrizePool?: number;
   winningNumber: number;
   ticketNumber: number;
   ticketId: string;
@@ -15,6 +25,8 @@ export interface FlashWinnerItem {
   isAutoClaimed?: boolean;
   timestamp: string;
   ticket?: TambolaTicket;
+  isEqualSplit?: boolean;
+  coWinners?: CoWinnerInfo[];
 }
 
 interface LiveWinnerFlashTickerProps {
@@ -83,6 +95,12 @@ export const LiveWinnerFlashTicker: React.FC<LiveWinnerFlashTickerProps> = ({
                 ⚡ LIVE WINNER FLASH
               </span>
 
+              {activeFlash.isEqualSplit && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-400 text-slate-950 border border-amber-300 shadow">
+                  ⚖️ 50-50 समान बंटवारा (2 सह-विजेता)
+                </span>
+              )}
+
               {activeFlash.isAutoClaimed && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                   <Sparkles className="w-2.5 h-2.5" />
@@ -98,36 +116,81 @@ export const LiveWinnerFlashTicker: React.FC<LiveWinnerFlashTickerProps> = ({
             </div>
 
             <div className="mt-1 flex items-baseline gap-2 flex-wrap">
-              <h4 className="text-base sm:text-lg font-black tracking-tight drop-shadow truncate">
-                <strong className={activeFlash.isCurrentUser ? 'text-slate-950 underline decoration-slate-900' : 'text-amber-300'}>
-                  {activeFlash.winnerName}
-                </strong>{' '}
-                ने जीता{' '}
-                <span
-                  className={`px-2 py-0.5 rounded-lg font-black text-sm ${
-                    activeFlash.isCurrentUser
-                      ? 'bg-slate-950 text-amber-300'
-                      : 'bg-purple-800/80 text-white border border-purple-400/40'
-                  }`}
-                >
-                  {activeFlash.prizeName}
-                </span>
-              </h4>
+              {activeFlash.coWinners && activeFlash.coWinners.length > 1 ? (
+                <h4 className="text-base sm:text-lg font-black tracking-tight drop-shadow flex items-center flex-wrap gap-1">
+                  {activeFlash.coWinners.map((cw, idx) => (
+                    <span key={idx} className="inline-flex items-center">
+                      {idx > 0 && <span className="text-amber-300 mx-1.5 font-black">&</span>}
+                      <span className={cw.isCurrentUser ? 'text-amber-200 underline decoration-amber-400 font-black' : (activeFlash.isCurrentUser ? 'text-slate-950 font-black' : 'text-amber-300 font-black')}>
+                        {cw.userName}
+                      </span>
+                      <span className="ml-1 text-xs font-black px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-500/40">
+                        (₹{cw.prizeAmount.toLocaleString('en-IN')})
+                      </span>
+                    </span>
+                  ))}
+                  <span className="ml-1.5 opacity-90 font-normal">ने जीता</span>{' '}
+                  <span
+                    className={`px-2 py-0.5 rounded-lg font-black text-sm ${
+                      activeFlash.isCurrentUser
+                        ? 'bg-slate-950 text-amber-300'
+                        : 'bg-purple-800/80 text-white border border-purple-400/40'
+                    }`}
+                  >
+                    {activeFlash.prizeName}
+                  </span>
+                </h4>
+              ) : (
+                <h4 className="text-base sm:text-lg font-black tracking-tight drop-shadow truncate">
+                  <strong className={activeFlash.isCurrentUser ? 'text-slate-950 underline decoration-slate-900' : 'text-amber-300'}>
+                    {activeFlash.winnerName}
+                  </strong>{' '}
+                  ने जीता{' '}
+                  <span
+                    className={`px-2 py-0.5 rounded-lg font-black text-sm ${
+                      activeFlash.isCurrentUser
+                        ? 'bg-slate-950 text-amber-300'
+                        : 'bg-purple-800/80 text-white border border-purple-400/40'
+                    }`}
+                  >
+                    {activeFlash.prizeName}
+                  </span>
+                </h4>
+              )}
 
-              <div className="flex items-center gap-1.5 text-xs font-black">
-                <span
-                  className={`px-2 py-0.5 rounded-md ${
-                    activeFlash.isCurrentUser
-                      ? 'bg-slate-950/80 text-yellow-300'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                  }`}
-                >
-                  ₹{(activeFlash?.prizeAmount || 0).toLocaleString('en-IN')}
-                </span>
+              <div className="flex items-center gap-1.5 text-xs font-black flex-wrap">
+                {activeFlash.coWinners && activeFlash.coWinners.length > 1 ? (
+                  <>
+                    <span
+                      className={`px-2 py-0.5 rounded-md ${
+                        activeFlash.isCurrentUser
+                          ? 'bg-slate-950/80 text-yellow-300'
+                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      }`}
+                    >
+                      बराबर 50-50 बंटवारा: ₹{activeFlash.prizeAmount.toLocaleString('en-IN')} प्रत्येक (कुल: ₹{(activeFlash.totalPrizePool || activeFlash.prizeAmount * activeFlash.coWinners.length).toLocaleString('en-IN')})
+                    </span>
+                    <span className="text-[11px] opacity-80">
+                      • बॉल: <strong className="font-black underline">{activeFlash.winningNumber}</strong> • टिकट: {activeFlash.coWinners.map(cw => `#${cw.ticketNumber}`).join(', ')}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={`px-2 py-0.5 rounded-md ${
+                        activeFlash.isCurrentUser
+                          ? 'bg-slate-950/80 text-yellow-300'
+                          : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      }`}
+                    >
+                      ₹{(activeFlash?.prizeAmount || 0).toLocaleString('en-IN')}
+                    </span>
 
-                <span className="text-[11px] opacity-80">
-                  • नंबर: <strong className="font-black underline">{activeFlash.winningNumber}</strong> • टिकट #{activeFlash.ticketNumber}
-                </span>
+                    <span className="text-[11px] opacity-80">
+                      • नंबर: <strong className="font-black underline">{activeFlash.winningNumber}</strong> • टिकट #{activeFlash.ticketNumber}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -147,6 +210,9 @@ export const LiveWinnerFlashTicker: React.FC<LiveWinnerFlashTickerProps> = ({
                   winningNumber: activeFlash.winningNumber,
                   ticket: activeFlash.ticket,
                   isCurrentUser: activeFlash.isCurrentUser,
+                  isEqualSplit: activeFlash.isEqualSplit,
+                  totalPrizePool: activeFlash.totalPrizePool,
+                  coWinners: activeFlash.coWinners,
                 })
               }
               className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md ${

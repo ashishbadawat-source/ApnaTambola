@@ -151,24 +151,24 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
 
       {/* Ticket Body */}
       <div className="p-3 sm:p-4 space-y-3">
-        {/* Game Title & Progress Bar & Auto Mode Switch */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <div className="space-y-0.5 max-w-[240px]">
-            <div className="flex items-center gap-2 truncate">
-              <span className="w-2.5 h-2.5 rounded-full ring-2 ring-white/30" style={{ backgroundColor: theme.previewHex }} />
-              <span className="text-slate-100 font-black truncate text-xs sm:text-sm">
-                {gameTitleDisplay}
+        {/* Prominent Game Title, Date & Time Banner */}
+        <div className="rounded-xl bg-gradient-to-r from-slate-900/90 via-purple-950/60 to-slate-900/90 border border-amber-500/30 p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-inner">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full ring-2 ring-amber-400 animate-pulse" style={{ backgroundColor: theme.previewHex }} />
+              <span className="text-amber-300 font-black text-sm sm:text-base tracking-wide uppercase drop-shadow">
+                🎮 {gameTitleDisplay}
               </span>
             </div>
             {(ticket.matchDate || ticket.matchTime) && (
-              <div className="text-[10px] text-amber-300/90 flex items-center gap-2 font-mono pl-4">
-                <span>📅 {ticket.matchDate}</span>
-                <span>⏰ {ticket.matchTime}</span>
+              <div className="text-[11px] text-slate-200 flex items-center gap-3 font-mono font-bold pl-5">
+                <span className="bg-black/50 px-2 py-0.5 rounded border border-white/10 text-amber-300">📅 {ticket.matchDate || 'Today'}</span>
+                <span className="bg-black/50 px-2 py-0.5 rounded border border-white/10 text-cyan-300">⏰ {ticket.matchTime || '09:00 PM'}</span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-end sm:self-center">
             {/* 🤖 Auto Mode (ऑटो मोड) Toggle */}
             {onToggleAutoMode && (
               <button
@@ -177,7 +177,7 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
                   e.stopPropagation();
                   onToggleAutoMode(ticket.id);
                 }}
-                className={`px-2 py-0.5 rounded-full font-black text-[10px] flex items-center gap-1 transition-all cursor-pointer border ${
+                className={`px-2.5 py-1 rounded-full font-black text-[10px] flex items-center gap-1 transition-all cursor-pointer border ${
                   ticket.autoMode !== false
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50 shadow-sm shadow-emerald-500/30'
                     : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'
@@ -193,7 +193,7 @@ export const TambolaTicketCard: React.FC<TambolaTicketCardProps> = ({
             )}
 
             <span
-              className={`px-2.5 py-0.5 rounded-full font-black text-[11px] ${
+              className={`px-2.5 py-1 rounded-full font-black text-[11px] ${
                 markedCount >= 15
                   ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-300 animate-bounce'
                   : markedCount >= 10
