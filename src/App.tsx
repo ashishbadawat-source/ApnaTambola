@@ -2704,6 +2704,11 @@ export function App() {
           }, { merge: true }).catch(() => {});
           setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
         } catch {}
+
+        // 🧹 Auto-remove / archive completed tickets after Full House
+        setTimeout(() => {
+          handleClearCompletedTickets(liveGame.id).catch(() => {});
+        }, 3000);
       }
 
       // Process each win
