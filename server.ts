@@ -923,7 +923,7 @@ async function startServer() {
 
   // Comprehensive Real-Time Sync endpoint for cross-device sync
   app.get('/api/sync/all', (req: Request, res: Response) => {
-    // Ensure all user IDs from deposits exist in users
+    // Ensure all user IDs from deposits and withdrawals exist in users
     let changed = false;
     const userIds = new Set(users.map((u) => u.id));
     deposits.forEach((dep) => {
@@ -949,6 +949,33 @@ async function startServer() {
           createdAt: dep.timestamp || new Date().toISOString(),
         });
         userIds.add(dep.userId);
+        changed = true;
+      }
+    });
+
+    withdrawals.forEach((wdr) => {
+      if (wdr.userId && !userIds.has(wdr.userId)) {
+        users.unshift({
+          id: wdr.userId,
+          name: wdr.userName || `Player ${wdr.userId.slice(-4)}`,
+          email: wdr.userEmail || `${wdr.userId}@tambolalive.com`,
+          phone: wdr.userPhone || '+91 9999999999',
+          role: 'user',
+          status: 'active',
+          isBlocked: false,
+          walletBalance: 0,
+          depositBalance: 0,
+          winningBalance: 0,
+          referralBalance: 0,
+          bonusRewardBalance: 0,
+          firstDepositBonusClaimed: true,
+          hasDeposited: true,
+          referralCode: `REF-${(wdr.userName || 'PLY').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+          kycStatus: 'verified',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+          createdAt: wdr.requestDate || new Date().toISOString(),
+        });
+        userIds.add(wdr.userId);
         changed = true;
       }
     });
@@ -2382,6 +2409,149 @@ async function startServer() {
   });
 
   // 5. Wallet & Payment Simulation APIs
+  app.get('/api/withdrawals', (req: Request, res: Response) => {
+    res.json(withdrawals);
+  });
+
+  app.post('/api/withdrawals/request', (req: Request, res: Response) => {
+    try {
+      const {
+        id,
+        userId,
+        userName,
+        userEmail,
+        userPhone,
+        amount,
+        tdsPercentage,
+        tdsAmount,
+        adminFeePercentage,
+        adminFeeAmount,
+        totalDeductions,
+        netAmount,
+        paymentMethod,
+        upiId,
+        bankName,
+        accountNumber,
+        ifsc,
+        accountHolder,
+        status,
+        requestDate,
+      } = req.body;
+
+      const numAmount = Number(amount) || 0;
+      if (numAmount <= 0) {
+        return res.status(400).json({ success: false, error: 'Invalid withdrawal amount.' });
+      }
+
+      const wdrId = id || `req_${Date.now()}`;
+
+      // Check if withdrawal already exists
+      let existingWdr = withdrawals.find((w) => w.id === wdrId);
+
+      // Robust User Lookup
+      let user = users.find((u) => u.id === userId);
+      if (!user && userPhone) {
+        const cleanPhone = userPhone.replace(/\D/g, '').slice(-10);
+        user = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+      }
+      if (!user && userEmail) {
+        user = users.find((u) => u.email && u.email.toLowerCase() === userEmail.toLowerCase());
+      }
+      if (!user && userName) {
+        user = users.find((u) => u.name && u.name.trim().toLowerCase() === userName.trim().toLowerCase());
+      }
+
+      // Auto-create user if missing so admin can always see user details
+      if (!user && (userId || userName || userPhone)) {
+        user = {
+          id: userId || `usr_${Date.now()}`,
+          name: userName || 'Player',
+          email: userEmail || `${(userName || 'user').toLowerCase().replace(/\s+/g, '')}@tambolalive.com`,
+          phone: userPhone || '+91 9999999999',
+          role: 'user',
+          status: 'active',
+          isBlocked: false,
+          walletBalance: 0,
+          depositBalance: 0,
+          winningBalance: 0,
+          referralBalance: 0,
+          bonusRewardBalance: 0,
+          firstDepositBonusClaimed: true,
+          hasDeposited: true,
+          referralCode: `REF-${(userName || 'PLY').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+          kycStatus: 'verified',
+          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+          createdAt: requestDate || new Date().toISOString(),
+        };
+        users.unshift(user);
+      }
+
+      const wdrRecord: WithdrawalRequest = {
+        id: wdrId,
+        userId: userId || (user ? user.id : 'usr_anon'),
+        userName: userName || (user ? user.name : 'Unknown User'),
+        userEmail: userEmail || (user ? user.email : ''),
+        userPhone: userPhone || (user ? user.phone : ''),
+        amount: numAmount,
+        tdsPercentage: tdsPercentage ?? siteSettings.tdsPercentage ?? 10,
+        tdsAmount: tdsAmount ?? Math.round((numAmount * (tdsPercentage ?? 10)) / 100),
+        adminFeePercentage: adminFeePercentage ?? siteSettings.adminFeePercentage ?? 5,
+        adminFeeAmount: adminFeeAmount ?? Math.round((numAmount * (adminFeePercentage ?? 5)) / 100),
+        totalDeductions: totalDeductions ?? (Math.round((numAmount * (tdsPercentage ?? 10)) / 100) + Math.round((numAmount * (adminFeePercentage ?? 5)) / 100)),
+        netAmount: netAmount ?? (numAmount - (Math.round((numAmount * (tdsPercentage ?? 10)) / 100) + Math.round((numAmount * (adminFeePercentage ?? 5)) / 100))),
+        paymentMethod: paymentMethod || 'upi',
+        upiId,
+        bankName,
+        accountNumber,
+        ifsc,
+        accountHolder: accountHolder || userName || (user ? user.name : ''),
+        status: (status as any) || 'pending',
+        requestDate: requestDate || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      };
+
+      if (existingWdr) {
+        Object.assign(existingWdr, wdrRecord);
+      } else {
+        withdrawals.unshift(wdrRecord);
+      }
+
+      // Add transaction if not present
+      let pendingTxn = transactions.find((t) => t.referenceId === wdrRecord.id);
+      if (!pendingTxn) {
+        pendingTxn = {
+          id: `txn_${Date.now()}`,
+          userId: wdrRecord.userId,
+          type: 'withdrawal',
+          amount: -numAmount,
+          balanceAfter: user ? user.walletBalance : 0,
+          description: `Withdrawal ₹${numAmount} to ${paymentMethod === 'upi' ? upiId : bankName}`,
+          paymentMethod: paymentMethod === 'upi' ? 'UPI' : 'Bank IMPS',
+          referenceId: wdrRecord.id,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          status: 'pending',
+        };
+        transactions.unshift(pendingTxn);
+      }
+
+      saveStateToDisk();
+
+      broadcastSSE('new_withdrawal_request', {
+        withdrawal: wdrRecord,
+        user,
+        transaction: pendingTxn,
+      });
+
+      res.json({
+        success: true,
+        withdrawal: wdrRecord,
+        user,
+        message: 'Withdrawal request recorded successfully',
+      });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
   app.post('/api/wallet/deposit', (req: Request, res: Response) => {
     const { amount, paymentMethod, userId } = req.body;
     const numAmount = Number(amount);
@@ -2407,6 +2577,8 @@ async function startServer() {
     };
     transactions.unshift(txn);
 
+    saveStateToDisk();
+
     // Send Brevo Wallet Deposit Transaction Email
     sendBrevoEmail('wallet_transaction', user.email || 'user@example.com', user.name, {
       txnType: 'Wallet Deposit Recharge',
@@ -2426,28 +2598,41 @@ async function startServer() {
   });
 
   app.post('/api/wallet/withdraw', (req: Request, res: Response) => {
-    const { amount, paymentMethod, upiId, bankName, accountNumber, ifsc, accountHolder, userId } = req.body;
+    const { amount, paymentMethod, upiId, bankName, accountNumber, ifsc, accountHolder, userId, id } = req.body;
     const numAmount = Number(amount);
     const user = users.find((u) => u.id === (userId || users[0].id)) || users[0];
 
-    if (!numAmount || numAmount < siteSettings.minWithdrawal) {
-      return res.status(400).json({ error: `Minimum withdrawal amount is ₹${siteSettings.minWithdrawal}.` });
+    if (!numAmount || numAmount < (siteSettings.minWithdrawal || 100)) {
+      return res.status(400).json({ error: `Minimum withdrawal amount is ₹${siteSettings.minWithdrawal || 100}.` });
     }
 
-    if (numAmount > user.winningBalance) {
-      return res.status(400).json({ error: `Insufficient winning balance. You have ₹${user.winningBalance} available for withdrawal.` });
+    if (numAmount > (user.winningBalance || 0) && numAmount > (user.walletBalance || 0)) {
+      return res.status(400).json({ error: `Insufficient balance. You have ₹${user.winningBalance || user.walletBalance} available for withdrawal.` });
     }
 
-    user.walletBalance -= numAmount;
-    user.winningBalance -= numAmount;
+    user.walletBalance = Math.max(0, user.walletBalance - numAmount);
+    user.winningBalance = Math.max(0, (user.winningBalance || 0) - numAmount);
+
+    const tdsPercentage = siteSettings.tdsPercentage ?? 10;
+    const adminFeePercentage = siteSettings.adminFeePercentage ?? 5;
+    const tdsAmount = Math.round((numAmount * tdsPercentage) / 100);
+    const adminFeeAmount = Math.round((numAmount * adminFeePercentage) / 100);
+    const totalDeductions = tdsAmount + adminFeeAmount;
+    const netAmount = numAmount - totalDeductions;
 
     const wdr: WithdrawalRequest = {
-      id: `wdr_${Date.now()}`,
+      id: id || `req_${Date.now()}`,
       userId: user.id,
       userName: user.name,
       userEmail: user.email,
       userPhone: user.phone,
       amount: numAmount,
+      tdsPercentage,
+      tdsAmount,
+      adminFeePercentage,
+      adminFeeAmount,
+      totalDeductions,
+      netAmount,
       paymentMethod: paymentMethod || 'upi',
       upiId,
       bankName,
@@ -2455,7 +2640,7 @@ async function startServer() {
       ifsc,
       accountHolder: accountHolder || user.name,
       status: 'pending',
-      requestDate: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      requestDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
       note: 'User withdrawal request',
     };
     withdrawals.unshift(wdr);
@@ -2469,13 +2654,22 @@ async function startServer() {
       description: `Withdrawal Request to ${paymentMethod === 'upi' ? upiId : bankName}`,
       paymentMethod: paymentMethod === 'upi' ? 'UPI' : 'Bank IMPS',
       referenceId: wdr.id,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
       balanceAfter: user.walletBalance,
     };
     transactions.unshift(txn);
 
+    saveStateToDisk();
+
+    // Broadcast SSE live event for multi-device sync
+    broadcastSSE('new_withdrawal_request', {
+      withdrawal: wdr,
+      user,
+      transaction: txn,
+    });
+
     // Send Brevo Withdrawal Request Confirmation Email
-    sendBrevoEmail('withdrawal_request', user.email || user.email || 'user@example.com', user.name, {
+    sendBrevoEmail('withdrawal_request', user.email || 'user@example.com', user.name, {
       amount: numAmount.toLocaleString('en-IN'),
       paymentMethod: paymentMethod === 'upi' ? `Instant UPI (${upiId})` : `Bank IMPS (${bankName})`,
       upiIdOrBank: upiId || `${bankName} - A/C: ${accountNumber}`,
@@ -2498,10 +2692,16 @@ async function startServer() {
     const wdr = withdrawals.find((w) => w.id === req.params.id);
     if (!wdr) return res.status(404).json({ error: 'Withdrawal not found' });
 
+    let user = users.find((u) => u.id === wdr.userId);
+    if (!user && wdr.userPhone) {
+      const cleanPhone = wdr.userPhone.replace(/\D/g, '').slice(-10);
+      user = users.find((u) => u.phone && u.phone.replace(/\D/g, '').endsWith(cleanPhone));
+    }
+
     if (action === 'approve') {
       wdr.status = 'approved';
       wdr.processedDate = new Date().toISOString().replace('T', ' ').slice(0, 16);
-      wdr.adminRemarks = remarks || 'Approved and credited via automated IMPS';
+      wdr.adminRemarks = remarks || 'Approved and credited via automated IMPS / UPI';
       
       const txn = transactions.find((t) => t.referenceId === wdr.id);
       if (txn) txn.status = 'completed';
@@ -2510,14 +2710,23 @@ async function startServer() {
       wdr.processedDate = new Date().toISOString().replace('T', ' ').slice(0, 16);
       wdr.adminRemarks = remarks || 'Rejected by Admin. Amount refunded to wallet.';
 
-      const user = users.find((u) => u.id === wdr.userId);
       if (user) {
-        user.walletBalance += wdr.amount;
-        user.winningBalance += wdr.amount;
+        user.walletBalance = (user.walletBalance || 0) + wdr.amount;
+        user.winningBalance = (user.winningBalance || 0) + wdr.amount;
       }
       const txn = transactions.find((t) => t.referenceId === wdr.id);
       if (txn) txn.status = 'failed';
     }
+
+    saveStateToDisk();
+
+    // Broadcast SSE live event for multi-device sync
+    broadcastSSE('withdrawal_updated', {
+      withdrawalId: req.params.id,
+      withdrawal: wdr,
+      action,
+      user,
+    });
 
     // Send Brevo Withdrawal Status Email (Approved or Rejected)
     sendBrevoEmail('withdrawal_status', wdr.userEmail || 'user@example.com', wdr.userName, {
@@ -2529,7 +2738,11 @@ async function startServer() {
       processedDate: wdr.processedDate,
     }).catch((e) => console.warn('[Brevo Error]', e));
 
-    res.json(wdr);
+    res.json({
+      success: true,
+      withdrawal: wdr,
+      user,
+    });
   });
 
   // 6. Admin Settings & Referral Settings

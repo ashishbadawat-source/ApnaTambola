@@ -809,6 +809,38 @@ export function App() {
         (err) => console.warn('Firestore deposits listener:', err)
       );
 
+      // Real-time withdrawals sync for multi-device admin settlement
+      const unsubscribeWithdrawals = onSnapshot(
+        collection(db, 'withdrawals'),
+        (snapshot) => {
+          const firestoreWdrs: WithdrawalRequest[] = [];
+          snapshot.forEach((docSnap) => {
+            firestoreWdrs.push({ ...(docSnap.data() as WithdrawalRequest), id: docSnap.id });
+          });
+
+          if (firestoreWdrs.length > 0) {
+            setWithdrawals((prev) => {
+              const map = new Map<string, WithdrawalRequest>();
+              prev.forEach((w) => map.set(w.id, w));
+              firestoreWdrs.forEach((w) => {
+                const existing = map.get(w.id);
+                map.set(w.id, { ...(existing || {}), ...w });
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+              });
+              try {
+                localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
+        },
+        (err) => console.warn('Firestore withdrawals listener:', err)
+      );
+
       return () => {
         if (unsubscribeUsers) unsubscribeUsers();
         if (unsubscribeCommissions) unsubscribeCommissions();
@@ -816,6 +848,7 @@ export function App() {
         if (unsubscribeGames) unsubscribeGames();
         if (unsubscribeTickets) unsubscribeTickets();
         if (unsubscribeDeposits) unsubscribeDeposits();
+        if (unsubscribeWithdrawals) unsubscribeWithdrawals();
       };
     } catch (err) {
       console.warn('Firestore onSnapshot listener error:', err);
@@ -944,6 +977,55 @@ export function App() {
             }
             if (notification) {
               setUserNotifications((prev) => [notification, ...prev]);
+            }
+          } else if (event.data?.type === 'NEW_WITHDRAWAL_REQUEST' && event.data.withdrawal) {
+            const newWdr: WithdrawalRequest = event.data.withdrawal;
+            setWithdrawals((prev) => {
+              const exists = prev.some((w) => w.id === newWdr.id);
+              if (exists) {
+                return prev.map((w) => (w.id === newWdr.id ? { ...w, ...newWdr } : w));
+              }
+              return [newWdr, ...prev];
+            });
+            if (event.data.user) {
+              const targetUser: User = event.data.user;
+              setUsers((prev) =>
+                prev.map((u) => (u.id === targetUser.id ? { ...u, ...targetUser } : u))
+              );
+            }
+            if (event.data.transaction) {
+              const newTxn: WalletTransaction = event.data.transaction;
+              setTransactions((prev) => {
+                if (prev.some((t) => t.id === newTxn.id)) return prev;
+                return [newTxn, ...prev];
+              });
+            }
+          } else if (event.data?.type === 'WITHDRAWAL_APPROVED' && event.data.withdrawalId) {
+            const { withdrawalId } = event.data;
+            setWithdrawals((prev) =>
+              prev.map((w) => (w.id === withdrawalId ? { ...w, status: 'approved' as const, processedDate: new Date().toISOString() } : w))
+            );
+            setTransactions((prev) =>
+              prev.map((t) => (t.referenceId === withdrawalId ? { ...t, status: 'completed' as const } : t))
+            );
+          } else if (event.data?.type === 'WITHDRAWAL_REJECTED' && event.data.withdrawalId) {
+            const { withdrawalId, refundedUser } = event.data;
+            setWithdrawals((prev) =>
+              prev.map((w) => (w.id === withdrawalId ? { ...w, status: 'rejected' as const, processedDate: new Date().toISOString() } : w))
+            );
+            setTransactions((prev) =>
+              prev.map((t) => (t.referenceId === withdrawalId ? { ...t, status: 'failed' as const } : t))
+            );
+            if (refundedUser) {
+              setUsers((prev) =>
+                prev.map((u) => (u.id === refundedUser.id ? { ...u, ...refundedUser } : u))
+              );
+              setCurrentUser((prev) => {
+                if (prev && prev.id === refundedUser.id) {
+                  return { ...prev, ...refundedUser };
+                }
+                return prev;
+              });
             }
           } else if (event.data?.type === 'DEPOSIT_REJECTED' && event.data.depositId) {
             const { depositId } = event.data;
@@ -1101,6 +1183,22 @@ export function App() {
               prev.forEach((t) => map.set(t.id, t));
               parsed.forEach((t) => map.set(t.id, t));
               return Array.from(map.values());
+            });
+          }
+        } catch (err) {}
+      } else if (e.key === 'apna_tambola_withdrawals' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setWithdrawals((prev) => {
+              const map = new Map<string, WithdrawalRequest>();
+              prev.forEach((w) => map.set(w.id, w));
+              parsed.forEach((w) => map.set(w.id, w));
+              return Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+              });
             });
           }
         } catch (err) {}
@@ -1287,6 +1385,27 @@ export function App() {
               return merged;
             });
           }
+          if (Array.isArray(data.withdrawals) && data.withdrawals.length > 0) {
+            setWithdrawals((prev) => {
+              const map = new Map<string, WithdrawalRequest>();
+              prev.forEach((w) => map.set(w.id, w));
+              data.withdrawals.forEach((w: WithdrawalRequest) => {
+                if (w && w.id) {
+                  const existing = map.get(w.id);
+                  map.set(w.id, { ...(existing || {}), ...w });
+                }
+              });
+              const merged = Array.from(map.values()).sort((a, b) => {
+                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
+                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
+                return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+              });
+              try {
+                localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(merged));
+              } catch (e) {}
+              return merged;
+            });
+          }
           if (Array.isArray(data.transactions) && data.transactions.length > 0) {
             setTransactions((prev) => {
               const map = new Map<string, WalletTransaction>();
@@ -1402,6 +1521,59 @@ export function App() {
                 }
                 return prev.filter((t) => !t.isCompleted && !t.isArchived);
               });
+            } else if (parsed?.type === 'new_withdrawal_request' && parsed?.payload) {
+              const { withdrawal: newWdr, user: reqUser, transaction: newTxn } = parsed.payload;
+              if (newWdr && newWdr.id) {
+                setWithdrawals((prev) => {
+                  const exists = prev.some((w) => w.id === newWdr.id);
+                  if (exists) {
+                    return prev.map((w) => (w.id === newWdr.id ? { ...w, ...newWdr } : w));
+                  }
+                  return [newWdr, ...prev];
+                });
+              }
+              if (reqUser && reqUser.id) {
+                setUsers((prev) =>
+                  prev.map((u) => (u.id === reqUser.id ? { ...u, ...reqUser } : u))
+                );
+              }
+              if (newTxn && newTxn.id) {
+                setTransactions((prev) => {
+                  if (prev.some((t) => t.id === newTxn.id)) return prev;
+                  return [newTxn, ...prev];
+                });
+              }
+            } else if (parsed?.type === 'withdrawal_updated' && parsed?.payload) {
+              const { withdrawalId, withdrawal: updatedWdr, action, user: refundedUser } = parsed.payload;
+              if (withdrawalId) {
+                setWithdrawals((prev) =>
+                  prev.map((w) => {
+                    if (w.id === withdrawalId) {
+                      return updatedWdr ? { ...w, ...updatedWdr } : { ...w, status: action === 'approve' ? 'approved' : 'rejected' };
+                    }
+                    return w;
+                  })
+                );
+                setTransactions((prev) =>
+                  prev.map((t) => {
+                    if (t.referenceId === withdrawalId) {
+                      return { ...t, status: action === 'approve' ? 'completed' : 'failed' };
+                    }
+                    return t;
+                  })
+                );
+                if (refundedUser && refundedUser.id) {
+                  setUsers((prev) =>
+                    prev.map((u) => (u.id === refundedUser.id ? { ...u, ...refundedUser } : u))
+                  );
+                  setCurrentUser((prev) => {
+                    if (prev && prev.id === refundedUser.id) {
+                      return { ...prev, ...refundedUser };
+                    }
+                    return prev;
+                  });
+                }
+              }
             }
           } catch (err) {}
         };
@@ -4580,13 +4752,23 @@ export function App() {
     const totalDeductions = tdsAmount + adminFeeAmount;
     const netAmount = data.amount - totalDeductions;
 
-    setCurrentUser((prev) => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        walletBalance: prev.walletBalance - data.amount,
-        winningBalance: prev.winningBalance - data.amount,
-      };
+    const updatedUser: User = {
+      ...currentUser,
+      walletBalance: Math.max(0, currentUser.walletBalance - data.amount),
+      winningBalance: Math.max(0, (currentUser.winningBalance || 0) - data.amount),
+    };
+
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updatedUser));
+    } catch (e) {}
+
+    setUsers((prev) => {
+      const next = prev.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+      try {
+        localStorage.setItem('apna_tambola_registered_users', JSON.stringify(next));
+      } catch (e) {}
+      return next;
     });
 
     const newReq: WithdrawalRequest = {
@@ -4611,14 +4793,21 @@ export function App() {
       status: 'pending',
       requestDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
     };
-    setWithdrawals((prev) => [newReq, ...prev]);
+
+    setWithdrawals((prev) => {
+      const next = [newReq, ...prev];
+      try {
+        localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
 
     const newTxn: WalletTransaction = {
       id: `txn_${Date.now()}`,
       userId: currentUser.id,
       type: 'withdrawal',
       amount: -data.amount,
-      balanceAfter: currentUser.walletBalance - data.amount,
+      balanceAfter: updatedUser.walletBalance,
       description: `Withdrawal ₹${data.amount} (Net Payout: ₹${netAmount} after 10% TDS & 5% Admin Charges) to ${
         data.paymentMethod === 'upi' ? data.upiId : data.bankName
       }`,
@@ -4627,6 +4816,38 @@ export function App() {
       status: 'pending',
     };
     setTransactions((prev) => [newTxn, ...prev]);
+
+    // 1. Post to Server for cross-device visibility
+    try {
+      fetch('/api/withdrawals/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newReq),
+      }).catch((e) => console.warn('Server withdrawal request sync error:', e));
+    } catch (e) {}
+
+    // 2. Persist to Firestore for multi-device sync
+    try {
+      const wdrRef = doc(db, 'withdrawals', newReq.id);
+      setDoc(wdrRef, newReq).catch((e) => console.warn('Firestore withdrawal create error:', e));
+      const userRef = doc(db, 'users', updatedUser.id);
+      setDoc(userRef, { walletBalance: updatedUser.walletBalance, winningBalance: updatedUser.winningBalance }, { merge: true }).catch((e) => console.warn('Firestore user balance sync error:', e));
+    } catch (e) {}
+
+    // 3. Broadcast across tabs and local devices via BroadcastChannel
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({
+          type: 'NEW_WITHDRAWAL_REQUEST',
+          withdrawal: newReq,
+          user: updatedUser,
+          transaction: newTxn,
+        });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 
@@ -4844,35 +5065,124 @@ export function App() {
   };
 
   // 9. Admin Approve Withdrawal
-  const handleApproveWithdrawal = async (id: string): Promise<boolean> => {
-    setWithdrawals((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, status: 'approved' } : w))
-    );
+  const handleApproveWithdrawal = async (id: string, remarks?: string): Promise<boolean> => {
+    setWithdrawals((prev) => {
+      const next = prev.map((w) => (w.id === id ? { ...w, status: 'approved' as const, processedDate: new Date().toISOString().replace('T', ' ').slice(0, 16), adminRemarks: remarks || 'Approved and credited via automated IMPS / UPI' } : w));
+      try {
+        localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
     setTransactions((prev) =>
-      prev.map((t) => (t.referenceId === id ? { ...t, status: 'completed' } : t))
+      prev.map((t) => (t.referenceId === id ? { ...t, status: 'completed' as const } : t))
     );
+
+    // 1. Call Backend API
+    try {
+      fetch(`/api/admin/withdrawals/${id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve', remarks: remarks || 'Approved by Admin' }),
+      }).catch((e) => console.warn('Server approve withdrawal notice:', e));
+    } catch (e) {}
+
+    // 2. Persist to Firestore
+    try {
+      const wdrRef = doc(db, 'withdrawals', id);
+      setDoc(wdrRef, { status: 'approved', processedDate: new Date().toISOString(), adminRemarks: remarks || 'Approved by Admin' }, { merge: true }).catch((e) => console.warn('Firestore approve withdrawal error:', e));
+    } catch (e) {}
+
+    // 3. Broadcast across tabs and devices via BroadcastChannel
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'WITHDRAWAL_APPROVED', withdrawalId: id });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 
   // 10. Admin Reject Withdrawal (refunds user)
-  const handleRejectWithdrawal = async (id: string): Promise<boolean> => {
+  const handleRejectWithdrawal = async (id: string, remarks?: string): Promise<boolean> => {
     const req = withdrawals.find((w) => w.id === id);
+    let refundedUser: User | null = null;
+
     if (req) {
-      setCurrentUser((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          walletBalance: (prev.walletBalance || 0) + req.amount,
-          winningBalance: (prev.winningBalance || 0) + req.amount,
+      // Find user and refund
+      const targetUser = users.find((u) => u.id === req.userId || (req.userPhone && u.phone && u.phone.replace(/\D/g, '').endsWith(req.userPhone.replace(/\D/g, '').slice(-10))));
+      if (targetUser) {
+        refundedUser = {
+          ...targetUser,
+          walletBalance: (targetUser.walletBalance || 0) + req.amount,
+          winningBalance: (targetUser.winningBalance || 0) + req.amount,
         };
-      });
+        setUsers((prev) => {
+          const next = prev.map((u) => (u.id === targetUser.id ? { ...u, ...refundedUser } : u));
+          try {
+            localStorage.setItem('apna_tambola_registered_users', JSON.stringify(next));
+          } catch (e) {}
+          return next;
+        });
+
+        // Persist refunded user in Firestore
+        try {
+          const userRef = doc(db, 'users', targetUser.id);
+          setDoc(userRef, { walletBalance: refundedUser.walletBalance, winningBalance: refundedUser.winningBalance }, { merge: true }).catch((e) => console.warn('Firestore user refund notice:', e));
+        } catch (e) {}
+      }
+
+      if (currentUser && (currentUser.id === req.userId || (refundedUser && currentUser.id === refundedUser.id))) {
+        const updatedSelf = {
+          ...currentUser,
+          walletBalance: (currentUser.walletBalance || 0) + req.amount,
+          winningBalance: (currentUser.winningBalance || 0) + req.amount,
+        };
+        setCurrentUser(updatedSelf);
+        try {
+          localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updatedSelf));
+        } catch (e) {}
+      }
     }
-    setWithdrawals((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, status: 'rejected' } : w))
-    );
+
+    setWithdrawals((prev) => {
+      const next = prev.map((w) => (w.id === id ? { ...w, status: 'rejected' as const, processedDate: new Date().toISOString().replace('T', ' ').slice(0, 16), adminRemarks: remarks || 'Rejected by Admin. Amount refunded to wallet.' } : w));
+      try {
+        localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
     setTransactions((prev) =>
-      prev.map((t) => (t.referenceId === id ? { ...t, status: 'failed' } : t))
+      prev.map((t) => (t.referenceId === id ? { ...t, status: 'failed' as const, description: `${t.description} (Rejected - Refunded to wallet)` } : t))
     );
+
+    // 1. Call Backend API
+    try {
+      fetch(`/api/admin/withdrawals/${id}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', remarks: remarks || 'Rejected by Admin. Amount refunded to wallet.' }),
+      }).catch((e) => console.warn('Server reject withdrawal notice:', e));
+    } catch (e) {}
+
+    // 2. Persist to Firestore
+    try {
+      const wdrRef = doc(db, 'withdrawals', id);
+      setDoc(wdrRef, { status: 'rejected', processedDate: new Date().toISOString(), adminRemarks: remarks || 'Rejected by Admin. Amount refunded to wallet.' }, { merge: true }).catch((e) => console.warn('Firestore reject withdrawal error:', e));
+    } catch (e) {}
+
+    // 3. Broadcast across tabs and devices via BroadcastChannel
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'WITHDRAWAL_REJECTED', withdrawalId: id, refundedUser });
+        bc.close();
+      }
+    } catch (e) {}
+
     return true;
   };
 

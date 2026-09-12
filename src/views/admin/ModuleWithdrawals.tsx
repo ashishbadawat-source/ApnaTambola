@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
   Scissors,
+  RefreshCw,
 } from 'lucide-react';
 import { WithdrawalRequest, User } from '../../types';
 
@@ -33,6 +34,15 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await fetch('/api/sync/all');
+    } catch (e) {}
+    setTimeout(() => setIsSyncing(false), 600);
+  };
 
   // Settings
   const [minWithdrawal, setMinWithdrawal] = useState(100);
@@ -105,6 +115,15 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleManualSync}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-200 cursor-pointer transition-colors"
+            title="दूसरे डिवाइस के विथड्रॉल को तुरंत रिफ्रेश और सिंक करें"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>लाइव सिंक</span>
+          </button>
           <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-400/40 text-xs">
             <span className="text-amber-400 font-bold">Pending: </span>
             <strong className="text-amber-300 font-black">₹{(totalPendingAmount || 0).toLocaleString('en-IN')}</strong> ({pendingList.length})
