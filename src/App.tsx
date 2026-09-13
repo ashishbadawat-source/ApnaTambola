@@ -2877,9 +2877,10 @@ export function App() {
           setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
         } catch {}
 
-        // 🧹 Auto-remove / archive completed tickets after Full House
-        setTimeout(() => {
-          handleClearCompletedTickets(liveGame.id).catch(() => {});
+        // 🧹 Auto-remove / archive completed tickets after Full House & Auto-book for next match
+        setTimeout(async () => {
+          await handleClearCompletedTickets(liveGame.id).catch(() => {});
+          await handleRunAutoTicketDispatch(undefined, true).catch(() => {});
         }, 3000);
       }
 
@@ -4038,7 +4039,10 @@ export function App() {
         setDoc(doc(db, 'games', liveGame.id), { status: 'completed', autoCalling: false }, { merge: true }).catch(() => {});
         setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
       } catch {}
-      handleClearCompletedTickets(liveGame.id).catch(() => {});
+      setTimeout(async () => {
+        await handleClearCompletedTickets(liveGame.id).catch(() => {});
+        await handleRunAutoTicketDispatch(undefined, true).catch(() => {});
+      }, 3000);
     }
 
     // Determine co-winners list for this prize
@@ -5345,6 +5349,7 @@ export function App() {
 
     if (markCompleted) {
       await handleClearCompletedTickets(gameId);
+      await handleRunAutoTicketDispatch(undefined, true);
     }
 
     setSiteSettings((prev) => {
@@ -5420,6 +5425,7 @@ export function App() {
       if (normalizedUpdates.status === 'completed') {
         normalizedUpdates.autoCalling = false;
         await handleClearCompletedTickets(gameId);
+        await handleRunAutoTicketDispatch(undefined, true);
         setSiteSettings((prev) => {
           const next = { ...prev, isLiveStopped: true };
           try {

@@ -2289,6 +2289,124 @@ async function startServer() {
     }
   });
 
+  // 3c. Clear Completed / Ended Game Tickets & Auto-Book Next Match Tickets
+  app.post('/api/tickets/clear-completed', (req: Request, res: Response) => {
+    try {
+      const { gameId } = req.body;
+      const completedGameIds = new Set(
+        games.filter((g) => g.status === 'completed').map((g) => g.id)
+      );
+      if (gameId && gameId !== 'all') {
+        completedGameIds.add(gameId);
+      }
+
+      const initialCount = tickets.length;
+      tickets = tickets.filter((t) => {
+        if (gameId && gameId !== 'all') {
+          return t.gameId !== gameId;
+        }
+        return !(t.isCompleted || t.isArchived || (t.gameId && completedGameIds.has(t.gameId)));
+      });
+
+      const clearedCount = initialCount - tickets.length;
+      saveStateToDisk();
+
+      // Broadcast cleared tickets
+      broadcastSSE('tickets_cleared', {
+        gameId: gameId || 'all',
+        clearedCount,
+      });
+
+      // Auto-trigger next game ticket dispatch for eligible funded users
+      let autoDispatchResult = null;
+      if (siteSettings?.autoTicketEnabled !== false) {
+        autoDispatchResult = executeAutoTicketDispatch(siteSettings?.autoTicketGameId);
+      }
+
+      console.log(`[Tickets Cleaned] Removed ${clearedCount} completed tickets. Auto-dispatch triggered.`);
+      res.json({
+        success: true,
+        clearedCount,
+        autoDispatch: autoDispatchResult,
+        message: `Successfully cleared ${clearedCount} completed tickets.`,
+      });
+    } catch (err: any) {
+      console.error('[Clear Completed Tickets Error]', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 3d. Delete Single Ticket (with optional user wallet refund)
+  app.post('/api/tickets/delete', (req: Request, res: Response) => {
+    try {
+      const { ticketId, refundUser = true } = req.body;
+      const targetIdx = tickets.findIndex((t) => t.id === ticketId || t.ticketId === ticketId);
+      if (targetIdx === -1) {
+        return res.status(404).json({ success: false, error: 'Ticket not found' });
+      }
+
+      const tkt = tickets[targetIdx];
+      tickets.splice(targetIdx, 1);
+
+      if (refundUser && tkt.userId && (tkt.price || 0) > 0) {
+        const u = users.find((user) => user.id === tkt.userId);
+        if (u) {
+          u.walletBalance = (u.walletBalance || 0) + Number(tkt.price);
+          u.depositBalance = (u.depositBalance || 0) + Number(tkt.price);
+          const refundTxn: WalletTransaction = {
+            id: `txn_ref_${Date.now()}`,
+            userId: u.id,
+            type: 'deposit',
+            amount: Number(tkt.price),
+            balanceAfter: u.walletBalance,
+            description: `टिकट रिफंड: ₹${tkt.price} (Ticket ID: ${tkt.ticketId})`,
+            paymentMethod: 'Admin Refund',
+            referenceId: tkt.ticketId,
+            timestamp: new Date().toISOString(),
+            status: 'completed',
+          };
+          transactions.unshift(refundTxn);
+        }
+      }
+
+      saveStateToDisk();
+      res.json({ success: true, message: 'Ticket deleted successfully' });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 3e. Batch Delete Tickets
+  app.post('/api/tickets/batch-delete', (req: Request, res: Response) => {
+    try {
+      const { ticketIds, refundUser = true } = req.body;
+      if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'No ticket IDs provided' });
+      }
+
+      const idSet = new Set(ticketIds);
+      const toDelete = tickets.filter((t) => idSet.has(t.id) || idSet.has(t.ticketId));
+      tickets = tickets.filter((t) => !idSet.has(t.id) && !idSet.has(t.ticketId));
+
+      if (refundUser) {
+        toDelete.forEach((tkt) => {
+          if (tkt.userId && (tkt.price || 0) > 0) {
+            const u = users.find((user) => user.id === tkt.userId);
+            if (u) {
+              u.walletBalance = (u.walletBalance || 0) + Number(tkt.price);
+              u.depositBalance = (u.depositBalance || 0) + Number(tkt.price);
+            }
+          }
+        });
+      }
+
+      saveStateToDisk();
+      res.json({ success: true, deletedCount: toDelete.length });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // 4. Claim Prize Verification Engine
   app.post('/api/games/:id/claim', (req: Request, res: Response) => {
     const { ticketId, prizeCode, userId } = req.body;
