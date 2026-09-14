@@ -190,6 +190,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const isAdmin = Boolean(
+    currentUser &&
+      (currentUser.role === 'admin' ||
+        currentUser.email === 'ashishbadawat@gmail.com' ||
+        currentUser.id === 'admin_master_1')
+  );
+
   const visitorNavItems = [
     { id: 'landing', label: '1. मुख्य पृष्ठ', icon: Sparkles, colorClass: 'from-amber-400 to-amber-500 text-slate-950', badge: 'Home' },
     { id: 'games', label: '2. टूर्नामेंट्स लॉबी', icon: Gamepad2, colorClass: 'from-amber-400 to-yellow-500 text-slate-950', badge: 'Lobby' },
@@ -232,6 +239,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'settings', label: '12. Settings', icon: Settings },
   ];
 
+  const logoClicksRef = useRef<number>(0);
+  const logoClickTimeoutRef = useRef<any>(null);
+
+  const handleLogoClick = () => {
+    handleTabChange('home');
+    logoClicksRef.current += 1;
+    if (logoClickTimeoutRef.current) clearTimeout(logoClickTimeoutRef.current);
+    logoClickTimeoutRef.current = setTimeout(() => {
+      logoClicksRef.current = 0;
+    }, 2000);
+
+    if (logoClicksRef.current >= 5) {
+      logoClicksRef.current = 0;
+      if (onOpenAdminLogin) onOpenAdminLogin();
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/90 bg-[#090d16]/98 backdrop-blur-md shadow-2xl">
       {/* Top micro announcement bar */}
@@ -264,7 +288,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Brand Logo */}
           <div
             id="brand-logo"
-            onClick={() => handleTabChange('home')}
+            onClick={handleLogoClick}
             className="flex items-center gap-2.5 cursor-pointer group select-none shrink-0"
           >
             <div className="relative flex items-center justify-center">
@@ -298,38 +322,78 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Center Mode / Public Tabs */}
           {currentUser ? (
             <div className="hidden md:flex items-center gap-1 bg-slate-950/90 p-1 rounded-2xl border border-slate-800 shadow-inner">
-              <button
-                id="header-user-mode-btn"
-                onClick={() => handleAdminToggle(false)}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                  !inAdminMode
-                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 scale-102'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                }`}
-              >
-                <Gamepad2 className="w-3.5 h-3.5" />
-                <span>यूज़र पैनल</span>
-              </button>
+              {isAdmin ? (
+                <>
+                  <button
+                    id="header-user-mode-btn"
+                    onClick={() => handleAdminToggle(false)}
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                      !inAdminMode
+                        ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/25 scale-102'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <Gamepad2 className="w-3.5 h-3.5" />
+                    <span>यूज़र पैनल</span>
+                  </button>
 
-              <button
-                id="header-admin-mode-btn"
-                onClick={() => handleAdminToggle(true)}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
-                  inAdminMode
-                    ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-500/25 scale-102'
-                    : 'text-red-400 hover:text-white hover:bg-red-950/60'
-                }`}
-                title="व्यवस्थापक (एडमिन) कंट्रोल पैनल खोलें"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                <span>👑 एडमिन पैनल</span>
-              </button>
+                  <button
+                    id="header-admin-mode-btn"
+                    onClick={() => handleAdminToggle(true)}
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                      inAdminMode
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-md shadow-red-500/25 scale-102'
+                        : 'text-red-400 hover:text-white hover:bg-red-950/60'
+                    }`}
+                    title="व्यवस्थापक (एडमिन) कंट्रोल पैनल खोलें"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                    <span>👑 एडमिन पैनल</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleTabChange('home')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentActiveTab === 'home' ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    होम
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('live')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                      currentActiveTab === 'live' ? 'bg-red-600 text-white font-black' : 'text-red-400 hover:text-red-300'
+                    }`}
+                  >
+                    <Flame className="w-3.5 h-3.5 animate-pulse" />
+                    <span>लाइव मैच</span>
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('buy-ticket')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentActiveTab === 'buy-ticket' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-emerald-400 hover:text-white'
+                    }`}
+                  >
+                    टिकट खरीदें
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('wallet')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentActiveTab === 'wallet' ? 'bg-amber-400 text-slate-950 font-black' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    वॉलेट
+                  </button>
+                </>
+              )}
 
               <button
                 id="header-all-options-btn"
                 onClick={() => setAllOptionsModalOpen(true)}
                 title="सभी विकल्प देखें"
-                className="px-2 py-1.5 rounded-xl text-xs font-black text-amber-300 hover:bg-amber-400/15 transition-all flex items-center gap-1 border border-amber-400/30 cursor-pointer"
+                className="px-2 py-1.5 rounded-xl text-xs font-black text-amber-300 hover:bg-amber-400/15 transition-all flex items-center gap-1 border border-amber-400/30 cursor-pointer ml-1"
               >
                 <Grid className="w-3.5 h-3.5 text-amber-400" />
                 <span>सभी विकल्प</span>
@@ -362,17 +426,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                 className="px-3 py-1.5 rounded-xl text-xs font-bold text-amber-300 hover:text-amber-200 transition-all cursor-pointer"
               >
                 रेफरल 7.8%
-              </button>
-              <button
-                onClick={() => {
-                  if (onOpenAdminLogin) onOpenAdminLogin();
-                  else handleTabChange('admin');
-                }}
-                className="px-3 py-1.5 rounded-xl text-xs font-black bg-red-950/70 hover:bg-red-900 border border-red-500/50 text-red-300 hover:text-white transition-all cursor-pointer flex items-center gap-1"
-                title="एडमिन पोर्टल खोलें"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                <span>👑 एडमिन</span>
               </button>
             </div>
           )}
@@ -573,17 +626,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                         </button>
                       )}
 
-                      {/* Admin Control Panel Button in User Dropdown */}
-                      <button
-                        onClick={() => {
-                          setUserDropdownOpen(false);
-                          handleAdminToggle(true);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-300 hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer border border-red-500/20 bg-red-950/20 my-0.5"
-                      >
-                        <ShieldCheck className="w-4 h-4 text-red-400" />
-                        <span>👑 व्यवस्थापक (एडमिन) पोर्टल</span>
-                      </button>
+                      {/* Admin Control Panel Button in User Dropdown (Visible only to verified Admins) */}
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            setUserDropdownOpen(false);
+                            handleAdminToggle(true);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-red-300 hover:bg-red-950/40 flex items-center gap-2 transition-colors cursor-pointer border border-red-500/20 bg-red-950/20 my-0.5"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-red-400" />
+                          <span>👑 व्यवस्थापक (एडमिन) पोर्टल</span>
+                        </button>
+                      )}
 
                       {/* Direct Logout Button */}
                       <button
@@ -632,21 +687,29 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-1.5 sm:gap-2">
           {/* Active Mode Label Tag */}
           <div className="flex items-center gap-1 sm:gap-1.5 pr-1.5 sm:pr-2 border-r border-slate-800 shrink-0">
-            <button
-              type="button"
-              onClick={() => handleAdminToggle(!inAdminMode)}
-              className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer ${
-                inAdminMode
-                  ? 'bg-red-500/25 text-red-300 border border-red-500/50 hover:bg-red-500/35'
-                  : 'bg-amber-400/20 text-amber-300 border border-amber-400/40 hover:bg-amber-400/30'
-              }`}
-              title={inAdminMode ? 'यूज़र पैनल देखें (Switch to User Panel)' : 'एडमिन पैनल खोलें (Open Admin Panel)'}
-            >
-              {inAdminMode ? <ShieldCheck className="w-3 h-3 text-red-400" /> : <Layers className="w-3 h-3 text-amber-400" />}
-              <span className="hidden sm:inline">{inAdminMode ? 'ADMIN PANEL' : currentUser ? 'USER PANEL' : 'VISITOR'}</span>
-              <span className="sm:hidden">{inAdminMode ? 'ADMIN' : 'USER'}</span>
-              <span className="text-[9px] opacity-70 ml-0.5">⇄</span>
-            </button>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => handleAdminToggle(!inAdminMode)}
+                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md flex items-center gap-1 transition-all cursor-pointer ${
+                  inAdminMode
+                    ? 'bg-red-500/25 text-red-300 border border-red-500/50 hover:bg-red-500/35'
+                    : 'bg-amber-400/20 text-amber-300 border border-amber-400/40 hover:bg-amber-400/30'
+                }`}
+                title={inAdminMode ? 'यूज़र पैनल देखें (Switch to User Panel)' : 'एडमिन पैनल खोलें (Open Admin Panel)'}
+              >
+                {inAdminMode ? <ShieldCheck className="w-3 h-3 text-red-400" /> : <Layers className="w-3 h-3 text-amber-400" />}
+                <span className="hidden sm:inline">{inAdminMode ? 'ADMIN PANEL' : 'USER PANEL'}</span>
+                <span className="sm:hidden">{inAdminMode ? 'ADMIN' : 'USER'}</span>
+                <span className="text-[9px] opacity-70 ml-0.5">⇄</span>
+              </button>
+            ) : (
+              <div className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-400/15 text-amber-300 border border-amber-400/30 flex items-center gap-1">
+                <Layers className="w-3 h-3 text-amber-400" />
+                <span className="hidden sm:inline">{currentUser ? 'PLAYER PANEL' : 'TAMBOLA LIVE'}</span>
+                <span className="sm:hidden">{currentUser ? 'PLAYER' : 'LIVE'}</span>
+              </div>
+            )}
           </div>
 
           {/* Left Scroll Arrow */}
@@ -851,17 +914,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </div>
 
-          {/* Quick Dedicated Mobile Admin Portal Button */}
-          <button
-            onClick={() => {
-              setMobileMenuOpen(false);
-              handleAdminToggle(true);
-            }}
-            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60 border border-red-500/40 cursor-pointer"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>👑 व्यवस्थापक (एडमिन) पोर्टल खोलें</span>
-          </button>
+          {/* Quick Dedicated Mobile Admin Portal Button (Visible only to verified Admin) */}
+          {isAdmin && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                handleAdminToggle(true);
+              }}
+              className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-950/60 border border-red-500/40 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>👑 व्यवस्थापक (एडमिन) पोर्टल खोलें</span>
+            </button>
+          )}
 
           {/* Direct Prominent Mobile Logout Button */}
           {currentUser && onLogout && (

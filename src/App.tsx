@@ -2022,13 +2022,30 @@ export function App() {
               return merged;
             });
 
-            // Also update active logged-in user
+            // Also update active logged-in user with strict admin role preservation
             setCurrentUser((prev) => {
               if (!prev) return null;
               const remote = data.users.find(
                 (u: User) => u.id === prev.id || (prev.phone && u.phone && u.phone.replace(/\D/g, '') === prev.phone.replace(/\D/g, ''))
               );
-              if (remote) return { ...prev, ...remote };
+              if (remote) {
+                const isMasterAdmin =
+                  prev.role === 'admin' ||
+                  prev.email === 'ashishbadawat@gmail.com' ||
+                  prev.id === 'admin_master_1' ||
+                  remote.role === 'admin' ||
+                  remote.email === 'ashishbadawat@gmail.com' ||
+                  remote.id === 'admin_master_1';
+                const merged = {
+                  ...prev,
+                  ...remote,
+                  role: isMasterAdmin ? 'admin' : (remote.role || prev.role || 'user'),
+                };
+                try {
+                  localStorage.setItem('apna_tambola_auth_user', JSON.stringify(merged));
+                } catch (e) {}
+                return merged;
+              }
               return prev;
             });
           }
@@ -2435,9 +2452,11 @@ export function App() {
       role: 'admin',
     };
     setCurrentUser(verifiedAdminUser);
+    setIsAdminView(true);
     setActiveTab('admin');
     try {
       localStorage.setItem('apna_tambola_auth_user', JSON.stringify(verifiedAdminUser));
+      localStorage.setItem('apna_tambola_admin_view_active', 'true');
     } catch (e) {}
     try {
       setDoc(doc(db, 'users', verifiedAdminUser.id), verifiedAdminUser, { merge: true }).catch(() => {});
