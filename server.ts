@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import { createServer as createViteServer } from 'vite';
 import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   DEFAULT_USER,
@@ -3070,39 +3071,19 @@ async function startServer() {
     res.json({ success: true, message: 'All email logs cleared.' });
   });
 
-  // Vite middleware for dev or static files for prod
-  const distPath = path.join(process.cwd(), 'dist');
-  const indexHtmlPath = path.join(distPath, 'index.html');
-  const hasDist = fs.existsSync(indexHtmlPath);
-
-  if (process.env.NODE_ENV === 'production' || hasDist) {
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req: Request, res: Response) => {
-      if (fs.existsSync(indexHtmlPath)) {
-        res.sendFile(indexHtmlPath);
-      } else {
-        res.send('Tambola Live server is running.');
-      }
+      res.sendFile(path.join(distPath, 'index.html'));
     });
-  } else {
-    try {
-      const { createServer: createViteServer } = await import('vite');
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa',
-      });
-      app.use(vite.middlewares);
-    } catch (err) {
-      console.warn('[Server] Could not initialize Vite middleware, falling back to static:', err);
-      app.use(express.static(distPath));
-      app.get('*', (req: Request, res: Response) => {
-        if (fs.existsSync(indexHtmlPath)) {
-          res.sendFile(indexHtmlPath);
-        } else {
-          res.send('Tambola Live server is running.');
-        }
-      });
-    }
   }
 
   const server = app.listen(PORT, '0.0.0.0', () => {
