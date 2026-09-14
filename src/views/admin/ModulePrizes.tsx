@@ -12,12 +12,35 @@ import {
   Award,
   Star,
   Check,
+  Target,
+  Users,
+  Ticket,
+  RotateCcw,
+  Zap,
+  Flame,
+  ChevronRight,
 } from 'lucide-react';
-import { GamePrize, TambolaGame } from '../../types';
+import { GamePrize, TambolaGame, TambolaTicket, User } from '../../types';
+import { ForcedWinnerSelectorModal } from '../../components/ForcedWinnerSelectorModal';
+import { getPrizeTargetProgress } from '../../utils/forcedWinnerEngine';
 
 interface ModulePrizesProps {
   games: TambolaGame[];
+  users?: User[];
+  tickets?: TambolaTicket[];
   onUpdateGame?: (gameId: string, updates: Partial<TambolaGame>) => Promise<boolean>;
+  onSetPrizeWinner?: (
+    gameId: string,
+    prizeId: string,
+    targetData: {
+      targetUserId?: string;
+      targetUserName?: string;
+      targetUserPhone?: string;
+      targetTicketId?: string;
+      targetTicketNumber?: number;
+      isPreTargeted: boolean;
+    }
+  ) => Promise<boolean> | void;
 }
 
 const INITIAL_MASTER_PRIZES: Omit<GamePrize, 'id' | 'claimedWinners'>[] = [
@@ -33,11 +56,28 @@ const INITIAL_MASTER_PRIZES: Omit<GamePrize, 'id' | 'claimedWinners'>[] = [
 ];
 
 export const ModulePrizes: React.FC<ModulePrizesProps> = ({
-  games,
+  games = [],
+  users = [],
+  tickets = [],
   onUpdateGame,
+  onSetPrizeWinner,
 }) => {
+  const safeGames = Array.isArray(games) ? games : [];
+  const safeUsers = Array.isArray(users) ? users : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+
+  const [activeTab, setActiveTab] = useState<'preset_winners' | 'templates' | 'calculator'>('preset_winners');
+  const [selectedGameId, setSelectedGameId] = useState<string>(
+    safeGames.find((g) => g.status === 'live')?.id || safeGames[0]?.id || ''
+  );
+
+  const selectedGame = safeGames.find((g) => g.id === selectedGameId) || safeGames[0];
+
+  // Target Winner Modal State
+  const [targetModalPrize, setTargetModalPrize] = useState<GamePrize | null>(null);
+
   const [prizesList, setPrizesList] = useState<Omit<GamePrize, 'id' | 'claimedWinners'>[]>(INITIAL_MASTER_PRIZES);
-  
+
   // Custom Prize Form
   const [customName, setCustomName] = useState('');
   const [customAmount, setCustomAmount] = useState(500);
@@ -56,15 +96,6 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
   const simAdminMargin = Math.round(simCollection * 0.30);
 
   const handleApply7030Preset = () => {
-    // Generate standard 70% prize breakdown:
-    // 1. Early 5 = 2.5% of collection (₹25 on ₹1,000)
-    // 2. Star/Corners = 2.5% of collection
-    // 3. Top Line = 2.5% of collection
-    // 4. Middle Line = 2.5% of collection
-    // 5. Bottom Line = 2.5% of collection
-    // 6. 1st Full House = 40% of collection
-    // 7. 2nd Full House = 17.5% of collection
-    // Total = 70% of collection | 30% Admin
     const e5 = Math.max(10, Math.round(simCollection * 0.025));
     const star = Math.max(10, Math.round(simCollection * 0.025));
     const tl = Math.max(10, Math.round(simCollection * 0.025));
@@ -131,7 +162,7 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
 
   const handleApplyToAllActiveGames = async () => {
     if (!onUpdateGame) return;
-    for (const game of games) {
+    for (const game of safeGames) {
       if (game.status === 'live' || game.status === 'upcoming') {
         await onUpdateGame(game.id, {
           prizePool: totalPrizePool,
@@ -147,17 +178,66 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
     setTimeout(() => setNotice(null), 5000);
   };
 
+  const handleSetTargetWinner = async (
+    gameId: string,
+    prizeId: string,
+    targetData: {
+      targetUserId?: string;
+      targetUserName?: string;
+      targetUserPhone?: string;
+      targetTicketId?: string;
+      targetTicketNumber?: number;
+      isPreTargeted: boolean;
+    }
+  ) => {
+    if (onSetPrizeWinner) {
+      await onSetPrizeWinner(gameId, prizeId, targetData);
+    } else if (onUpdateGame && selectedGame) {
+      const updatedPrizes = (selectedGame.prizes || []).map((p) => {
+        if (p.id === prizeId || p.code === (prizeId as any)) {
+          return {
+            ...p,
+            ...targetData,
+          };
+        }
+        return p;
+      });
+      await onUpdateGame(gameId, { prizes: updatedPrizes });
+    }
+
+    setNotice(
+      targetData.isPreTargeted
+        ? `🎯 विजेता सफलतापूर्वक सेट हो गया! ${targetData.targetUserName} (टिकट #${targetData.targetTicketNumber || '?'}) को ईनाम मिलेगा।`
+        : `🎲 ईनाम को सामान्य रैंडम मोड पर सेट कर दिया गया है।`
+    );
+    setTimeout(() => setNotice(null), 5000);
+  };
+
+  // Game tickets for selected game
+  const currentGameTickets = selectedGame
+    ? safeTickets.filter((t) => t && (t.gameId === selectedGame.id || !t.gameId))
+    : [];
+
+  const targetedPrizesCount = (selectedGame?.prizes || []).filter(
+    (p) => p && (p.isPreTargeted || p.targetTicketId || p.targetUserId)
+  ).length;
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+          <div className="flex items-center gap-2">
+            <span className="bg-amber-500/20 text-amber-300 font-bold text-xs px-3 py-0.5 rounded-full border border-amber-500/30">
+              ईनाम और विजेता नियंत्रण (Prize & Winner Governance)
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2 mt-1">
             <Trophy className="w-6 h-6 text-amber-400" />
-            <span>Tambola Prize Pool & Claim Management</span>
+            <span>ईनाम प्रबंधन & प्री-सेट विजेता नियंत्रण (Forced Winner Manager)</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-400">
-            Configure default prize categories (Early 5, Corners, Lines, Full House 1/2/3), custom side-bets, amounts, and winner allocations.
+            एडमिन तय कर सकता है कि किस यूजर/टिकट को कौनसा ईनाम मिलेगा। स्मार्ट गेम इंजन उसी अनुसार तंबोला नंबर कॉलिंग चलाएगा।
           </p>
         </div>
 
@@ -167,13 +247,13 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
             className="px-4 py-2 rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-200 border border-purple-400/40 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Custom Prize</span>
+            <span>कस्टम ईनाम जोड़ें</span>
           </button>
           <button
             onClick={handleApplyToAllActiveGames}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
           >
-            Apply Template to Tournaments
+            सभी गेम्स पर लागू करें
           </button>
         </div>
       </div>
@@ -185,201 +265,443 @@ export const ModulePrizes: React.FC<ModulePrizesProps> = ({
         </div>
       )}
 
-      {/* 🌟 70% Prize Pool vs 30% Admin Margin Live Calculator & Preset Widget */}
-      <div className="p-5 rounded-3xl bg-gradient-to-r from-[#180a29] via-[#0e162d] to-[#0d2224] border-2 border-yellow-400/80 shadow-2xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-yellow-500/30 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-500 text-slate-950 font-black flex items-center justify-center shadow-lg shadow-amber-500/30 text-base">
-              %
-            </div>
-            <div>
-              <h3 className="text-base font-black text-white flex items-center gap-2">
-                <span>70% प्राइज पूल & 30% एडमिन शेयर फॉर्मूला (Admin 30% / Players 70%)</span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black uppercase">
-                  Active Rule
-                </span>
-              </h3>
-              <p className="text-xs text-slate-300">
-                कुल टिकट बिक्री का 70% हिस्सा सभी विजेताओं के ईनाम में ऑटो-कैलकुलेट होकर बंटता है और 30% हिस्सा एडमिन के पास रहता है।
-              </p>
-            </div>
-          </div>
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <button
+          onClick={() => setActiveTab('preset_winners')}
+          className={`px-4 py-2 rounded-xl font-black text-xs flex items-center gap-2 transition-all ${
+            activeTab === 'preset_winners'
+              ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-lg shadow-amber-500/30'
+              : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Target className="w-4 h-4" />
+          <span>1. प्री-सेट विजेता नियंत्रण (Set User Winners)</span>
+          {targetedPrizesCount > 0 && (
+            <span className="bg-slate-950 text-amber-300 text-[10px] px-2 py-0.5 rounded-full font-black">
+              {targetedPrizesCount} TARGETED
+            </span>
+          )}
+        </button>
 
-          <button
-            onClick={handleApply7030Preset}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/40 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider shrink-0 transition-transform active:scale-95"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>Apply 70%-30% Master Formula</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setActiveTab('calculator')}
+          className={`px-4 py-2 rounded-xl font-black text-xs flex items-center gap-2 transition-all ${
+            activeTab === 'calculator'
+              ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-lg shadow-amber-500/30'
+              : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>2. 70%-30% फॉर्मूला कैलकुलेटर</span>
+        </button>
 
-        {/* Live Simulator Form */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-          <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
-            <label className="text-[11px] text-slate-400 font-bold uppercase block">1. Total Tickets Sold</label>
-            <input
-              type="number"
-              value={calcTickets}
-              onChange={(e) => setCalcTickets(Math.max(1, Number(e.target.value)))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white font-black font-mono focus:border-amber-400 focus:outline-none"
-            />
-            <span className="text-[10px] text-slate-500">Player ticket volume</span>
-          </div>
-
-          <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
-            <label className="text-[11px] text-slate-400 font-bold uppercase block">2. Ticket Price (₹)</label>
-            <input
-              type="number"
-              value={calcPrice}
-              onChange={(e) => setCalcPrice(Math.max(5, Number(e.target.value)))}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-amber-300 font-black font-mono focus:border-amber-400 focus:outline-none"
-            />
-            <span className="text-[10px] text-slate-500">Per ticket entry fee</span>
-          </div>
-
-          <div className="p-3 bg-gradient-to-b from-purple-950/60 to-slate-950 rounded-2xl border border-purple-500/40 space-y-1">
-            <label className="text-[11px] text-purple-300 font-bold uppercase block">Total Sales Collection</label>
-            <div className="text-xl font-black text-white font-mono">₹{(simCollection || 0).toLocaleString('en-IN')}</div>
-            <span className="text-[10px] text-purple-300/80 font-bold">100% Gross Intake</span>
-          </div>
-
-          <div className="p-3 bg-gradient-to-b from-emerald-950/60 to-slate-950 rounded-2xl border border-emerald-500/40 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-emerald-300 font-bold uppercase">70% Players Prize</span>
-              <span className="text-[11px] text-amber-400 font-bold uppercase">30% Admin</span>
-            </div>
-            <div className="flex items-baseline justify-between font-mono">
-              <span className="text-lg font-black text-emerald-400">₹{(simPrizePool || 0).toLocaleString('en-IN')}</span>
-              <span className="text-sm font-black text-amber-300">₹{(simAdminMargin || 0).toLocaleString('en-IN')}</span>
-            </div>
-            <span className="text-[10px] text-slate-400 block">Distributed across 7 prize tiers</span>
-          </div>
-        </div>
-
-        {/* Formula breakdown info bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-center text-xs">
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <div className="text-[10px] text-slate-400">Early 5 (2.5%)</div>
-            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <div className="text-[10px] text-slate-400">Star/4 Corners (2.5%)</div>
-            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <div className="text-[10px] text-slate-400">Top Line (2.5%)</div>
-            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <div className="text-[10px] text-slate-400">Mid Line (2.5%)</div>
-            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
-          </div>
-          <div className="p-2 rounded-xl bg-slate-950/60 border border-slate-800">
-            <div className="text-[10px] text-slate-400">Bottom Line (2.5%)</div>
-            <div className="text-xs font-bold text-amber-300">₹{Math.max(10, Math.round(simCollection * 0.025))}</div>
-          </div>
-          <div className="p-2 rounded-xl bg-yellow-950/60 border border-yellow-500/40">
-            <div className="text-[10px] text-yellow-300 font-bold">1st Full House (40%)</div>
-            <div className="text-sm font-black text-yellow-400">₹{Math.max(50, Math.round(simCollection * 0.40))}</div>
-          </div>
-          <div className="p-2 rounded-xl bg-amber-950/60 border border-amber-500/40">
-            <div className="text-[10px] text-amber-300 font-bold">2nd Full House (17.5%)</div>
-            <div className="text-xs font-black text-amber-400">₹{Math.max(25, Math.round(simCollection * 0.175))}</div>
-          </div>
-        </div>
+        <button
+          onClick={() => setActiveTab('templates')}
+          className={`px-4 py-2 rounded-xl font-black text-xs flex items-center gap-2 transition-all ${
+            activeTab === 'templates'
+              ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-lg shadow-amber-500/30'
+              : 'bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>3. मास्टर प्राइज लिस्ट (Master Template)</span>
+        </button>
       </div>
 
-      {/* Prize Pool Summary Card */}
-      <div className="p-5 rounded-3xl bg-gradient-to-r from-[#1b1238] via-[#111938] to-[#250d24] border-2 border-amber-400/40 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="text-xs font-black uppercase tracking-wider text-amber-400">TOTAL MASTER PRIZE POOL</div>
-          <div className="text-3xl sm:text-4xl font-black text-white">
-            ₹{(totalPrizePool || 0).toLocaleString('en-IN')}
-          </div>
-          <p className="text-xs text-slate-300">
-            Across {prizesList.length} defined prize categories • Distributed in real-time upon valid number verification
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2 text-xs">
-          <div className="px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
-            <div className="text-[10px] text-slate-400 uppercase font-bold">1st Full House</div>
-            <div className="text-base font-black text-amber-400">
-              ₹{(prizesList.find((p) => p.code === 'full_house')?.amount || 6000).toLocaleString('en-IN')}
-            </div>
-          </div>
-          <div className="px-3 py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-center">
-            <div className="text-[10px] text-slate-400 uppercase font-bold">Lines Total</div>
-            <div className="text-base font-black text-emerald-400">
-              ₹{(
-                (prizesList.find((p) => p.code === 'top_line')?.amount || 1000) +
-                (prizesList.find((p) => p.code === 'mid_line')?.amount || 1000) +
-                (prizesList.find((p) => p.code === 'bot_line')?.amount || 1000)
-              ).toLocaleString('en-IN')}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Prize Categories Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {prizesList.map((prz, idx) => (
-          <div
-            key={idx}
-            className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all space-y-3 shadow-lg flex flex-col justify-between"
-          >
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 font-black text-xs flex items-center justify-center border border-amber-400/30">
-                    {idx + 1}
-                  </span>
-                  <h3 className="font-black text-white text-sm">{prz.name}</h3>
+      {/* TAB 1: PRESET WINNER CONTROLLER (KEY REQUEST) */}
+      {activeTab === 'preset_winners' && (
+        <div className="space-y-6">
+          {/* Game Selector Card */}
+          <div className="p-5 rounded-3xl bg-slate-900 border border-amber-500/30 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-300 flex items-center justify-center font-black border border-amber-500/30">
+                  <Target className="w-5 h-5" />
                 </div>
+                <div>
+                  <h3 className="text-base font-black text-white">गेम चुनें (Select Tournament to Configure)</h3>
+                  <p className="text-xs text-slate-400">
+                    जिस गेम में आपको प्री-सेट विनर सेट करना है, उसे नीचे से सेलेक्ट करें।
+                  </p>
+                </div>
+              </div>
 
+              {/* Game Selector Dropdown */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedGameId}
+                  onChange={(e) => setSelectedGameId(e.target.value)}
+                  className="bg-slate-950 border-2 border-amber-400/50 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-amber-400"
+                >
+                  {safeGames.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.status === 'live' ? '🟢 LIVE: ' : '📅 '} {g.title} (₹{g.ticketPrice}) - {g.status.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Game Quick Info Bar */}
+            {selectedGame && (
+              <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs">
+                <div>
+                  <span className="text-slate-400">टूर्नामेंट:</span>{' '}
+                  <span className="text-amber-300 font-bold">{selectedGame.title}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">टिकट मूल्य:</span>{' '}
+                  <span className="text-white font-bold">₹{selectedGame.ticketPrice}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">बिके टिकट:</span>{' '}
+                  <span className="text-emerald-400 font-bold">{currentGameTickets.length} Tickets</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">स्थिति:</span>{' '}
+                  <span
+                    className={`font-black uppercase px-2 py-0.5 rounded-full text-[10px] ${
+                      selectedGame.status === 'live'
+                        ? 'bg-red-500 text-white animate-pulse'
+                        : 'bg-amber-500/20 text-amber-300'
+                    }`}
+                  >
+                    {selectedGame.status}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400">प्री-सेट ईनाम:</span>{' '}
+                  <span className="text-amber-400 font-black">{targetedPrizesCount} Set</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Prizes Table with Forced Winner Badges */}
+          {selectedGame ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-400" />
+                  <span>ईनाम सूची और विजेता असाइनमेंट (Prizes & Assigned Winners)</span>
+                </h3>
+                <span className="text-xs text-slate-400">
+                  कुल ईनाम श्रेणियां: {(selectedGame.prizes || []).length}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(selectedGame.prizes || []).map((prz, idx) => {
+                  const isTargeted = prz.isPreTargeted || !!prz.targetTicketId || !!prz.targetUserId;
+                  const claimedCount = Array.isArray(prz.claimedWinners) ? prz.claimedWinners.length : 0;
+                  const isClaimed = claimedCount >= (prz.maxWinners || 1);
+
+                  // Progress of target ticket if game is active
+                  const targetTicket = currentGameTickets.find(
+                    (t) => (prz.targetTicketId && (t.ticketId === prz.targetTicketId || t.id === prz.targetTicketId)) ||
+                           (prz.targetUserId && t.userId === prz.targetUserId)
+                  );
+
+                  const progress = targetTicket
+                    ? getPrizeTargetProgress(prz.code, targetTicket.numbers, selectedGame.calledNumbers || [])
+                    : null;
+
+                  return (
+                    <div
+                      key={prz.id || `prz_${idx}`}
+                      className={`p-5 rounded-3xl border transition-all ${
+                        isTargeted
+                          ? 'bg-gradient-to-br from-amber-950/40 via-purple-950/20 to-slate-900 border-2 border-amber-400/80 shadow-xl shadow-amber-500/10'
+                          : 'bg-slate-900/90 border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Header row */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                              #{idx + 1}
+                            </span>
+                            <h4 className="text-base font-black text-white">{prz.name}</h4>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">{prz.description}</p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-base font-black text-amber-300 block">
+                            ₹{(prz.amount || 0).toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {prz.maxWinners} विजेता क्षमता
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Status / Assigned Winner Box */}
+                      <div className="mt-4 pt-3 border-t border-slate-800 space-y-2">
+                        {isTargeted ? (
+                          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-400/40 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-black tracking-wider text-amber-300 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                                🎯 प्री-सेट विजेता (FORCED WINNER ACTIVE)
+                              </span>
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                गारंटेड विनर
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs">
+                              <div>
+                                <span className="text-white font-black text-sm">{prz.targetUserName || 'User'}</span>
+                                {prz.targetUserPhone && (
+                                  <span className="text-slate-400 text-xs ml-2">({prz.targetUserPhone})</span>
+                                )}
+                              </div>
+                              <div className="text-amber-200 font-bold">
+                                टिकट #{prz.targetTicketNumber || '?'}{' '}
+                                <span className="text-[10px] text-slate-400 font-mono">({prz.targetTicketId})</span>
+                              </div>
+                            </div>
+
+                            {/* Progression indicator */}
+                            {progress && (
+                              <div className="pt-1 text-[11px] text-slate-300 flex items-center justify-between">
+                                <span>
+                                  कॉलिंग प्रोग्रेस: <strong className="text-amber-400">{progress.markedCount}/{progress.requiredTotal}</strong> नंबर मार्क हुए
+                                </span>
+                                {progress.isComplete ? (
+                                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" /> जीत के लिए तैयार!
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-300">
+                                    {progress.remainingCount} नंबर बाकी
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-2xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between text-xs">
+                            <span className="text-slate-400 flex items-center gap-1.5">
+                              <span>🎲</span>
+                              <span>रैंडम मोड (कोई भी योग्य टिकट जीत सकता है)</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-bold">नो प्री-सेट</span>
+                          </div>
+                        )}
+
+                        {/* Claimed status */}
+                        {isClaimed && (
+                          <div className="p-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-300 flex items-center justify-between font-bold">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span>यह ईनाम क्लेम हो चुका है ({claimedCount}/{prz.maxWinners})</span>
+                            </span>
+                            <span>{prz.claimedWinners?.[0]?.userName}</span>
+                          </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="pt-2 flex items-center justify-end gap-2">
+                          {isTargeted && (
+                            <button
+                              onClick={() =>
+                                handleSetTargetWinner(selectedGame.id, prz.id, {
+                                  targetUserId: undefined,
+                                  targetUserName: undefined,
+                                  targetUserPhone: undefined,
+                                  targetTicketId: undefined,
+                                  targetTicketNumber: undefined,
+                                  isPreTargeted: false,
+                                })
+                              }
+                              className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-bold transition-colors border border-red-500/20 flex items-center gap-1"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>रैंडम करें (Reset)</span>
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => setTargetModalPrize(prz)}
+                            className={`px-4 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow ${
+                              isTargeted
+                                ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
+                                : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950'
+                            }`}
+                          >
+                            <Target className="w-3.5 h-3.5" />
+                            <span>{isTargeted ? 'विजेता बदलें (Change)' : '🎯 विजेता सेट करें (Set Winner)'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 text-center bg-slate-900 rounded-3xl border border-slate-800 text-slate-400">
+              कृपया ऊपर से एक गेम सेलेक्ट करें।
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: 70%-30% FORMULA CALCULATOR */}
+      {activeTab === 'calculator' && (
+        <div className="p-5 rounded-3xl bg-gradient-to-r from-[#180a29] via-[#0e162d] to-[#0d2224] border-2 border-yellow-400/80 shadow-2xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-yellow-500/30 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-500 text-slate-950 font-black flex items-center justify-center shadow-lg shadow-amber-500/30 text-base">
+                %
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white flex items-center gap-2">
+                  <span>70% प्राइज पूल & 30% एडमिन शेयर फॉर्मूला (Admin 30% / Players 70%)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-black uppercase">
+                    Active Rule
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-300">
+                  कुल टिकट बिक्री का 70% हिस्सा सभी विजेताओं के ईनाम में ऑटो-कैलकुलेट होकर बंटता है और 30% हिस्सा एडमिन के पास रहता है।
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={handleApply7030Preset}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/40 flex items-center gap-1.5 cursor-pointer uppercase tracking-wider shrink-0 transition-transform active:scale-95"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Apply 70%-30% Master Formula</span>
+            </button>
+          </div>
+
+          {/* Live Simulator Form */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
+              <label className="text-[11px] text-slate-400 font-bold uppercase block">1. Total Tickets Sold</label>
+              <input
+                type="number"
+                value={calcTickets}
+                onChange={(e) => setCalcTickets(Math.max(1, Number(e.target.value)))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-black focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
+              <label className="text-[11px] text-slate-400 font-bold uppercase block">2. Ticket Price (₹)</label>
+              <input
+                type="number"
+                value={calcPrice}
+                onChange={(e) => setCalcPrice(Math.max(1, Number(e.target.value)))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-black focus:outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div className="p-3 bg-emerald-950/40 rounded-2xl border border-emerald-500/40 space-y-0.5">
+              <span className="text-[10px] text-emerald-400 font-black uppercase tracking-wider block">
+                Total Collection (100%)
+              </span>
+              <span className="text-xl font-black text-emerald-300">
+                ₹{simCollection.toLocaleString('en-IN')}
+              </span>
+              <span className="text-[10px] text-emerald-500 block">
+                {calcTickets} tickets × ₹{calcPrice}
+              </span>
+            </div>
+
+            <div className="p-3 bg-amber-950/40 rounded-2xl border border-amber-500/40 space-y-0.5">
+              <span className="text-[10px] text-amber-400 font-black uppercase tracking-wider block">
+                Prize Pool (70%) / Admin (30%)
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-lg font-black text-amber-300">
+                  ₹{simPrizePool.toLocaleString('en-IN')}
+                </span>
+                <span className="text-xs font-bold text-slate-400">
+                  + ₹{simAdminMargin.toLocaleString('en-IN')} Admin
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: MASTER TEMPLATES */}
+      {activeTab === 'templates' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {prizesList.map((prz, idx) => (
+            <div
+              key={idx}
+              className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 uppercase">
+                      Prize #{idx + 1}
+                    </span>
+                    <span className="text-xs font-black text-white">{prz.name}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">{prz.description}</p>
+                </div>
                 <button
                   onClick={() => handleDeletePrize(idx)}
-                  className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                  title="Delete Prize"
+                  className="text-slate-500 hover:text-red-400 p-1"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
 
-              <p className="text-[11px] text-slate-400">{prz.description}</p>
-            </div>
+              {/* Editable Amount & Max Winners */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold">Prize Amount (₹)</label>
+                  <input
+                    type="number"
+                    value={prz.amount}
+                    onChange={(e) => handleUpdatePrizeAmount(idx, Number(e.target.value))}
+                    min={10}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-black focus:outline-none focus:border-amber-400"
+                  />
+                </div>
 
-            {/* Editable Amount & Max Winners */}
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 uppercase font-bold">Prize Amount (₹)</label>
-                <input
-                  type="number"
-                  value={prz.amount}
-                  onChange={(e) => handleUpdatePrizeAmount(idx, Number(e.target.value))}
-                  min={10}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-black focus:outline-none focus:border-amber-400"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 uppercase font-bold">Max Winners</label>
-                <input
-                  type="number"
-                  value={prz.maxWinners}
-                  onChange={(e) => handleUpdateMaxWinners(idx, Number(e.target.value))}
-                  min={1}
-                  max={5}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
-                />
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400 uppercase font-bold">Max Winners</label>
+                  <input
+                    type="number"
+                    value={prz.maxWinners}
+                    onChange={(e) => handleUpdateMaxWinners(idx, Number(e.target.value))}
+                    min={1}
+                    max={5}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Modal: Add Custom Prize */}
+      {/* Target Winner Selection Modal */}
+      {targetModalPrize && selectedGame && (
+        <ForcedWinnerSelectorModal
+          isOpen={!!targetModalPrize}
+          onClose={() => setTargetModalPrize(null)}
+          game={selectedGame}
+          prize={targetModalPrize}
+          users={safeUsers}
+          tickets={safeTickets}
+          onSetWinner={handleSetTargetWinner}
+        />
+      )}
+
+      {/* Custom Prize Modal */}
       {showAddCustom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="w-full max-w-md bg-slate-900 border-2 border-amber-400 rounded-3xl p-6 space-y-4 shadow-2xl">

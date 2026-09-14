@@ -182,6 +182,22 @@ export function checkAndAutoTrackWinners(
       );
       if (alreadyClaimed) continue;
 
+      // 🎯 Admin Pre-Set / Forced Winner Rule:
+      // If admin has pre-configured a specific winner for this prize, only that target ticket/user is allowed to win
+      if (prize.isPreTargeted || prize.targetTicketId || prize.targetUserId || prize.targetTicketNumber) {
+        let isMatch = false;
+        if (prize.targetTicketId && (ticket.ticketId === prize.targetTicketId || ticket.id === prize.targetTicketId)) {
+          isMatch = true;
+        } else if (prize.targetTicketNumber && ticket.ticketNumber === prize.targetTicketNumber) {
+          isMatch = true;
+        } else if (prize.targetUserId && ticket.userId === prize.targetUserId) {
+          isMatch = true;
+        }
+        if (!isMatch) {
+          continue; // Reserved for pre-set target winner!
+        }
+      }
+
       // 🛡️ Strict Anti-Cheat Rule: 1 Ticket can win ONLY 1 Full House!
       const isFullHousePrize = prizeCode === 'full_house' || prizeCode === 'second_full_house' || prizeCode === 'third_full_house';
       if (isFullHousePrize) {

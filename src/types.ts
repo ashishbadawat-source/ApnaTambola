@@ -110,6 +110,12 @@ export interface GamePrize {
   name: string;
   amount: number;
   maxWinners: number;
+  targetUserId?: string; // Pre-configured target winner User ID
+  targetUserName?: string; // Pre-configured target winner Name
+  targetUserPhone?: string; // Pre-configured target winner Phone
+  targetTicketId?: string; // Pre-configured target Ticket ID (e.g. TKT-9824-712)
+  targetTicketNumber?: number; // Pre-configured target Ticket Number (e.g. 102)
+  isPreTargeted?: boolean; // Flag if admin has set a pre-determined winner for this prize
   claimedWinners: {
     userId: string;
     userName: string;

@@ -67,6 +67,7 @@ import {
 import { UniversalLiveBallBar } from './components/UniversalLiveBallBar';
 import { generateTambolaTicketMatrix, generateTicketId, verifyClaim } from './utils/tambolaTicket';
 import { checkAndAutoTrackWinners, auditDuplicateFullHouseWins } from './utils/autoWinnerTracker';
+import { getNextSmartSteeredNumber } from './utils/forcedWinnerEngine';
 import { LiveWinnerFlashTicker, FlashWinnerItem } from './components/LiveWinnerFlashTicker';
 import { WinnerFlashData } from './components/WinnerCelebrationModal';
 import { COLOR_KEYS, getTicketTheme } from './utils/ticketColors';
@@ -3138,22 +3139,28 @@ export function App() {
     if (forcedNumber && !calledList.includes(forcedNumber) && forcedNumber >= 1 && forcedNumber <= 90) {
       nextNum = forcedNumber;
     } else {
-      const available = Array.from({ length: 90 }, (_, i) => i + 1).filter((n) => !calledList.includes(n));
-      if (available.length === 0) {
-        if (autoCallTimerRef.current) {
-          clearInterval(autoCallTimerRef.current);
-          autoCallTimerRef.current = null;
+      // 🎯 Smart Pre-Set Winner Steerer: Automatically steers called numbers toward admin-assigned target ticket
+      const smartSteered = getNextSmartSteeredNumber(targetGame, tickets);
+      if (smartSteered && typeof smartSteered.number === 'number' && !calledList.includes(smartSteered.number)) {
+        nextNum = smartSteered.number;
+      } else {
+        const available = Array.from({ length: 90 }, (_, i) => i + 1).filter((n) => !calledList.includes(n));
+        if (available.length === 0) {
+          if (autoCallTimerRef.current) {
+            clearInterval(autoCallTimerRef.current);
+            autoCallTimerRef.current = null;
+          }
+          setGames((prev) => prev.map((g) => (g.id === activeTargetId ? { ...g, autoCalling: false, status: 'completed' } : g)));
+          setSiteSettings((prev) => ({ ...prev, isLiveStopped: true }));
+          try {
+            setDoc(doc(db, 'games', activeTargetId), { autoCalling: false, status: 'completed' }, { merge: true }).catch(() => {});
+            setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
+          } catch {}
+          handleClearCompletedTickets(activeTargetId).catch(() => {});
+          return;
         }
-        setGames((prev) => prev.map((g) => (g.id === activeTargetId ? { ...g, autoCalling: false, status: 'completed' } : g)));
-        setSiteSettings((prev) => ({ ...prev, isLiveStopped: true }));
-        try {
-          setDoc(doc(db, 'games', activeTargetId), { autoCalling: false, status: 'completed' }, { merge: true }).catch(() => {});
-          setDoc(doc(db, 'system', 'site_settings'), { isLiveStopped: true }, { merge: true }).catch(() => {});
-        } catch {}
-        handleClearCompletedTickets(activeTargetId).catch(() => {});
-        return;
+        nextNum = available[Math.floor(Math.random() * available.length)];
       }
-      nextNum = available[Math.floor(Math.random() * available.length)];
     }
 
     const newCalled = [...calledList, nextNum];
@@ -3962,6 +3969,22 @@ export function App() {
     if (claimedWinnersList.length >= prize.maxWinners) {
       alert(`The ${prize.name} has already reached maximum winners (${prize.maxWinners})!`);
       return;
+    }
+
+    // 🎯 Pre-Set / Forced Winner Rule Check:
+    if (prize.isPreTargeted || prize.targetTicketId || prize.targetUserId || prize.targetTicketNumber) {
+      let isMatch = false;
+      if (prize.targetTicketId && (ticket.ticketId === prize.targetTicketId || ticket.id === prize.targetTicketId)) {
+        isMatch = true;
+      } else if (prize.targetTicketNumber && ticket.ticketNumber === prize.targetTicketNumber) {
+        isMatch = true;
+      } else if (prize.targetUserId && currentUser.id === prize.targetUserId) {
+        isMatch = true;
+      }
+      if (!isMatch) {
+        alert(`⚠️ यह ईनाम (${prize.name}) एडमिन द्वारा किसी अन्य टिकट के लिए आरक्षित / प्री-सेट किया गया है।`);
+        return;
+      }
     }
 
     // 🛡️ Strict Anti-Cheat Rule: 1 Ticket can win ONLY 1 Full House!
@@ -6240,6 +6263,93 @@ export function App() {
     }
   };
 
+  // 14h. Admin Pre-Set / Forced Winner Setter (किस यूजर को कौनसा ईनाम मिलेगा)
+  const handleAdminSetPrizeWinner = async (
+    gameId: string,
+    prizeId: string,
+    targetData: {
+      targetUserId?: string;
+      targetUserName?: string;
+      targetUserPhone?: string;
+      targetTicketId?: string;
+      targetTicketNumber?: number;
+      isPreTargeted: boolean;
+    }
+  ): Promise<boolean> => {
+    try {
+      let updatedGamesList: TambolaGame[] = [];
+      setGames((prev) => {
+        updatedGamesList = prev.map((g) => {
+          if (g.id !== gameId) return g;
+          return {
+            ...g,
+            prizes: (g.prizes || []).map((p) => {
+              if (p.id === prizeId || p.code === (prizeId as any)) {
+                return {
+                  ...p,
+                  ...targetData,
+                };
+              }
+              return p;
+            }),
+          };
+        });
+        try {
+          localStorage.setItem('apna_tambola_games', JSON.stringify(updatedGamesList));
+        } catch (e) {}
+        return updatedGamesList;
+      });
+
+      const targetGame = updatedGamesList.find((g) => g.id === gameId);
+      if (targetGame) {
+        // Sync to Firestore
+        try {
+          setDoc(doc(db, 'games', gameId), { prizes: targetGame.prizes }, { merge: true }).catch(() => {});
+        } catch (e) {}
+
+        // Broadcast across tabs
+        try {
+          if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+            const bc = new BroadcastChannel('apna_tambola_sync');
+            bc.postMessage({ type: 'GAMES_UPDATED', games: updatedGamesList });
+            bc.close();
+          }
+        } catch (e) {}
+
+        // Sync to Server API
+        try {
+          fetch(`/api/games/${gameId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prizes: targetGame.prizes }),
+          }).catch(() => {});
+        } catch (e) {}
+      }
+
+      // Admin Activity Log
+      setActivityLogs((prev) => [
+        {
+          id: `act_${Date.now()}_set_winner`,
+          adminName: currentUser?.name || 'Admin',
+          action: targetData.isPreTargeted
+            ? `🎯 प्री-सेट विजेता सेट: ${targetData.targetUserName} (टिकट #${targetData.targetTicketNumber || '?'})`
+            : `🎲 ईनाम प्री-सेट रीसेट (रैंडम मोड)`,
+          category: 'game',
+          ipAddress: '127.0.0.1 (Admin)',
+          device: 'Admin Console',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+          status: 'success',
+        },
+        ...prev,
+      ]);
+
+      return true;
+    } catch (err) {
+      console.error('Error setting prize target winner:', err);
+      return false;
+    }
+  };
+
   // 14f. Delete Single Winner Record (विजेता रिमूव करें)
   const handleDeleteWinner = async (winnerId: string): Promise<boolean> => {
     try {
@@ -7546,6 +7656,7 @@ export function App() {
             onRunClawbackAudit={handleAdminRunClawbackAudit}
             onForceRefresh={handleForceRefresh}
             isSyncing={isSyncing}
+            onSetPrizeWinner={handleAdminSetPrizeWinner}
             onOpenFirebaseDiagnostics={() => setShowFirebaseModal(true)}
           />
         )}

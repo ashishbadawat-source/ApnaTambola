@@ -16,13 +16,17 @@ import {
   Users,
   Clock,
   Sparkles,
+  Target,
 } from 'lucide-react';
-import { TambolaGame, TambolaTicket, GameWinner } from '../../types';
+import { TambolaGame, TambolaTicket, GameWinner, User, GamePrize } from '../../types';
 import { playNumberCallSound, speakNumberCall } from '../../utils/audio';
+import { ForcedWinnerSelectorModal } from '../../components/ForcedWinnerSelectorModal';
+import { getPrizeTargetProgress } from '../../utils/forcedWinnerEngine';
 
 interface ModuleLiveControlProps {
   games: TambolaGame[];
   tickets: TambolaTicket[];
+  users?: User[];
   selectedGameId?: string;
   onSelectGame?: (gameId: string) => void;
   onStartGame?: (gameId: string) => Promise<void>;
@@ -31,11 +35,24 @@ interface ModuleLiveControlProps {
   onToggleAuto: (gameId?: string) => void;
   onResetGame: (gameId?: string) => void;
   onUpdateGame?: (gameId: string, updates: Partial<TambolaGame>) => Promise<boolean>;
+  onSetPrizeWinner?: (
+    gameId: string,
+    prizeId: string,
+    targetData: {
+      targetUserId?: string;
+      targetUserName?: string;
+      targetUserPhone?: string;
+      targetTicketId?: string;
+      targetTicketNumber?: number;
+      isPreTargeted: boolean;
+    }
+  ) => Promise<boolean> | void;
 }
 
 export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   games = [],
   tickets = [],
+  users = [],
   selectedGameId: propSelectedGameId,
   onSelectGame,
   onStartGame,
@@ -44,14 +61,18 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
   onToggleAuto,
   onResetGame,
   onUpdateGame,
+  onSetPrizeWinner,
 }) => {
   const safeGames = Array.isArray(games) ? games.filter(Boolean) : [];
   const safeTickets = Array.isArray(tickets) ? tickets.filter(Boolean) : [];
+  const safeUsers = Array.isArray(users) ? users.filter(Boolean) : [];
 
   const [internalSelectedId, setInternalSelectedId] = useState<string>(
     propSelectedGameId || safeGames.find((g) => g.status === 'live')?.id || safeGames[0]?.id || ''
   );
   const selectedGameId = propSelectedGameId || internalSelectedId;
+
+  const [selectedModalPrize, setSelectedModalPrize] = useState<GamePrize | null>(null);
 
   const handleSelectGame = (id: string) => {
     setInternalSelectedId(id);
@@ -659,20 +680,24 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-400" />
-            <h3 className="text-base font-black text-white">Prize Claim & Verification Log</h3>
+            <h3 className="text-base font-black text-white">ईनाम स्थिति & विजेता नियंत्रण (Prizes & Live Targets)</h3>
           </div>
-          <span className="text-xs text-slate-400 font-medium">Automatic algorithm verifies marked numbers against called balls</span>
+          <span className="text-xs text-slate-400 font-medium">Automatic algorithm & Smart Pre-set Winner engine</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           {currentGame?.prizes?.map((prz) => {
             const hasWinner = prz.claimedWinners && prz.claimedWinners.length > 0;
+            const isTargeted = prz.isPreTargeted || !!prz.targetTicketId || !!prz.targetUserId;
+
             return (
               <div
                 key={prz.id}
                 className={`p-3.5 rounded-2xl border transition-all space-y-2 ${
                   hasWinner
                     ? 'bg-gradient-to-b from-[#1b1c2b] to-[#101222] border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+                    : isTargeted
+                    ? 'bg-amber-950/30 border-amber-500/60 shadow-lg shadow-amber-500/10'
                     : 'bg-slate-950/80 border-slate-800'
                 }`}
               >
@@ -681,21 +706,71 @@ export const ModuleLiveControl: React.FC<ModuleLiveControlProps> = ({
                   <span className="text-xs font-black text-amber-400">₹{prz.amount}</span>
                 </div>
                 <p className="text-[10px] text-slate-400">{prz.description}</p>
+
+                {/* Winner / Target status */}
                 {hasWinner ? (
                   <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 font-bold space-y-0.5">
                     <div>Winner: <strong>{prz.claimedWinners![0].userName}</strong></div>
-                    <div className="text-[9px] text-slate-400 font-mono">Tkt: {prz.claimedWinners![0].ticketId}</div>
+                    <div className="text-[9px] text-slate-400 font-mono">Tkt: {prz.claimedWinners![0].ticketId} (No #{prz.claimedWinners![0].ticketNumber})</div>
+                  </div>
+                ) : isTargeted ? (
+                  <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 font-bold space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9px] uppercase tracking-wider text-amber-400 font-black">🎯 PRE-SET TARGET:</span>
+                      <span className="text-[9px] text-emerald-400">गारंटेड</span>
+                    </div>
+                    <div className="text-white font-black">{prz.targetUserName || 'User'}</div>
+                    <div className="text-[9px] text-slate-400 font-mono">
+                      टिकट #{prz.targetTicketNumber || '?'} ({prz.targetTicketId})
+                    </div>
                   </div>
                 ) : (
                   <div className="text-[10px] text-slate-500 font-bold italic">
-                    Unclaimed • Ready for claim
+                    🎲 रैंडम मोड (कोई भी जीत सकता है)
                   </div>
+                )}
+
+                {/* Target setup button */}
+                {!hasWinner && (
+                  <button
+                    onClick={() => setSelectedModalPrize(prz)}
+                    className={`w-full py-1.5 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      isTargeted
+                        ? 'bg-amber-400/20 text-amber-300 hover:bg-amber-400/30 border border-amber-400/40'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                    }`}
+                  >
+                    <Target className="w-3 h-3 text-amber-400" />
+                    <span>{isTargeted ? 'टारगेट बदलें (Change)' : '🎯 विजेता सेट करें'}</span>
+                  </button>
                 )}
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Target Winner Selection Modal */}
+      {selectedModalPrize && currentGame && (
+        <ForcedWinnerSelectorModal
+          isOpen={!!selectedModalPrize}
+          onClose={() => setSelectedModalPrize(null)}
+          game={currentGame}
+          prize={selectedModalPrize}
+          users={safeUsers}
+          tickets={safeTickets}
+          onSetWinner={async (gameId, prizeId, targetData) => {
+            if (onSetPrizeWinner) {
+              await onSetPrizeWinner(gameId, prizeId, targetData);
+            } else if (onUpdateGame) {
+              const updatedPrizes = (currentGame.prizes || []).map((p) =>
+                p.id === prizeId || p.code === (prizeId as any) ? { ...p, ...targetData } : p
+              );
+              await onUpdateGame(gameId, { prizes: updatedPrizes });
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

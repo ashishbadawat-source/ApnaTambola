@@ -173,6 +173,18 @@ interface AdminDashboardViewProps {
   onToggleAutoTicket?: (enabled: boolean, gameId?: string) => Promise<boolean> | void;
   onRunAutoTicketDispatch?: (gameId?: string) => Promise<{ success: boolean; dispatchedCount: number; totalDeducted: number; message: string; details?: any[] }>;
   onOpenFirebaseDiagnostics?: () => void;
+  onSetPrizeWinner?: (
+    gameId: string,
+    prizeId: string,
+    targetData: {
+      targetUserId?: string;
+      targetUserName?: string;
+      targetUserPhone?: string;
+      targetTicketId?: string;
+      targetTicketNumber?: number;
+      isPreTargeted: boolean;
+    }
+  ) => Promise<boolean> | void;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
@@ -246,6 +258,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
   onRunAutoTicketDispatch,
   onSetTicketName,
   onRunClawbackAudit,
+  onSetPrizeWinner,
   franchises = [],
   franchiseTransfers = [],
   onApproveFranchise = async () => true,
@@ -511,6 +524,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
           <ModuleLiveControl
             games={games}
             tickets={tickets}
+            users={users}
             selectedGameId={selectedGameId}
             onSelectGame={onSelectGame}
             onStartGame={onStartGame}
@@ -519,6 +533,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onToggleAuto={onToggleAuto}
             onResetGame={onResetGame}
             onUpdateGame={onUpdateGame}
+            onSetPrizeWinner={onSetPrizeWinner}
           />
         )}
 
@@ -565,7 +580,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
         {activeTab === 'prizes' && (
           <ModulePrizes
             games={games}
+            users={users}
+            tickets={tickets}
             onUpdateGame={onUpdateGame}
+            onSetPrizeWinner={onSetPrizeWinner}
           />
         )}
 
