@@ -613,6 +613,8 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onApproveWithdrawal={onApproveWithdrawal}
             onRejectWithdrawal={onRejectWithdrawal}
             onOpenAdjustModal={onOpenAdjustModal}
+            onForceRefresh={onForceRefresh}
+            isSyncing={isSyncing}
           />
         )}
 

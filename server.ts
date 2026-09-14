@@ -147,8 +147,34 @@ function loadStateFromDisk() {
         }
       });
 
+      withdrawals.forEach((wdr) => {
+        if (wdr.userId && !userMap.has(wdr.userId)) {
+          const autoUser: User = {
+            id: wdr.userId,
+            name: wdr.userName || `Player ${wdr.userId.slice(-4)}`,
+            email: wdr.userEmail || `${wdr.userId}@tambolalive.com`,
+            phone: wdr.userPhone || '+91 9999999999',
+            role: 'user',
+            status: 'active',
+            isBlocked: false,
+            walletBalance: 0,
+            depositBalance: 0,
+            winningBalance: 0,
+            referralBalance: 0,
+            bonusRewardBalance: 0,
+            firstDepositBonusClaimed: true,
+            hasDeposited: true,
+            referralCode: `REF-${(wdr.userName || 'PLY').slice(0, 3).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`,
+            kycStatus: 'verified',
+            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80',
+            createdAt: wdr.requestDate || new Date().toISOString(),
+          };
+          userMap.set(wdr.userId, autoUser);
+        }
+      });
+
       users = Array.from(userMap.values());
-      console.log(`[Storage] Loaded persistent data: ${users.length} users (all user IDs synchronized), ${commissions.length} commissions, ${deposits.length} deposits`);
+      console.log(`[Storage] Loaded persistent data: ${users.length} users (all user IDs synchronized), ${commissions.length} commissions, ${deposits.length} deposits, ${withdrawals.length} withdrawals`);
     } else {
       users = Array.from(userMap.values());
       saveStateToDisk();
@@ -2529,6 +2555,27 @@ async function startServer() {
   // 5. Wallet & Payment Simulation APIs
   app.get('/api/withdrawals', (req: Request, res: Response) => {
     res.json(withdrawals);
+  });
+
+  app.post('/api/withdrawals/sync', (req: Request, res: Response) => {
+    try {
+      const { withdrawals: incoming } = req.body;
+      if (Array.isArray(incoming) && incoming.length > 0) {
+        const map = new Map<string, WithdrawalRequest>();
+        withdrawals.forEach((w) => { if (w && w.id) map.set(w.id, w); });
+        incoming.forEach((w: WithdrawalRequest) => {
+          if (w && w.id) {
+            const existing = map.get(w.id);
+            map.set(w.id, { ...(existing || {}), ...w });
+          }
+        });
+        withdrawals = Array.from(map.values());
+        saveStateToDisk();
+      }
+      res.json({ success: true, count: withdrawals.length });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
   });
 
   app.post('/api/withdrawals/request', (req: Request, res: Response) => {

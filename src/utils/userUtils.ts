@@ -1,4 +1,4 @@
-import { User } from '../types';
+import { User, WithdrawalRequest } from '../types';
 
 /**
  * Robust utility to reliably extract registration timestamp from a User object
@@ -43,6 +43,61 @@ export function getUserRegistrationTimestamp(u: Partial<User> | null | undefined
   }
 
   return 0;
+}
+
+/**
+ * Robust utility to reliably extract numeric timestamp from a WithdrawalRequest
+ */
+export function getWithdrawalSortTime(w: Partial<WithdrawalRequest> | null | undefined): number {
+  if (!w) return 0;
+
+  const anyW = w as Record<string, any>;
+  const raw = w.createdAt || anyW.created_at || w.timestamp || anyW.timestamp;
+  if (raw) {
+    if (typeof raw === 'object' && typeof raw.toMillis === 'function') {
+      const ms = raw.toMillis();
+      if (!isNaN(ms) && ms > 0) return ms;
+    }
+    if (typeof raw === 'object' && typeof raw._seconds === 'number') {
+      const ms = raw._seconds * 1000;
+      if (!isNaN(ms) && ms > 0) return ms;
+    }
+    if (typeof raw === 'number' && !isNaN(raw) && raw > 0) {
+      return raw > 1e11 ? raw : raw * 1000;
+    }
+    if (typeof raw === 'string') {
+      const parsed = new Date(raw).getTime();
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  }
+
+  if (w.id && typeof w.id === 'string') {
+    const match = w.id.match(/\d{10,14}/);
+    if (match && match[0]) {
+      const num = Number(match[0]);
+      if (!isNaN(num) && num > 1e11) return num;
+      if (!isNaN(num) && num > 1e9) return num * 1000;
+    }
+  }
+
+  if (w.requestDate && typeof w.requestDate === 'string') {
+    const parsed = new Date(w.requestDate).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  return 0;
+}
+
+/**
+ * Sorts an array of withdrawals with newest first (index 0)
+ */
+export function sortWithdrawalsNewestFirst(list: WithdrawalRequest[]): WithdrawalRequest[] {
+  if (!Array.isArray(list)) return [];
+  return [...list].sort((a, b) => {
+    const tA = getWithdrawalSortTime(a);
+    const tB = getWithdrawalSortTime(b);
+    return tB - tA;
+  });
 }
 
 /**

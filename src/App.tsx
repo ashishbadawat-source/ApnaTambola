@@ -76,6 +76,8 @@ import {
   getUserRegistrationTimestamp,
   isUserRecentlyRegistered,
   sortUsersNewestFirst,
+  getWithdrawalSortTime,
+  sortWithdrawalsNewestFirst,
 } from './utils/userUtils';
 import { db, handleFirestoreError, OperationType } from './lib/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, getDocs, getDoc, query, where, getDocFromServer } from 'firebase/firestore';
@@ -1388,18 +1390,14 @@ export function App() {
           if (Array.isArray(data.withdrawals) && data.withdrawals.length > 0) {
             setWithdrawals((prev) => {
               const map = new Map<string, WithdrawalRequest>();
-              prev.forEach((w) => map.set(w.id, w));
+              prev.forEach((w) => { if (w && w.id) map.set(w.id, w); });
               data.withdrawals.forEach((w: WithdrawalRequest) => {
                 if (w && w.id) {
                   const existing = map.get(w.id);
                   map.set(w.id, { ...(existing || {}), ...w });
                 }
               });
-              const merged = Array.from(map.values()).sort((a, b) => {
-                const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
-                const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
-                return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
-              });
+              const merged = sortWithdrawalsNewestFirst(Array.from(map.values()));
               try {
                 localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(merged));
               } catch (e) {}
@@ -1768,12 +1766,17 @@ export function App() {
             const map = new Map<string, WithdrawalRequest>();
             prev.forEach((w) => { if (w && w.id) map.set(w.id, w); });
             fsWithdrawals.forEach((w) => { if (w && w.id) map.set(w.id, w); });
-            return Array.from(map.values()).sort((a, b) => {
-              const timeA = a.requestDate ? new Date(a.requestDate).getTime() : 0;
-              const timeB = b.requestDate ? new Date(b.requestDate).getTime() : 0;
-              return timeB - timeA;
-            });
+            const merged = sortWithdrawalsNewestFirst(Array.from(map.values()));
+            try { localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(merged)); } catch (e) {}
+            return merged;
           });
+
+          // Also synchronize Firestore withdrawals to local backend server
+          fetch('/api/withdrawals/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ withdrawals: fsWithdrawals }),
+          }).catch(() => {});
         }
       }, (error) => {
         handleSnapshotErr(error, 'withdrawals');
@@ -1808,12 +1811,13 @@ export function App() {
       // 1. Force fetch from Firestore collections
       if (db) {
         try {
-          const [usersSnap, gamesSnap, ticketsSnap, commsSnap, depositsSnap, settingsSnap] = await Promise.all([
+          const [usersSnap, gamesSnap, ticketsSnap, commsSnap, depositsSnap, withdrawalsSnap, settingsSnap] = await Promise.all([
             getDocs(collection(db, 'users')).catch(() => null),
             getDocs(collection(db, 'games')).catch(() => null),
             getDocs(collection(db, 'tickets')).catch(() => null),
             getDocs(collection(db, 'commissions')).catch(() => null),
             getDocs(collection(db, 'deposits')).catch(() => null),
+            getDocs(collection(db, 'withdrawals')).catch(() => null),
             getDoc(doc(db, 'system', 'site_settings')).catch(() => null),
           ]);
 
@@ -1948,6 +1952,32 @@ export function App() {
             }
           }
 
+          if (withdrawalsSnap && !withdrawalsSnap.empty) {
+            const fsWithdrawals: WithdrawalRequest[] = [];
+            withdrawalsSnap.forEach((d) => {
+              fsWithdrawals.push({ ...(d.data() as WithdrawalRequest), id: d.id });
+            });
+            if (fsWithdrawals.length > 0) {
+              setWithdrawals((prev) => {
+                const map = new Map<string, WithdrawalRequest>();
+                prev.forEach((w) => { if (w && w.id) map.set(w.id, w); });
+                fsWithdrawals.forEach((w) => { if (w && w.id) map.set(w.id, w); });
+                const merged = sortWithdrawalsNewestFirst(Array.from(map.values()));
+                try {
+                  localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(merged));
+                } catch {}
+                return merged;
+              });
+
+              // Forward Firestore withdrawals to backend server
+              fetch('/api/withdrawals/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ withdrawals: fsWithdrawals }),
+              }).catch(() => {});
+            }
+          }
+
           if (settingsSnap && settingsSnap.exists()) {
             const data = settingsSnap.data() as Partial<SiteSettings>;
             setSiteSettings((prev) => {
@@ -2038,6 +2068,23 @@ export function App() {
               });
               try {
                 localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+          if (Array.isArray(data.withdrawals) && data.withdrawals.length > 0) {
+            setWithdrawals((prev) => {
+              const map = new Map<string, WithdrawalRequest>();
+              prev.forEach((w) => { if (w && w.id) map.set(w.id, w); });
+              data.withdrawals.forEach((w: WithdrawalRequest) => {
+                if (w && w.id) {
+                  const existing = map.get(w.id);
+                  map.set(w.id, { ...(existing || {}), ...w });
+                }
+              });
+              const merged = sortWithdrawalsNewestFirst(Array.from(map.values()));
+              try {
+                localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(merged));
               } catch {}
               return merged;
             });
@@ -4796,10 +4843,12 @@ export function App() {
       accountHolder: data.accountHolder,
       status: 'pending',
       requestDate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+      createdAt: new Date().toISOString(),
+      timestamp: new Date().toISOString(),
     };
 
     setWithdrawals((prev) => {
-      const next = [newReq, ...prev];
+      const next = sortWithdrawalsNewestFirst([newReq, ...prev.filter((w) => w.id !== newReq.id)]);
       try {
         localStorage.setItem('apna_tambola_withdrawals', JSON.stringify(next));
       } catch (e) {}

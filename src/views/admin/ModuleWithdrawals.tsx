@@ -23,6 +23,8 @@ interface ModuleWithdrawalsProps {
   onApproveWithdrawal: (id: string) => Promise<boolean>;
   onRejectWithdrawal: (id: string) => Promise<boolean>;
   onOpenAdjustModal?: (userOrId: string | User, type?: 'credit' | 'debit') => void;
+  onForceRefresh?: () => Promise<void>;
+  isSyncing?: boolean;
 }
 
 export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
@@ -30,18 +32,24 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
   onApproveWithdrawal,
   onRejectWithdrawal,
   onOpenAdjustModal,
+  onForceRefresh,
+  isSyncing = false,
 }) => {
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [localSyncing, setLocalSyncing] = useState(false);
 
   const handleManualSync = async () => {
-    setIsSyncing(true);
+    setLocalSyncing(true);
     try {
-      await fetch('/api/sync/all');
+      if (onForceRefresh) {
+        await onForceRefresh();
+      } else {
+        await fetch('/api/sync/all');
+      }
     } catch (e) {}
-    setTimeout(() => setIsSyncing(false), 600);
+    setTimeout(() => setLocalSyncing(false), 600);
   };
 
   // Settings
@@ -255,7 +263,33 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-slate-300">
-              {filteredWithdrawals.map((req) => {
+              {filteredWithdrawals.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center text-slate-500">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <div className="text-sm font-bold text-slate-300">
+                        {searchQuery ? 'कोई विथड्रावल रिक्वेस्ट नहीं मिली' : `कोई ${filterTab === 'pending' ? 'पेंडिंग' : filterTab === 'approved' ? 'अप्रूव्ड' : filterTab === 'rejected' ? 'रिजेक्टेड' : ''} विथड्रावल रिक्वेस्ट मौजूद नहीं है`}
+                      </div>
+                      <p className="text-xs text-slate-500 max-w-sm">
+                        जब भी कोई यूजर किसी भी डिवाइस से विथड्रॉ रिक्वेस्ट करेगा, वह यहाँ तुरंत रियल-टाइम में दिखाई देगा।
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleManualSync}
+                        disabled={localSyncing || isSyncing}
+                        className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                      >
+                        <RefreshCw className={`w-4 h-4 text-emerald-400 ${localSyncing || isSyncing ? 'animate-spin' : ''}`} />
+                        <span>लाइव डेटा सिंक करें (Refresh Sync)</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredWithdrawals.map((req) => {
                 const reqTds = req.tdsAmount ?? Math.round(req.amount * 0.10);
                 const reqAdminFee = req.adminFeeAmount ?? Math.round(req.amount * 0.05);
                 const reqNet = req.netAmount ?? (req.amount - reqTds - reqAdminFee);
@@ -386,7 +420,8 @@ export const ModuleWithdrawals: React.FC<ModuleWithdrawalsProps> = ({
                   </td>
                 </tr>
                 );
-              })}
+              })
+              )}
             </tbody>
           </table>
         </div>
