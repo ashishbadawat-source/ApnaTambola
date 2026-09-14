@@ -299,6 +299,8 @@ export interface WithdrawalRequest {
   processedDate?: string;
   note?: string;
   adminRemarks?: string;
+  timestamp?: string;
+  createdAt?: string;
 }
 
 export interface SupportTicket {

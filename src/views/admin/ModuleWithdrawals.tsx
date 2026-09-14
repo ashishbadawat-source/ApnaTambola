@@ -23,7 +23,7 @@ interface ModuleWithdrawalsProps {
   onApproveWithdrawal: (id: string) => Promise<boolean>;
   onRejectWithdrawal: (id: string) => Promise<boolean>;
   onOpenAdjustModal?: (userOrId: string | User, type?: 'credit' | 'debit') => void;
-  onForceRefresh?: () => Promise<void>;
+  onForceRefresh?: () => Promise<void> | void;
   isSyncing?: boolean;
 }
 

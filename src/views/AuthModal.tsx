@@ -1797,39 +1797,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <LogIn className="w-4 h-4" />
                   <span>{isSubmitting ? (lang === 'hi' ? 'लॉगिन हो रहा है...' : 'Logging in...') : t.loginBtn}</span>
                 </button>
-
-                {/* Direct 1-Click Fast Login Shortcuts */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                  <p className="text-[11px] font-bold text-slate-400 text-center uppercase tracking-wider">
-                    {lang === 'hi' ? '⚡ सीधा 1-क्लिक इंस्टेंट लॉगिन' : '⚡ Instant 1-Click Fast Login'}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playWinningFanfare();
-                        onLogin({ ...MASTER_ADMIN_ASHISH, role: 'admin' });
-                        onClose();
-                      }}
-                      className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-900/60 to-indigo-900/60 border border-purple-500/40 hover:border-purple-400 text-purple-200 hover:text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.02] shadow-sm"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{lang === 'hi' ? '👑 मास्टर एडमिन लॉगिन' : '👑 Master Admin Login'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playWinningFanfare();
-                        onLogin(DEFAULT_USER);
-                        onClose();
-                      }}
-                      className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-950/60 to-teal-950/60 border border-emerald-500/40 hover:border-emerald-400 text-emerald-200 hover:text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.02] shadow-sm"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>{lang === 'hi' ? '🎮 टेस्ट प्लेयर लॉगिन' : '🎮 Test Player Login'}</span>
-                    </button>
-                  </div>
-                </div>
               </form>
             )}
 
