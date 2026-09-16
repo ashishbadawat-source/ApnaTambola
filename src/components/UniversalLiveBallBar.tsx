@@ -44,19 +44,22 @@ export const UniversalLiveBallBar: React.FC<UniversalLiveBallBarProps> = ({
   soundEnabled,
   setSoundEnabled,
 }) => {
-  // Find currently active live game if not provided or to ensure freshest
+  // Find currently active live game or upcoming match to always display
   const activeLiveGame =
-    game && game.status === 'live'
+    (game && (game.status === 'live' || game.autoCalling || (Array.isArray(game.calledNumbers) && game.calledNumbers.length > 0 && game.status !== 'completed')))
       ? game
-      : allGames.find((g) => g && g.status === 'live') ||
-        (game && Array.isArray(game.calledNumbers) && game.calledNumbers.length > 0 && game.status !== 'completed'
-          ? game
-          : null);
+      : (allGames || []).find((g) => g && (g.status === 'live' || g.autoCalling || (Array.isArray(g.calledNumbers) && g.calledNumbers.length > 0 && g.status !== 'completed'))) ||
+        (game && game.status !== 'completed' && game.status !== 'cancelled' ? game : null) ||
+        (allGames || []).find((g) => g && g.status === 'upcoming') ||
+        (allGames || []).find((g) => g && g.status !== 'completed' && g.status !== 'cancelled') ||
+        (allGames && allGames.length > 0 ? allGames[0] : null) ||
+        game;
 
   const [lastAnimatedNumber, setLastAnimatedNumber] = useState<number | null>(null);
   const [isPulsing, setIsPulsing] = useState<boolean>(false);
   const [voiceLang, setVoiceLang] = useState<VoiceLanguage>(() => getCallerVoiceLanguage() || 'both');
 
+  const isLiveActive = activeLiveGame && (activeLiveGame.status === 'live' || activeLiveGame.autoCalling || (Array.isArray(activeLiveGame.calledNumbers) && activeLiveGame.calledNumbers.length > 0));
   const currentNumber = activeLiveGame?.currentNumber || (activeLiveGame?.calledNumbers && activeLiveGame.calledNumbers.length > 0 ? activeLiveGame.calledNumbers[activeLiveGame.calledNumbers.length - 1] : null);
   const previousNumbers = activeLiveGame?.previousNumbers || (activeLiveGame?.calledNumbers ? activeLiveGame.calledNumbers.slice(-6, -1).reverse() : []);
   const calledCount = activeLiveGame?.calledNumbers?.length || 0;
@@ -82,7 +85,7 @@ export const UniversalLiveBallBar: React.FC<UniversalLiveBallBarProps> = ({
     }
   }, [currentNumber, soundEnabled, voiceLang, lastAnimatedNumber]);
 
-  if (!activeLiveGame || activeLiveGame.status === 'completed' || activeLiveGame.status === 'cancelled') {
+  if (!activeLiveGame) {
     return null;
   }
 

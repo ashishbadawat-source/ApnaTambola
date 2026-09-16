@@ -1123,6 +1123,25 @@ export function App() {
             const { gameId } = event.data;
             setGames((prev) => prev.map((g) => (g.id === gameId ? { ...g, status: 'completed', autoCalling: false } : g)));
             setTickets((prev) => prev.filter((t) => t.gameId !== gameId));
+          } else if (event.data?.type === 'WINNER_FLASH' && event.data.flash) {
+            const flash = event.data.flash;
+            const isMine = currentUserRef.current
+              ? flash.ticket?.userId === currentUserRef.current.id ||
+                (flash.coWinners && flash.coWinners.some((cw: any) => cw.userId === currentUserRef.current?.id || cw.userName === currentUserRef.current?.name)) ||
+                flash.winnerName === currentUserRef.current.name
+              : false;
+            setActiveWinnerFlash({ ...flash, isCurrentUser: isMine });
+            if (event.data.newWinner) {
+              setWinners((prev) => [event.data.newWinner, ...prev.filter((w) => w.id !== event.data.newWinner.id)]);
+            }
+            if (soundEnabled) {
+              try {
+                playWinningFanfare();
+                if (flash.winnerName && flash.prizeName) {
+                  speakWinnerAnnouncement([flash.winnerName], flash.prizeName, flash.prizeAmount, true);
+                }
+              } catch (e) {}
+            }
           }
         };
       }
@@ -2976,7 +2995,7 @@ export function App() {
         const isAnyCurrentUser = flashCoWinners ? flashCoWinners.some((w) => w.isCurrentUser) : win.isCurrentUser;
 
         // Broadcast to Live Flash Ticker for all players (flashing both winners when split)
-        setActiveWinnerFlash({
+        const flashItem = {
           id: win.id,
           winnerName: flashWinnerName,
           prizeName: win.prizeName,
@@ -2991,7 +3010,17 @@ export function App() {
           ticket: win.ticket,
           isEqualSplit: !!flashCoWinners && flashCoWinners.length > 1,
           coWinners: flashCoWinners,
-        });
+        };
+        setActiveWinnerFlash(flashItem);
+
+        // Broadcast across all open browser tabs and devices
+        try {
+          if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+            const bc = new BroadcastChannel('apna_tambola_sync');
+            bc.postMessage({ type: 'WINNER_FLASH', flash: flashItem, newWinner: newWinnerRecord });
+            bc.close();
+          }
+        } catch (e) {}
 
         // Voice announcement of winners
         try {
@@ -4158,7 +4187,7 @@ export function App() {
     const combinedWinnerNames = allClaimedForThisPrize.map((w) => w.userName).join(' & ');
 
     // Broadcast to Live Flash Ticker for all players (flashes both names if split)
-    setActiveWinnerFlash({
+    const flashItem = {
       id: `flash_claim_${prize.id}_${Date.now()}`,
       winnerName: combinedWinnerNames,
       prizeName: prize.name,
@@ -4173,7 +4202,16 @@ export function App() {
       ticket: ticket,
       isEqualSplit: isSplit,
       coWinners: isSplit ? coWinners : undefined,
-    });
+    };
+    setActiveWinnerFlash(flashItem);
+
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('apna_tambola_sync');
+        bc.postMessage({ type: 'WINNER_FLASH', flash: flashItem, newWinner });
+        bc.close();
+      }
+    } catch (e) {}
 
     // Voice announcement for winner / co-winners
     try {
@@ -7399,6 +7437,10 @@ export function App() {
             winners={winners}
             referralMembers={computedReferralMembers}
             commissions={commissions}
+            activeWinnerFlash={activeWinnerFlash}
+            soundEnabled={soundEnabled}
+            setSoundEnabled={setSoundEnabled}
+            onViewCelebration={(data) => setCelebrationData(data)}
             onNavigate={handleNavigate}
             onOpenDeposit={() => handleNavigate('wallet')}
             onOpenAuth={handleOpenAuth}

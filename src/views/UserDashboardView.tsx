@@ -31,10 +31,19 @@ import {
   PhoneCall,
   MessageCircle,
   LogOut,
+  Volume2,
+  VolumeX,
+  Languages,
+  Award,
+  Crown,
 } from 'lucide-react';
 import { User, TambolaGame, TambolaTicket, GameWinner, ReferralMember, ReferralCommission } from '../types';
 import { isDirectChildOf } from '../utils/referralMatcher';
 import { ApnaTambolaLiveArena } from '../components/ApnaTambolaLiveArena';
+import { TAMBOLA_NICKNAMES_EN, TAMBOLA_NICKNAMES_HI, HINDI_NUMBERS, VoiceLanguage } from '../utils/tambolaNicknames';
+import { playNumberCallSound, speakNumberCall, getCallerVoiceLanguage, setCallerVoiceLanguage } from '../utils/audio';
+import { FlashWinnerItem } from '../components/LiveWinnerFlashTicker';
+import { WinnerFlashData } from '../components/WinnerCelebrationModal';
 
 interface UserDashboardViewProps {
   currentUser?: User | null;
@@ -44,6 +53,10 @@ interface UserDashboardViewProps {
   winners: GameWinner[];
   referralMembers?: ReferralMember[];
   commissions?: ReferralCommission[];
+  activeWinnerFlash?: FlashWinnerItem | null;
+  soundEnabled?: boolean;
+  setSoundEnabled?: (val: boolean) => void;
+  onViewCelebration?: (data: WinnerFlashData) => void;
   onNavigate: (tab: string, gameId?: string) => void;
   onOpenDeposit: () => void;
   onOpenAuth?: (mode?: 'login' | 'register') => void;
@@ -58,18 +71,67 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   winners = [],
   referralMembers = [],
   commissions = [],
+  activeWinnerFlash,
+  soundEnabled = true,
+  setSoundEnabled,
+  onViewCelebration,
   onNavigate,
   onOpenDeposit,
   onOpenAuth,
   onLogout,
 }) => {
-  const liveGame = (games || []).find((g) => g && g.status === 'live');
+  const liveGame = (games || []).find((g) => g && (g.status === 'live' || g.autoCalling || (Array.isArray(g.calledNumbers) && g.calledNumbers.length > 0 && g.status !== 'completed'))) || (games || [])[0];
   const upcomingGames = (games || []).filter((g) => g && g.status === 'upcoming');
   const myActiveTickets = (tickets || []).filter((t) => {
     if (!t) return false;
     const matchedGame = (games || []).find((g) => g && g.id === t.gameId);
     return matchedGame && matchedGame.status !== 'completed';
   });
+
+  const [voiceLang, setVoiceLang] = useState<VoiceLanguage>(() => getCallerVoiceLanguage() || 'both');
+  const [lastAnimatedNumber, setLastAnimatedNumber] = useState<number | null>(null);
+  const [isBallPulsing, setIsBallPulsing] = useState<boolean>(false);
+
+  const currentNumber = liveGame?.currentNumber || (liveGame?.calledNumbers && liveGame.calledNumbers.length > 0 ? liveGame.calledNumbers[liveGame.calledNumbers.length - 1] : null);
+  const previousNumbers = liveGame?.previousNumbers || (liveGame?.calledNumbers ? liveGame.calledNumbers.slice(-6, -1).reverse() : []);
+  const calledCount = liveGame?.calledNumbers?.length || 0;
+
+  // Ball arrival animation and voice announcement
+  useEffect(() => {
+    if (currentNumber && currentNumber !== lastAnimatedNumber) {
+      setLastAnimatedNumber(currentNumber);
+      setIsBallPulsing(true);
+
+      if (soundEnabled) {
+        try {
+          playNumberCallSound();
+          speakNumberCall(currentNumber, soundEnabled, voiceLang);
+        } catch (e) {}
+      }
+
+      const timer = setTimeout(() => {
+        setIsBallPulsing(false);
+      }, 2500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [currentNumber, soundEnabled, voiceLang, lastAnimatedNumber]);
+
+  const handleToggleVoiceLang = () => {
+    const nextLang: VoiceLanguage = voiceLang === 'hi' ? 'en' : voiceLang === 'en' ? 'both' : 'hi';
+    setVoiceLang(nextLang);
+    setCallerVoiceLanguage(nextLang);
+    if (currentNumber && soundEnabled) {
+      speakNumberCall(currentNumber, true, nextLang);
+    }
+  };
+
+  const enNickname = currentNumber ? TAMBOLA_NICKNAMES_EN[currentNumber] || '' : '';
+  const hiNickname = currentNumber ? TAMBOLA_NICKNAMES_HI[currentNumber] || '' : '';
+  const hiWord = currentNumber ? HINDI_NUMBERS[currentNumber] || '' : '';
+
+  // Get most recent winner to flash if no activeWinnerFlash
+  const latestWinner = activeWinnerFlash || (winners && winners.length > 0 ? winners[0] : null);
 
   // Upline sponsor lookup using canonical referral matching
   const uplineUser = currentUser ? (
@@ -480,6 +542,245 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             <div className="p-2.5 sm:p-3 rounded-2xl bg-slate-950/80 border border-amber-400/40 text-right hidden xs:block">
               <span className="text-[10px] uppercase font-bold text-amber-400/80 block">All-in-One Dashboard</span>
               <span className="text-xs font-black text-white">11 Dedicated Modules</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 🏆 LIVE WINNER FLASH TICKER (ईनाम जीतने वाले यूजर का नाम फ्लैश) */}
+        {latestWinner && (
+          <div
+            id="dashboard-live-winner-flash"
+            className="mt-6 overflow-hidden rounded-2xl bg-gradient-to-r from-amber-600 via-purple-700 to-amber-600 border-2 border-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.4)] p-0.5 animate-pulse"
+          >
+            <div className="bg-gradient-to-r from-slate-950 via-purple-950 to-slate-950 p-3.5 sm:p-4 rounded-[14px] flex flex-col sm:flex-row items-center justify-between gap-3 text-white">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 shadow-lg shadow-amber-500/50 shrink-0 animate-bounce">
+                  <Crown className="w-7 h-7" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider animate-pulse">
+                      🏆 LIVE WINNER FLASH
+                    </span>
+                    <span className="text-xs text-amber-300 font-mono">
+                      {(latestWinner as any).timestamp || 'Just now'}
+                    </span>
+                  </div>
+                  <div className="text-sm sm:text-base font-black text-white mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-amber-400 font-extrabold text-base sm:text-lg underline decoration-amber-400 decoration-2">
+                      {(latestWinner as any).winnerName || (latestWinner as any).userName || 'Lucky Player'}
+                    </span>
+                    <span className="text-slate-200">ने जीता</span>
+                    <span className="text-emerald-400 font-extrabold bg-emerald-950/80 px-2 py-0.5 rounded-md border border-emerald-500/40">
+                      {latestWinner.prizeName} (₹{(latestWinner as any).prizeAmount?.toLocaleString('en-IN') || (latestWinner as any).amount?.toLocaleString('en-IN') || '500'})
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 flex items-center gap-2 mt-0.5 font-mono">
+                    {latestWinner.winningNumber && (
+                      <span>विनिंग बॉल: <strong className="text-amber-300">#{latestWinner.winningNumber}</strong></span>
+                    )}
+                    {latestWinner.ticketNumber && (
+                      <span>• टिकट: <strong className="text-purple-300">#{latestWinner.ticketNumber}</strong></span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {onViewCelebration && (
+                  <button
+                    onClick={() =>
+                      onViewCelebration({
+                        prizeName: latestWinner.prizeName,
+                        prizeAmount: (latestWinner as any).prizeAmount || (latestWinner as any).amount || 500,
+                        userName: (latestWinner as any).winnerName || (latestWinner as any).userName || 'Player',
+                        ticketId: (latestWinner as any).ticketId,
+                        ticketNumber: latestWinner.ticketNumber,
+                        winningNumber: latestWinner.winningNumber,
+                      })
+                    }
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/30 flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shrink-0"
+                  >
+                    <Sparkles className="w-4 h-4 text-slate-950" />
+                    <span>🎉 बधाई दें</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => onNavigate('winners')}
+                  className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-400/40 text-amber-300 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                  <span>सभी विनर लिस्ट</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🔴 LIVE TAMBOLA BALL ARENA (डैशबोर्ड में लाइव तंबोला बॉल व नंबर कॉलिंग बोर्ड) */}
+        <div
+          id="dashboard-live-ball-arena"
+          className="mt-6 rounded-3xl bg-gradient-to-r from-slate-950 via-purple-950/90 to-slate-950 border-2 border-red-500/80 shadow-[0_0_35px_rgba(239,68,68,0.3)] p-4 sm:p-5 text-white relative overflow-hidden"
+        >
+          {/* Ambient Glow */}
+          <div className="absolute -right-10 -top-10 w-48 h-48 bg-red-600/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -left-10 -bottom-10 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-5">
+            {/* Left Info Column */}
+            <div className="w-full lg:w-1/3 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500"></span>
+                </span>
+                <span className="px-2.5 py-0.5 rounded-md bg-red-600 text-white font-black text-xs tracking-wider uppercase shadow-md shadow-red-500/40">
+                  🔴 LIVE TAMBOLA BALL
+                </span>
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-amber-300 font-mono text-xs font-bold">
+                  {liveGame?.gameCode || 'LIVE-01'}
+                </span>
+              </div>
+
+              <h2 className="text-base sm:text-lg font-black text-white">
+                {liveGame?.title || 'Mega Jackpot Tambola'}
+              </h2>
+
+              <div className="flex items-center gap-3 text-xs text-slate-300 flex-wrap">
+                <span className="flex items-center gap-1 text-emerald-400 font-bold bg-emerald-950/70 px-2 py-1 rounded-lg border border-emerald-500/30">
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                  प्राइज पूल: ₹{liveGame?.prizePool?.toLocaleString('en-IN') || '10,000'}
+                </span>
+                <span className="flex items-center gap-1 text-blue-300 font-bold bg-blue-950/70 px-2 py-1 rounded-lg border border-blue-500/30">
+                  <Ticket className="w-3.5 h-3.5 text-blue-400" />
+                  टिकट: ₹{liveGame?.ticketPrice || 20}
+                </span>
+              </div>
+
+              <div className="text-xs text-slate-300 pt-1">
+                कुल निकाली गई बॉलें:{' '}
+                <strong className="text-amber-400 font-mono text-sm">{calledCount} / 90</strong>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700">
+                <div
+                  className="bg-gradient-to-r from-amber-500 via-red-500 to-emerald-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.round((calledCount / 90) * 100))}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Center: HUGE 3D GLOWING TAMBOLA BALL */}
+            <div className="w-full lg:w-1/3 flex flex-col items-center justify-center text-center space-y-2 py-2">
+              <div className="relative group">
+                <div
+                  className={`w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700 border-4 border-white shadow-[0_0_40px_rgba(245,158,11,0.7)] flex flex-col items-center justify-center text-slate-950 font-black relative overflow-hidden transition-transform duration-300 ${
+                    isBallPulsing ? 'scale-110 rotate-6 shadow-[0_0_60px_rgba(239,68,68,0.9)]' : 'hover:scale-105'
+                  }`}
+                >
+                  {/* Gloss shine effect */}
+                  <div className="absolute top-1 left-3 w-10 h-6 bg-white/40 rounded-full blur-[1px] transform -rotate-45" />
+                  <span className="text-3xl sm:text-4xl font-black font-mono tracking-tighter drop-shadow-md">
+                    {currentNumber ?? '--'}
+                  </span>
+                  {currentNumber && (
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-900 bg-amber-200/80 px-2 py-0.2 rounded-full mt-0.5">
+                      {hiWord || 'BALL'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Bilingual Nickname / Announcement Text */}
+              <div className="min-h-[38px] flex flex-col items-center justify-center">
+                {currentNumber ? (
+                  <>
+                    <span className="text-xs sm:text-sm font-black text-amber-300">
+                      {hiNickname || hiWord}
+                    </span>
+                    {enNickname && (
+                      <span className="text-[11px] text-slate-300 font-medium italic">
+                        "{enNickname}"
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-slate-400 italic">
+                    मैच शुरू होने पर बॉल यहाँ लाइव दिखाई देगी
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column: Previous Balls & Live Navigation Buttons */}
+            <div className="w-full lg:w-1/3 flex flex-col items-start lg:items-end justify-between space-y-3">
+              {/* Previous 5 Balls */}
+              <div className="w-full">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1 lg:text-right">
+                  पिछली निकाली गई बॉलें (Recent Balls):
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap lg:justify-end">
+                  {previousNumbers && previousNumbers.length > 0 ? (
+                    previousNumbers.slice(0, 5).map((num, idx) => (
+                      <span
+                        key={`prev-ball-${num}-${idx}`}
+                        className="w-8 h-8 rounded-full bg-slate-900 border-2 border-amber-400/60 text-amber-300 font-mono font-black text-xs flex items-center justify-center shadow-md"
+                      >
+                        {num}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">कोई पिछली बॉल नहीं</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Sound & Speech Language Quick Toggles */}
+              <div className="flex items-center gap-2 pt-1">
+                {setSoundEnabled && (
+                  <button
+                    onClick={() => setSoundEnabled(!soundEnabled)}
+                    className={`px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                      soundEnabled
+                        ? 'bg-amber-500/20 border-amber-400/40 text-amber-300 hover:bg-amber-500/30'
+                        : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+                    <span>{soundEnabled ? 'आवाज ON' : 'आवाज MUTE'}</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={handleToggleVoiceLang}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-purple-400/40 text-purple-300 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Languages className="w-3.5 h-3.5" />
+                  <span>
+                    {voiceLang === 'both' ? 'हिन्दी + Eng' : voiceLang === 'hi' ? 'हिन्दी Voice' : 'English Voice'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 w-full justify-start lg:justify-end pt-1 flex-wrap">
+                <button
+                  onClick={() => onNavigate('live', liveGame?.id)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs shadow-lg shadow-red-600/40 flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>🔴 लाइव रूम में खेलें</span>
+                </button>
+
+                <button
+                  onClick={() => onNavigate('tickets', liveGame?.id)}
+                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/30 flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
+                >
+                  <Ticket className="w-4 h-4" />
+                  <span>🎟️ टिकट खरीदें</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
