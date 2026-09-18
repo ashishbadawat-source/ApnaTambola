@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Flame, Ticket, Wallet, Users, Grid, LogIn, LayoutDashboard, Trophy, Gamepad2 } from 'lucide-react';
+import { Home, Flame, Ticket, Wallet, Users, Grid, LogIn, LayoutDashboard, Trophy, Gamepad2, Sparkles, Rocket } from 'lucide-react';
 import { User } from '../types';
 
 interface MobileBottomNavProps {
@@ -20,17 +20,17 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 }) => {
   const visitorItems = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'live', label: 'Play Live', icon: Flame, isLive: true },
-    { id: 'games', label: 'Tournaments', icon: Gamepad2 },
+    { id: 'color-prediction', label: 'Win Go', icon: Sparkles },
+    { id: 'aviator', label: 'Aviator', icon: Rocket },
+    { id: 'live', label: 'Live RNG', icon: Flame, isLive: true },
   ];
 
   const loggedInItems = [
     { id: 'home', label: 'Home', icon: Home },
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'live', label: 'Play Live', icon: Flame, isLive: true },
+    { id: 'color-prediction', label: 'Win Go', icon: Sparkles },
+    { id: 'aviator', label: 'Aviator', icon: Rocket },
+    { id: 'live', label: 'Tambola', icon: Flame, isLive: true },
     { id: 'wallet', label: 'Wallet', icon: Wallet },
-    { id: 'referral', label: 'Referral', icon: Users },
   ];
 
   const items = currentUser ? loggedInItems : visitorItems;

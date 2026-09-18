@@ -578,3 +578,101 @@ export interface FranchiseTransferRecord {
   timestamp: string;
 }
 
+// 🎨 Color Prediction (Win Go / Parity) Types
+export type ColorPredictionMode = 'wingo_30s' | 'wingo_1m' | 'wingo_3m' | 'wingo_5m';
+export type ColorPredictionBetType = 'color' | 'number' | 'size';
+export type ColorPredictionColor = 'green' | 'red' | 'violet';
+export type ColorPredictionSize = 'big' | 'small';
+export type ColorPredictionSelection =
+  | 'green'
+  | 'red'
+  | 'violet'
+  | '0'
+  | '1'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
+  | 'big'
+  | 'small';
+
+export interface ColorPredictionRound {
+  id: string;
+  period: string;
+  mode: ColorPredictionMode;
+  startTime: number;
+  endTime: number;
+  durationSeconds: number;
+  status: 'betting' | 'locked' | 'completed';
+  resultNumber?: number; // 0-9
+  resultColor?: 'green' | 'red' | 'violet' | 'green_violet' | 'red_violet';
+  resultSize?: ColorPredictionSize;
+  totalBetsAmount: number;
+  totalPayout: number;
+  forcedResultNumber?: number;
+  createdAt: string;
+}
+
+export interface ColorPredictionBet {
+  id: string;
+  period: string;
+  mode: ColorPredictionMode;
+  userId: string;
+  userName: string;
+  userPhone?: string;
+  betType: ColorPredictionBetType;
+  selection: ColorPredictionSelection;
+  unitPrice: number;
+  multiplier: number;
+  totalAmount: number;
+  status: 'pending' | 'won' | 'lost' | 'cancelled';
+  winAmount?: number;
+  payoutMultiplier?: number;
+  resultNumber?: number;
+  resultColor?: string;
+  resultSize?: string;
+  createdAt: string;
+}
+
+export interface ColorPredictionAdminControl {
+  autoMode: boolean;
+  nextTargetNumber?: number | null;
+  nextTargetColor?: 'green' | 'red' | 'violet' | null;
+  houseProfitMargin?: number;
+  activeMode: ColorPredictionMode;
+  gameActive: boolean;
+}
+
+// 🚀 Apna Aviator Crash Game Types (Apna Win)
+export interface AviatorBet {
+  id: string;
+  roundId: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  autoCashoutAt?: number;
+  cashedOutMultiplier?: number;
+  winAmount?: number;
+  status: 'active' | 'cashed_out' | 'crashed';
+  betSlot: 1 | 2;
+  createdAt: string;
+}
+
+export interface AviatorRound {
+  id: string;
+  crashPoint: number;
+  status: 'waiting' | 'flying' | 'crashed';
+  startTime: number;
+  duration: number;
+}
+
+export interface AviatorHistoryItem {
+  id: string;
+  multiplier: number;
+  timestamp: string;
+}
+

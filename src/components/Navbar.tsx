@@ -199,27 +199,35 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const visitorNavItems = [
     { id: 'landing', label: '1. मुख्य पृष्ठ', icon: Sparkles, colorClass: 'from-amber-400 to-amber-500 text-slate-950', badge: 'Home' },
-    { id: 'games', label: '2. टूर्नामेंट्स लॉबी', icon: Gamepad2, colorClass: 'from-amber-400 to-yellow-500 text-slate-950', badge: 'Lobby' },
-    { id: 'live', label: '3. लाइव खेल (RNG)', isLive: true, icon: Flame, badge: '🔴 LIVE', colorClass: 'from-red-500 to-purple-600 text-white' },
-    { id: 'winners', label: '4. हॉल ऑफ़ विनर्स', icon: Trophy, colorClass: 'from-orange-500 to-rose-600 text-white', badge: 'Prizes' },
-    { id: 'how-to-play', label: '5. नियम व गाइड', icon: HelpCircle, colorClass: 'from-lime-400 to-emerald-500 text-slate-950', badge: 'Guide' },
-    { id: 'support', label: '6. 24/7 सहायता', icon: HelpCircle, colorClass: 'from-sky-400 to-blue-500 text-slate-950', badge: 'Help' },
+    { id: 'color-prediction', label: '2. अपना विन गो (Win Go)', icon: Sparkles, colorClass: 'from-emerald-400 via-purple-500 to-rose-500 text-white', badge: '🔥 2X–9X' },
+    { id: 'aviator', label: '3. अपना एविएटर (Apna Aviator)', icon: Sparkles, colorClass: 'from-red-500 via-rose-600 to-amber-500 text-white', badge: '🚀 100X' },
+    { id: 'chicken-road', label: '4. अपना चिकन रोड (Chicken Road)', icon: Gamepad2, colorClass: 'from-amber-400 to-orange-500 text-slate-950', badge: '🐔 15X' },
+    { id: 'apna-slots', label: '5. अपना स्लॉट्स (777 Slots)', icon: Sparkles, colorClass: 'from-amber-400 to-amber-600 text-slate-950', badge: '🎰 500X' },
+    { id: 'apna-dragon-tiger', label: '6. अपना ड्रैगन टाइगर', icon: Gamepad2, colorClass: 'from-rose-500 to-red-600 text-white', badge: '🃏 2X' },
+    { id: 'live', label: '7. अपना लाइव तंबोला (Housie)', isLive: true, icon: Flame, badge: '🔴 LIVE', colorClass: 'from-red-500 to-purple-600 text-white' },
+    { id: 'games', label: '8. टूर्नामेंट्स लॉबी', icon: Gamepad2, colorClass: 'from-amber-400 to-yellow-500 text-slate-950', badge: 'Lobby' },
+    { id: 'winners', label: '9. हॉल ऑफ़ विनर्स', icon: Trophy, colorClass: 'from-orange-500 to-rose-600 text-white', badge: 'Prizes' },
+    { id: 'how-to-play', label: '10. नियम व गाइड', icon: HelpCircle, colorClass: 'from-lime-400 to-emerald-500 text-slate-950', badge: 'Guide' },
+    { id: 'support', label: '11. 24/7 सहायता', icon: HelpCircle, colorClass: 'from-sky-400 to-blue-500 text-slate-950', badge: 'Help' },
   ];
 
   const userNavItems = [
     { id: 'landing', label: '1. मुख्य पृष्ठ', icon: Sparkles, colorClass: 'from-amber-400 to-amber-500 text-slate-950', badge: 'Home' },
-    { id: 'dashboard', label: '2. 11-डैशबोर्ड', icon: LayoutDashboard, colorClass: 'from-purple-600 to-indigo-600 text-white', badge: '11 Box' },
-    { id: 'live', label: '3. लाइव गेम', isLive: true, icon: Flame, badge: '🔴 LIVE', colorClass: 'from-red-500 to-purple-600 text-white' },
-    { id: 'buy-ticket', label: '4. टिकट खरीदें', icon: Ticket, colorClass: 'from-emerald-400 to-teal-500 text-slate-950', badge: 'Store' },
-    { id: 'my-tickets', label: '5. मेरे टिकट्स', icon: Ticket, colorClass: 'from-indigo-500 to-blue-600 text-white', badge: 'Passbook' },
-    { id: 'wallet', label: '6. वॉलेट व UPI', icon: Wallet, colorClass: 'from-emerald-500 to-green-600 text-white', badge: 'Instant' },
-    { id: 'referral', label: '7. 8-लेवल रेफरल', icon: Users, badge: '4.6%', colorClass: 'from-cyan-400 to-sky-500 text-slate-950' },
-    { id: 'games', label: '8. टूर्नामेंट्स', icon: Gamepad2, colorClass: 'from-amber-400 to-yellow-500 text-slate-950', badge: 'Lobby' },
-    { id: 'winners', label: '9. विनर्स', icon: Trophy, colorClass: 'from-orange-500 to-rose-600 text-white', badge: 'Prizes' },
-    { id: 'daily-bonus', label: '10. डेली बोनस', icon: Sparkles, colorClass: 'from-pink-500 to-fuchsia-600 text-white', badge: 'Free' },
-    { id: 'how-to-play', label: '11. नियम', icon: HelpCircle, colorClass: 'from-lime-400 to-emerald-500 text-slate-950', badge: 'Guide' },
-    { id: 'profile', label: '12. प्रोफ़ाइल व बैंक', icon: User, colorClass: 'from-violet-500 to-purple-600 text-white', badge: 'KYC' },
-    { id: 'support', label: '13. सहायता', icon: HelpCircle, colorClass: 'from-sky-400 to-blue-500 text-slate-950', badge: '24/7' },
+    { id: 'dashboard', label: '2. डैशबोर्ड', icon: LayoutDashboard, colorClass: 'from-purple-600 to-indigo-600 text-white', badge: 'Hub' },
+    { id: 'color-prediction', label: '3. अपना विन गो (Win Go)', icon: Sparkles, colorClass: 'from-emerald-400 via-purple-500 to-rose-500 text-white', badge: '🔥 2X–9X' },
+    { id: 'aviator', label: '4. अपना एविएटर (Apna Aviator)', icon: Sparkles, colorClass: 'from-red-500 via-rose-600 to-amber-500 text-white', badge: '🚀 100X' },
+    { id: 'chicken-road', label: '5. अपना चिकन रोड', icon: Gamepad2, colorClass: 'from-amber-400 to-orange-500 text-slate-950', badge: '🐔 15X' },
+    { id: 'apna-slots', label: '6. अपना स्लॉट्स (777 Slots)', icon: Sparkles, colorClass: 'from-amber-400 to-amber-600 text-slate-950', badge: '🎰 500X' },
+    { id: 'apna-dragon-tiger', label: '7. अपना ड्रैगन टाइगर', icon: Gamepad2, colorClass: 'from-rose-500 to-red-600 text-white', badge: '🃏 2X' },
+    { id: 'live', label: '8. अपना लाइव तंबोला', isLive: true, icon: Flame, badge: '🔴 LIVE', colorClass: 'from-red-500 to-purple-600 text-white' },
+    { id: 'buy-ticket', label: '9. टिकट खरीदें', icon: Ticket, colorClass: 'from-emerald-400 to-teal-500 text-slate-950', badge: 'Store' },
+    { id: 'my-tickets', label: '10. मेरे टिकट्स', icon: Ticket, colorClass: 'from-indigo-500 to-blue-600 text-white', badge: 'Passbook' },
+    { id: 'wallet', label: '11. वॉलेट व UPI', icon: Wallet, colorClass: 'from-emerald-500 to-green-600 text-white', badge: 'Instant' },
+    { id: 'referral', label: '12. 8-लेवल रेफरल', icon: Users, badge: '4.6%', colorClass: 'from-cyan-400 to-sky-500 text-slate-950' },
+    { id: 'daily-bonus', label: '13. अपना डेली बोनस', icon: Sparkles, colorClass: 'from-pink-500 to-fuchsia-600 text-white', badge: 'Free' },
+    { id: 'how-to-play', label: '14. नियम', icon: HelpCircle, colorClass: 'from-lime-400 to-emerald-500 text-slate-950', badge: 'Guide' },
+    { id: 'profile', label: '15. प्रोफ़ाइल व बैंक', icon: User, colorClass: 'from-violet-500 to-purple-600 text-white', badge: 'KYC' },
+    { id: 'support', label: '16. सहायता', icon: HelpCircle, colorClass: 'from-sky-400 to-blue-500 text-slate-950', badge: '24/7' },
   ];
 
   const displayedNavItems = currentUser ? userNavItems : visitorNavItems;
@@ -227,16 +235,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const adminNavItems = [
     { id: 'dashboard', label: '1. Dashboard', icon: LayoutDashboard },
     { id: 'users', label: '2. Users & KYC', icon: Users },
-    { id: 'games', label: '3. Game Mgmt', icon: Gamepad2 },
-    { id: 'live_control', label: '4. Live Caller RNG', icon: Radio, badge: 'RNG' },
-    { id: 'tickets', label: '5. Ticket Gen', icon: Ticket },
-    { id: 'prizes', label: '6. Prizes', icon: Trophy },
-    { id: 'referrals', label: '7. 8-Level MLM', icon: Share2 },
-    { id: 'wallets', label: '8. Ledger', icon: Wallet },
-    { id: 'withdrawals', label: '9. Withdrawals', icon: ArrowUpRight },
-    { id: 'reports', label: '10. Reports', icon: BarChart3 },
-    { id: 'notifications', label: '11. Broadcast', icon: Bell },
-    { id: 'settings', label: '12. Settings', icon: Settings },
+    { id: 'color_prediction', label: '3. Color Prediction', icon: Sparkles, badge: 'WinGo' },
+    { id: 'games', label: '4. Game Mgmt', icon: Gamepad2 },
+    { id: 'live_control', label: '5. Live Caller RNG', icon: Radio, badge: 'RNG' },
+    { id: 'tickets', label: '6. Ticket Gen', icon: Ticket },
+    { id: 'prizes', label: '7. Prizes', icon: Trophy },
+    { id: 'referrals', label: '8. 8-Level MLM', icon: Share2 },
+    { id: 'wallets', label: '9. Ledger', icon: Wallet },
+    { id: 'withdrawals', label: '10. Withdrawals', icon: ArrowUpRight },
+    { id: 'reports', label: '11. Reports', icon: BarChart3 },
+    { id: 'notifications', label: '12. Broadcast', icon: Bell },
+    { id: 'settings', label: '13. Settings', icon: Settings },
   ];
 
   const logoClicksRef = useRef<number>(0);
@@ -294,7 +303,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative flex items-center justify-center">
               <img
                 src="/logo.png"
-                alt="Apna Tambola Logo"
+                alt="Apna Win Logo"
                 className="w-10 h-10 sm:w-11 sm:h-11 rounded-full object-cover group-hover:scale-105 transition-transform drop-shadow-[0_0_12px_rgba(245,158,11,0.5)] border-2 border-amber-400/60"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none';
@@ -305,16 +314,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-black text-lg sm:text-xl tracking-wider bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent drop-shadow">
-                  अपना TAMBOLA
+                  APNA WIN
                 </span>
-                <span className="bg-red-600 text-white font-black text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full uppercase tracking-wider animate-pulse shadow">
-                  LIVE
+                <span className="bg-gradient-to-r from-red-600 to-rose-600 text-white font-black text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded-full uppercase tracking-wider animate-pulse shadow">
+                  OFFICIAL
                 </span>
               </div>
               <p className="text-[9px] sm:text-[10px] text-amber-200/90 -mt-0.5 font-bold tracking-wide flex items-center gap-1">
-                <span>Multiplayer Housie</span>
+                <span>Apna Win Go • Apna Aviator • Casino</span>
                 <span className="text-slate-500">•</span>
-                <span className="text-emerald-400 font-extrabold">₹10 Free Bonus</span>
+                <span className="text-emerald-400 font-extrabold">₹10 Instant Bonus</span>
               </p>
             </div>
           </div>

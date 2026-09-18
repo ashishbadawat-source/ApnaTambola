@@ -15,6 +15,9 @@ import { SupportView } from './views/SupportView';
 import { UserDashboardView } from './views/UserDashboardView';
 import { HowToPlayView } from './views/HowToPlayView';
 import { DailyBonusView } from './views/DailyBonusView';
+import { ColorPredictionView } from './views/ColorPredictionView';
+import { AviatorView } from './views/AviatorView';
+import { ChickenRoadView } from './views/ChickenRoadView';
 import { AdminDashboardView } from './views/AdminDashboardView';
 import { AdminLoginModal } from './views/AdminLoginModal';
 import { AuthModal } from './views/AuthModal';
@@ -3711,6 +3714,129 @@ export function App() {
       return true;
     } catch (err: any) {
       console.error('Error in handleBuyTickets:', err);
+      return false;
+    }
+  };
+
+  // 5a-2. Color Prediction (Win Go) Real-time Balance Debit/Credit Handler
+  const handleColorPredictionBalanceUpdate = async (params: {
+    type: 'debit' | 'credit';
+    amount: number;
+    description: string;
+    category?: 'bet' | 'winning';
+  }): Promise<boolean> => {
+    if (!currentUser) return false;
+    const { type, amount, description } = params;
+    if (amount <= 0) return true;
+
+    try {
+      const currentDep = Number(currentUser.depositBalance ?? 0);
+      const currentWin = Number(currentUser.winningBalance ?? 0);
+      const currentRef = Number(currentUser.referralBalance ?? 0);
+      const currentWal = Number(currentUser.walletBalance ?? (currentDep + currentWin + currentRef));
+
+      let newDep = currentDep;
+      let newWin = currentWin;
+      let newRef = currentRef;
+      let newWal = currentWal;
+
+      if (type === 'debit') {
+        if (currentWal < amount) {
+          return false;
+        }
+
+        let needed = amount;
+        if (newDep >= needed) {
+          newDep -= needed;
+          needed = 0;
+        } else {
+          needed -= newDep;
+          newDep = 0;
+        }
+
+        if (needed > 0 && newWin >= needed) {
+          newWin -= needed;
+          needed = 0;
+        } else if (needed > 0) {
+          needed -= newWin;
+          newWin = 0;
+        }
+
+        if (needed > 0 && newRef >= needed) {
+          newRef -= needed;
+          needed = 0;
+        } else if (needed > 0) {
+          needed -= newRef;
+          newRef = 0;
+        }
+
+        newWal = Math.max(0, currentWal - amount);
+      } else {
+        // Credit winnings to winningBalance and total walletBalance
+        newWin += amount;
+        newWal += amount;
+      }
+
+      const updatedUser: User = {
+        ...currentUser,
+        depositBalance: newDep,
+        winningBalance: newWin,
+        referralBalance: newRef,
+        walletBalance: newWal,
+      };
+
+      // 1. Update active current user session
+      setCurrentUser(updatedUser);
+      try {
+        localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updatedUser));
+      } catch (e) {}
+
+      // 2. Update user in registered users directory
+      setUsers((prev) => {
+        const next = prev.map((u) => (u.id === updatedUser.id ? updatedUser : u));
+        try {
+          localStorage.setItem('apna_tambola_registered_users', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 3. Record passbook transaction
+      const txn: WalletTransaction = {
+        id: `txn_cp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userId: currentUser.id,
+        userName: currentUser.name,
+        type: type === 'debit' ? 'ticket_purchase' : 'prize_won',
+        amount: type === 'debit' ? -amount : amount,
+        balanceAfter: newWal,
+        description,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ', Today',
+        status: 'completed',
+      };
+
+      setTransactions((prev) => {
+        const next = [txn, ...prev];
+        try {
+          localStorage.setItem('apna_tambola_transactions', JSON.stringify(next));
+        } catch (e) {}
+        return next;
+      });
+
+      // 4. Firestore synchronization
+      try {
+        setDoc(doc(db, 'users', updatedUser.id), updatedUser, { merge: true }).catch(() => {});
+        setDoc(doc(db, 'transactions', txn.id), txn, { merge: true }).catch(() => {});
+      } catch (e) {}
+
+      // 5. If debit (betting volume), also distribute referral commission
+      if (type === 'debit') {
+        try {
+          distributeReferralCommissions(amount);
+        } catch (e) {}
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error in handleColorPredictionBalanceUpdate:', err);
       return false;
     }
   };
@@ -7445,6 +7571,40 @@ export function App() {
             onOpenDeposit={() => handleNavigate('wallet')}
             onOpenAuth={handleOpenAuth}
             onLogout={handleLogout}
+          />
+        )}
+
+        {/* 🔮 Color Prediction (Win Go) - 1Min, 3Min, 5Min, 10Min 2X-9X Arena */}
+        {activeTab === 'color-prediction' && (
+          <ColorPredictionView
+            currentUser={currentUser}
+            onUpdateUserBalance={handleColorPredictionBalanceUpdate}
+            onNavigate={handleNavigate}
+            onOpenDeposit={() => handleNavigate('wallet')}
+            onOpenAuth={handleOpenAuth}
+            isAdmin={currentUser?.role === 'admin'}
+          />
+        )}
+
+        {/* 🚀 Apna Win Aviator Crash Game */}
+        {activeTab === 'aviator' && (
+          <AviatorView
+            currentUser={currentUser}
+            onUpdateUserBalance={handleColorPredictionBalanceUpdate}
+            onNavigate={handleNavigate}
+            onOpenDeposit={() => handleNavigate('wallet')}
+            onOpenAuth={handleOpenAuth}
+          />
+        )}
+
+        {/* 🐔 Apna Win Chicken Road Mini Game */}
+        {activeTab === 'chicken-road' && (
+          <ChickenRoadView
+            currentUser={currentUser}
+            onUpdateUserBalance={handleColorPredictionBalanceUpdate}
+            onNavigate={handleNavigate}
+            onOpenDeposit={() => handleNavigate('wallet')}
+            onOpenAuth={handleOpenAuth}
           />
         )}
 

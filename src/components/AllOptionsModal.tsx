@@ -59,8 +59,17 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
       badge: 'Gold Hub',
     },
     {
+      id: 'color-prediction',
+      name: '2. Color Prediction (Win Go)',
+      nameHi: 'कलर प्रेडिक्शन व विन गो',
+      desc: 'Predict Green, Violet, Red, Big/Small & Numbers 0-9 with 2X to 9X instant payouts',
+      icon: Sparkles,
+      color: 'from-emerald-500/20 via-purple-500/20 to-rose-500/20 text-emerald-300 border-emerald-500/40',
+      badge: '🔥 2X–9X WIN GO',
+    },
+    {
       id: 'games',
-      name: '2. Tournament Games Lobby',
+      name: '3. Tournament Games Lobby',
       nameHi: 'गेम्स लॉबी व शेड्यूल',
       desc: 'Upcoming, live and completed matches with timer countdowns and pools',
       icon: Gamepad2,
@@ -69,7 +78,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'live',
-      name: '3. Play Tambola Live (RNG)',
+      name: '4. Play Tambola Live (RNG)',
       nameHi: 'लाइव हाउसी खेलें',
       desc: 'Interactive 1–90 Master Board, audio voice caller & real-time prize claims',
       icon: Flame,
@@ -78,7 +87,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'buy-ticket',
-      name: '4. Buy Tickets & Store',
+      name: '5. Buy Tickets & Store',
       nameHi: 'टिकट बुक करें (स्टोर)',
       desc: 'Interactive ticket selector, 6 color themes, quantity multiplier & discounts',
       icon: Ticket,
@@ -87,7 +96,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'my-tickets',
-      name: '5. My Tickets & Passbook',
+      name: '6. My Tickets & Passbook',
       nameHi: 'मेरे टिकट व प्रिंट',
       desc: 'View active/past tickets, instant QR codes, PDF/PNG download, WhatsApp share',
       icon: Ticket,
@@ -96,7 +105,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'wallet',
-      name: '6. Wallet & UPI Banking',
+      name: '7. Wallet & UPI Banking',
       nameHi: 'वॉलेट, डिपॉजिट व निकासी',
       desc: 'Instant UPI/QR deposits, fast bank withdrawals & complete transaction ledger',
       icon: Wallet,
@@ -105,8 +114,8 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'referral',
-      name: '7. 5-Level Referral (7.8%)',
-      nameHi: 'रेफरल और 5-लेवल कमाई',
+      name: '8. 8-Level Referral (4.6%)',
+      nameHi: 'रेफरल और 8-लेवल कमाई',
       desc: 'Lifetime multi-tier commission tree, dynamic invite links & projection calc',
       icon: Users,
       color: 'from-cyan-500/20 to-sky-500/20 text-cyan-300 border-cyan-500/40',
@@ -114,7 +123,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'winners',
-      name: '8. Leaderboard & Winners',
+      name: '9. Leaderboard & Winners',
       nameHi: 'लीडरबोर्ड व विजेता सूची',
       desc: 'Live winner feeds, verified claims, prize amounts & UPI payout proof tags',
       icon: Trophy,
@@ -123,7 +132,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'daily-bonus',
-      name: '9. Daily Spin & Win Rewards',
+      name: '10. Daily Spin & Win Rewards',
       nameHi: 'लकी स्पिन व दैनिक रिवॉर्ड',
       desc: '24h lucky wheel for free tickets, 7-day login streak cash, mystery scratch card',
       icon: Gift,
@@ -132,7 +141,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'how-to-play',
-      name: '10. How to Play & Rules',
+      name: '11. How to Play & Rules',
       nameHi: 'तंबोला नियम व गाइड',
       desc: 'Interactive pattern visualizer (Early 5, Top/Mid/Bottom line, Corners, Full House)',
       icon: HelpCircle,
@@ -141,7 +150,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'profile',
-      name: '11. Profile & KYC Center',
+      name: '12. Profile & KYC Center',
       nameHi: 'प्रोफ़ाइल व केवाईसी',
       desc: 'User details, Aadhaar/PAN KYC verification, UPI IDs & security settings',
       icon: User,
@@ -150,7 +159,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'support',
-      name: '12. 24x7 Support Helpline',
+      name: '13. 24x7 Support Helpline',
       nameHi: 'सहायता व हेल्पलाइन',
       desc: '24x7 Live support tickets, interactive FAQs, WhatsApp & Telegram channels',
       icon: HelpCircle,
@@ -159,7 +168,7 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
     },
     {
       id: 'franchise',
-      name: '13. Fund Franchise Portal',
+      name: '14. Fund Franchise Portal',
       nameHi: 'एडमिन फंड फ्रेंचाइजी (3-7% कमीशन)',
       desc: 'Apply for Franchise ID, distribute player funds, earn instant commission on every transfer',
       icon: Building2,
@@ -177,22 +186,29 @@ export const AllOptionsModal: React.FC<AllOptionsModalProps> = ({
       icon: LayoutDashboard,
     },
     {
-      id: 'users',
+      id: 'color_prediction',
       num: '2',
+      name: 'Color Prediction (Win Go)',
+      desc: 'Next round outcome setter, target number/color override & volume analytics',
+      icon: Sparkles,
+    },
+    {
+      id: 'users',
+      num: '3',
       name: 'User Management',
       desc: 'KYC review, block/unblock, password reset & wallet balance credit/debit',
       icon: Users,
     },
     {
       id: 'games',
-      num: '3',
+      num: '4',
       name: 'Game Management',
       desc: 'Create tournaments, configure ticket pricing, schedules & prize pools',
       icon: Gamepad2,
     },
     {
       id: 'live_control',
-      num: '4',
+      num: '5',
       name: 'Live Game Control',
       desc: 'Manual/auto RNG caller engine, call next ball, game timer & board reset',
       icon: Radio,

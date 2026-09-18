@@ -50,6 +50,7 @@ import {
 import { INITIAL_SITE_SETTINGS } from '../data/mockData';
 
 import { ModuleDashboard } from './admin/ModuleDashboard';
+import { ModuleColorPrediction } from './admin/ModuleColorPrediction';
 import { ModuleUsers } from './admin/ModuleUsers';
 import { ModuleGames } from './admin/ModuleGames';
 import { ModuleLiveControl } from './admin/ModuleLiveControl';
@@ -300,23 +301,24 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
 
   const NAV_ITEMS = [
     { id: 'dashboard', label: '1. Dashboard', icon: LayoutDashboard, badge: null },
-    { id: 'users', label: '2. User Management', icon: Users, badge: `${safeUsers.length}` },
-    { id: 'games', label: '3. Game Management', icon: Gamepad2, badge: liveGamesCount > 0 ? `${liveGamesCount} LIVE` : null, badgeColor: 'bg-red-500 text-white' },
-    { id: 'live_control', label: '4. Live Game Control', icon: Radio, badge: 'RNG', badgeColor: 'bg-amber-400 text-slate-950' },
-    { id: 'tickets', label: '5. Ticket Management', icon: Ticket, badge: `${safeTickets.length}` },
-    { id: 'winners', label: '6. Winners & Ticket Ledger', icon: Trophy, badge: `${safeWinners.length} WIN`, badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black' },
-    { id: 'prizes', label: '7. Prize Management', icon: Award, badge: null },
-    { id: 'referrals', label: '8. 5-Level Referral', icon: Share2, badge: 'MLM' },
-    { id: 'referral_growth', label: '9. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },
-    { id: 'wallets', label: '10. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
-    { id: 'withdrawals', label: '11. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
-    { id: 'offers', label: '12. Offer Popups', icon: Gift, badge: activeOffersCount > 0 ? `${activeOffersCount} ON` : 'NEW', badgeColor: 'bg-pink-500 text-white font-black' },
-    { id: 'reports', label: '13. Reports & Analytics', icon: BarChart3, badge: null },
-    { id: 'notifications', label: '14. Notifications', icon: Bell, badge: null },
-    { id: 'settings', label: '15. Site & Security', icon: Settings, badge: null },
-    { id: 'email_settings', label: '16. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
-    { id: 'franchise', label: '17. Fund Franchise', icon: Building2, badge: 'ID & FUND', badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black' },
-    { id: 'firebase_diagnostics', label: '18. Firebase DB & Sync', icon: Flame, badge: 'REALTIME', badgeColor: 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black animate-pulse' },
+    { id: 'color_prediction', label: '2. Color Prediction (Win Go)', icon: Sparkles, badge: 'WIN GO', badgeColor: 'bg-gradient-to-r from-emerald-400 via-purple-500 to-rose-500 text-white font-black' },
+    { id: 'users', label: '3. User Management', icon: Users, badge: `${safeUsers.length}` },
+    { id: 'games', label: '4. Game Management', icon: Gamepad2, badge: liveGamesCount > 0 ? `${liveGamesCount} LIVE` : null, badgeColor: 'bg-red-500 text-white' },
+    { id: 'live_control', label: '5. Live Game Control', icon: Radio, badge: 'RNG', badgeColor: 'bg-amber-400 text-slate-950' },
+    { id: 'tickets', label: '6. Ticket Management', icon: Ticket, badge: `${safeTickets.length}` },
+    { id: 'winners', label: '7. Winners & Ticket Ledger', icon: Trophy, badge: `${safeWinners.length} WIN`, badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 font-black' },
+    { id: 'prizes', label: '8. Prize Management', icon: Award, badge: null },
+    { id: 'referrals', label: '9. 8-Level Referral', icon: Share2, badge: 'MLM' },
+    { id: 'referral_growth', label: '10. Referral Growth Chart', icon: TrendingUp, badge: '30D LINE', badgeColor: 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 font-black' },
+    { id: 'wallets', label: '11. Wallets & UTRs', icon: Wallet, badge: pendingDepositsCount > 0 ? `${pendingDepositsCount} UTR` : null, badgeColor: 'bg-amber-400 text-slate-950 font-black' },
+    { id: 'withdrawals', label: '12. Withdrawals', icon: ArrowUpRight, badge: pendingWithdrawalsCount > 0 ? `${pendingWithdrawalsCount}` : null, badgeColor: 'bg-amber-400 text-slate-950' },
+    { id: 'offers', label: '13. Offer Popups', icon: Gift, badge: activeOffersCount > 0 ? `${activeOffersCount} ON` : 'NEW', badgeColor: 'bg-pink-500 text-white font-black' },
+    { id: 'reports', label: '14. Reports & Analytics', icon: BarChart3, badge: null },
+    { id: 'notifications', label: '15. Notifications', icon: Bell, badge: null },
+    { id: 'settings', label: '16. Site & Security', icon: Settings, badge: null },
+    { id: 'email_settings', label: '17. Brevo Email Engine', icon: Mail, badge: 'FREE 300/d', badgeColor: 'bg-emerald-400 text-slate-950 font-black' },
+    { id: 'franchise', label: '18. Fund Franchise', icon: Building2, badge: 'ID & FUND', badgeColor: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black' },
+    { id: 'firebase_diagnostics', label: '19. Firebase DB & Sync', icon: Flame, badge: 'REALTIME', badgeColor: 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black animate-pulse' },
   ];
 
   return (
@@ -505,6 +507,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = ({
             onViewUserWallet={onViewUserWallet}
             onOpenAdjustModal={onOpenAdjustModal}
           />
+        )}
+
+        {activeTab === 'color_prediction' && (
+          <ModuleColorPrediction />
         )}
 
         {activeTab === 'games' && (

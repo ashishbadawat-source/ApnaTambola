@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Flame,
   Ticket,
@@ -17,6 +17,7 @@ import {
   HelpCircle,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Dices,
   LayoutDashboard,
   Wallet,
@@ -41,8 +42,10 @@ import {
   Check,
   Layers,
   Smartphone,
+  Rocket,
 } from 'lucide-react';
 import { TambolaGame, GameWinner, User } from '../types';
+import { CasinoDemoModal } from '../components/CasinoDemoModal';
 import { playNumberCallSound, speakNumberCall } from '../utils/audio';
 
 interface HomeViewProps {
@@ -106,6 +109,36 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const monthlyL1 = dailyL1Sales * 30 * 0.02;
   const monthlyL2To8 = dailyL1Sales * 30 * 0.026 * 3;
   const totalMonthlyEarnings = Math.round(monthlyL1 + monthlyL2To8);
+
+  // Apna Win Carousel, Categories, Jackpot & Demo States
+  const [currentSlide, setCurrentSlide] = useState<number>(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [jackpotAmount, setJackpotAmount] = useState<number>(48972618.4);
+  const [demoModal, setDemoModal] = useState<{
+    isOpen: boolean;
+    name: string;
+    type: 'slot' | 'dragontiger' | 'roulette';
+  }>({
+    isOpen: false,
+    name: '',
+    type: 'slot',
+  });
+
+  // Auto-advance banner carousel every 4.5 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % 6);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Real-time ticking mega jackpot counter
+  useEffect(() => {
+    const jTimer = setInterval(() => {
+      setJackpotAmount((prev) => +(prev + 0.15 + Math.random() * 0.45).toFixed(2));
+    }, 1500);
+    return () => clearInterval(jTimer);
+  }, []);
 
   // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -285,221 +318,764 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </section>
       )}
 
-      {/* 3. Brand New Grand Hero Festival Section */}
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#121933] via-[#1c1236] to-[#280c29] border-2 border-amber-400/40 p-6 sm:p-10 lg:p-12 shadow-2xl">
-        {/* Glow Spheres */}
-        <div className="absolute -top-28 -right-28 w-96 h-96 bg-red-500/25 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 left-1/4 w-80 h-80 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-28 -left-28 w-96 h-96 bg-purple-600/35 rounded-full blur-3xl pointer-events-none" />
+      {/* 3. APNA WIN DYNAMIC HERO CAROUSEL BANNER */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0c1224] via-[#16102c] to-[#250d28] border-2 border-amber-400/50 p-5 sm:p-8 lg:p-10 shadow-2xl">
+        {/* Ambient Glows */}
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-32 -left-32 w-96 h-96 bg-purple-600/25 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Floating 3D Tambola Balls */}
-        <div className="hidden lg:block absolute top-8 right-12 pointer-events-none animate-float-ball">
-          <div className="tambola-ball-3d ball-gold w-16 h-16 text-2xl font-black shadow-2xl">7</div>
-        </div>
-        <div className="hidden lg:block absolute bottom-10 right-1/3 pointer-events-none animate-float-ball" style={{ animationDelay: '1.2s' }}>
-          <div className="tambola-ball-3d ball-red w-14 h-14 text-xl font-black shadow-2xl">21</div>
-        </div>
-        <div className="hidden lg:block absolute top-1/3 left-8 pointer-events-none animate-float-ball" style={{ animationDelay: '2.4s' }}>
-          <div className="tambola-ball-3d ball-green w-12 h-12 text-base font-black shadow-2xl">47</div>
-        </div>
-
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          {/* Left Column: Headlines, Value Prop & Main CTAs */}
-          <div className="lg:col-span-7 space-y-6">
-            <div className="flex flex-wrap items-center gap-3">
-              <img
-                src="/logo.png"
-                alt="Apna Tambola Logo"
-                className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover shadow-xl shadow-amber-500/30 border-2 border-amber-400/80 shrink-0 animate-pulse"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-              <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/30 via-red-500/20 to-purple-600/30 border-2 border-amber-400/50 rounded-full px-4 py-1.5 text-xs font-black text-amber-300 shadow-lg">
-                <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-                <span className="tracking-wider uppercase">भारत का #1 रियल-मनी तंबोला व हाउसी गेम</span>
+        {/* Carousel Slides */}
+        {currentSlide === 0 && (
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-fadeIn">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="px-3 py-1 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow">
+                  👑 APNA WIN OFFICIAL
+                </span>
+                <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 font-extrabold text-xs">
+                  ₹10 मुफ्त रजिस्ट्रेशन बोनस
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                अपना विन (Apna Win) <br />
+                <span className="bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent drop-shadow">
+                  100% पहला डिपॉजिट बोनस!
+                </span>
+              </h1>
+              <p className="text-slate-300 text-xs sm:text-base leading-relaxed">
+                अपना विन गो (Win Go), अपना एविएटर (Apna Aviator), अपना चिकन रोड, अपना स्लॉट्स और अपना तंबोला एक ही जगह खेलें। 10-सेकंड में सीधा UPI विथड्रॉल!
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                {!currentUser ? (
+                  <button
+                    onClick={() => (onOpenAuth ? onOpenAuth('register') : onNavigate('profile'))}
+                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-amber-500/30 hover:scale-105 cursor-pointer transition-all"
+                  >
+                    <Gift className="w-5 h-5" />
+                    <span>रजिस्टर करें (₹10 बोनस)</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={onOpenDeposit}
+                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-emerald-500/30 hover:scale-105 cursor-pointer transition-all"
+                  >
+                    <ArrowDownLeft className="w-5 h-5" />
+                    <span>डिपॉजिट करें (+100% बोनस)</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => onNavigate('color-prediction')}
+                  className="px-5 py-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-400/50 font-bold text-sm flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>अपना विन गो खेलें</span>
+                </button>
+                <button
+                  onClick={() => onNavigate('aviator')}
+                  className="px-5 py-3.5 rounded-2xl bg-red-950/80 hover:bg-red-900/80 text-red-300 border border-red-500/50 font-bold text-sm flex items-center gap-2 cursor-pointer transition-all"
+                >
+                  <Rocket className="w-4 h-4 text-red-400" />
+                  <span>अपना एविएटर खेलें</span>
+                </button>
               </div>
             </div>
+            {/* Visual Box */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-gradient-to-b from-slate-900/90 via-slate-950/95 to-[#0b1020] border-2 border-amber-400/60 shadow-2xl space-y-4 text-center">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-3xl shadow-lg shadow-amber-500/30">
+                  👑
+                </div>
+                <h3 className="font-black text-xl text-white">APNA WIN VIP CLUB</h3>
+                <p className="text-xs text-amber-200/90">
+                  VIP 1 से VIP 10 तक विशेष स्तर बोनस, मासिक वेतन और 8-लेवल एजेंट पैसिव इनकम
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">अधिकतम जैकपॉट</span>
+                    <span className="font-black text-amber-300 text-sm">₹4.89 Cr+</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">UPI निकासी</span>
+                    <span className="font-black text-emerald-400 text-sm">10 सेकंड</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
-            <div className="space-y-3">
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-white leading-[1.15]">
-                लाइव तंबोला खेलें, <br />
-                <span className="bg-gradient-to-r from-amber-300 via-red-400 to-pink-400 bg-clip-text text-transparent drop-shadow-md">
+        {currentSlide === 1 && (
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-fadeIn">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="px-3 py-1 rounded-full bg-purple-600 text-white font-black text-xs uppercase tracking-wider shadow">
+                  🔮 WIN GO FAST LOTTERY
+                </span>
+                <span className="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 font-extrabold text-xs">
+                  🔥 2X से 9X तक रिटर्न
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                कलर प्रेडिक्शन (Win Go) <br />
+                <span className="bg-gradient-to-r from-emerald-400 via-purple-400 to-rose-400 bg-clip-text text-transparent drop-shadow">
+                  हर 1 मिनट में जीतें 9X!
+                </span>
+              </h1>
+              <p className="text-slate-300 text-xs sm:text-base leading-relaxed">
+                हरा (Green 2X), लाल (Red 2X), बैंगनी (Violet 4.5X) या 0 से 9 लकी नंबर (9X)! पारदर्शी RNG परिणाम और तुरंत वॉलेट क्रेडिट।
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={() => onNavigate('color-prediction')}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 text-white font-black text-sm flex items-center gap-2 shadow-xl shadow-purple-600/30 hover:scale-105 cursor-pointer transition-all"
+                >
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                  <span>🔮 अभी खेलें (Win Go 1M)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Visual Box */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-gradient-to-b from-purple-950/80 via-slate-950/95 to-[#0e0a1c] border-2 border-purple-400/60 shadow-2xl space-y-4 text-center">
+                <span className="text-[10px] uppercase font-bold text-purple-300 block tracking-widest">
+                  लाइव सट्टेबाजी चिप्स
+                </span>
+                <div className="flex justify-center gap-3 py-2">
+                  <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex flex-col items-center justify-center font-black shadow-lg shadow-emerald-500/50">
+                    <span className="text-xs">GREEN</span>
+                    <span className="text-[10px]">2X</span>
+                  </div>
+                  <div className="w-14 h-14 rounded-full bg-purple-600 text-white flex flex-col items-center justify-center font-black shadow-lg shadow-purple-600/50">
+                    <span className="text-xs">VIOLET</span>
+                    <span className="text-[10px]">4.5X</span>
+                  </div>
+                  <div className="w-14 h-14 rounded-full bg-rose-500 text-white flex flex-col items-center justify-center font-black shadow-lg shadow-rose-500/50">
+                    <span className="text-xs">RED</span>
+                    <span className="text-[10px]">2X</span>
+                  </div>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-900/90 border border-purple-500/30 flex justify-between text-xs">
+                  <span className="text-slate-400">लकी नंबर्स 0–9:</span>
+                  <span className="text-amber-300 font-black">₹10 का ₹90 (9X)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentSlide === 2 && (
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-fadeIn">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="px-3 py-1 rounded-full bg-red-600 text-white font-black text-xs uppercase tracking-wider shadow">
+                  🚀 AVIATOR CRASH GAME
+                </span>
+                <span className="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 font-extrabold text-xs">
+                  100X तक मल्टीप्लायर
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                Aviator (एविएटर) <br />
+                <span className="bg-gradient-to-r from-red-400 via-rose-300 to-amber-300 bg-clip-text text-transparent drop-shadow">
+                  उड़ने से पहले कैशआउट करें!
+                </span>
+              </h1>
+              <p className="text-slate-300 text-xs sm:text-base leading-relaxed">
+                जेट की उड़ान देखें, 1.01X से 100X+ तक बढ़ता हुआ मल्टीप्लायर और समय पर कैशआउट बटन दबाकर अपनी जीत अपने खाते में लें!
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={() => onNavigate('aviator')}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-sm flex items-center gap-2 shadow-xl shadow-red-600/30 hover:scale-105 cursor-pointer transition-all"
+                >
+                  <Rocket className="w-5 h-5 text-amber-300" />
+                  <span>🚀 एविएटर खेलें (Aviator)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Visual Box */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-gradient-to-b from-red-950/80 via-slate-950/95 to-[#160a0f] border-2 border-red-500/60 shadow-2xl space-y-4 text-center">
+                <div className="text-4xl animate-bounce">✈️</div>
+                <div className="text-5xl font-black text-red-400 font-mono">
+                  34.80x
+                </div>
+                <p className="text-xs text-red-200">
+                  लाइव राउंड चल रहा है • ऑटो-कैशआउट सुविधा उपलब्ध
+                </p>
+                <div className="p-3 rounded-2xl bg-slate-900/90 border border-red-500/30 flex justify-between text-xs">
+                  <span className="text-slate-400">न्यूनतम बेट:</span>
+                  <span className="text-amber-300 font-black">₹10 से शुरू</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentSlide === 3 && (
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-fadeIn">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow">
+                  🐔 CHICKEN ROAD MINI GAME
+                </span>
+                <span className="px-3 py-1 rounded-full bg-emerald-400/20 border border-emerald-400/50 text-emerald-300 font-extrabold text-xs">
+                  15.00X गोल्डन एग
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                चिकन रोड (Chicken Road) <br />
+                <span className="bg-gradient-to-r from-amber-300 via-orange-400 to-yellow-200 bg-clip-text text-transparent drop-shadow">
+                  सुरक्षित हाईवे पार करें!
+                </span>
+              </h1>
+              <p className="text-slate-300 text-xs sm:text-base leading-relaxed">
+                मुर्गी को हाईवे की हर लेन पार कराएं। हर लेन के साथ मल्टीप्लायर बढ़ता है। किसी भी वक्त कैशआउट करें या 15X गोल्डन एग तक पहुंचें!
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={() => onNavigate('chicken-road')}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-amber-500/30 hover:scale-105 cursor-pointer transition-all"
+                >
+                  <Gamepad2 className="w-5 h-5 text-slate-950" />
+                  <span>🐔 चिकन रोड खेलें</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Visual Box */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-gradient-to-b from-amber-950/80 via-slate-950/95 to-[#1c1206] border-2 border-amber-500/60 shadow-2xl space-y-4 text-center">
+                <div className="text-4xl">🐔 ➡️ 🚗 ➡️ 🥚</div>
+                <div className="text-3xl font-black text-amber-400 font-mono">
+                  15.00X GOLDEN EGG
+                </div>
+                <p className="text-xs text-amber-200">
+                  हर कदम पर कैशआउट की आजादी • 100% निष्पक्ष RNG
+                </p>
+                <div className="p-3 rounded-2xl bg-slate-900/90 border border-amber-500/30 flex justify-between text-xs">
+                  <span className="text-slate-400">कम रिस्क / ज्यादा रिवॉर्ड:</span>
+                  <span className="text-emerald-400 font-black">2.5X – 15X</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {currentSlide === 4 && (
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-fadeIn">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="px-3 py-1 rounded-full bg-red-600 text-white font-black text-xs uppercase tracking-wider shadow">
+                  🔴 LIVE TAMBOLA ARENA
+                </span>
+                <span className="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 font-extrabold text-xs">
+                  1 से 90 ऑटो वॉइस कॉलिंग
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                अपना तंबोला (Housie) <br />
+                <span className="bg-gradient-to-r from-amber-300 via-red-400 to-pink-400 bg-clip-text text-transparent drop-shadow">
                   हर मैच में नकद जीतें!
                 </span>
               </h1>
-              <p className="text-sm sm:text-base text-slate-200 max-w-xl font-normal leading-relaxed">
-                भारत का सबसे लोकप्रिय ऑनलाइन मल्टीप्लेयर तंबोला! ऑटोमैटिक <strong>1 से 90 वॉइस नंबर कॉलिंग</strong>, विभिन्न रंगों के प्रिंटेबल टिकट्स, <strong>पहले डिपॉजिट पर ₹10 बोनस</strong> और <strong>10-सेकंड में सीधा UPI विथड्रॉल</strong>!
+              <p className="text-slate-300 text-xs sm:text-base leading-relaxed">
+                भारत का सबसे लोकप्रिय ऑनलाइन मल्टीप्लेयर तंबोला! 1st Full House, Early 5, Top Line, Middle Line और Bottom Line जीतें!
               </p>
-            </div>
-
-            {/* Main Action CTAs */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              {/* 🎁 Instant Signup CTA with Bonus if not logged in */}
-              {!currentUser ? (
+              <div className="flex flex-wrap items-center gap-3 pt-2">
                 <button
-                  id="hero-signup-btn"
-                  onClick={() => {
-                    if (onOpenAuth) onOpenAuth('register');
-                    else onNavigate('profile');
-                  }}
-                  className="px-6 py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-sm sm:text-base flex items-center gap-2.5 shadow-xl shadow-amber-500/40 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  onClick={() => onNavigate('live')}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-sm flex items-center gap-2 shadow-xl shadow-red-600/30 hover:scale-105 cursor-pointer transition-all"
                 >
-                  <Gift className="w-5 h-5 text-slate-950" />
-                  <span>साइन अप करें (₹10 डिपॉजिट बोनस)</span>
+                  <Flame className="w-5 h-5 text-amber-300 animate-bounce" />
+                  <span>🎯 लाइव रूम में जाएं</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
-              ) : (
-                <button
-                  id="hero-dashboard-btn"
-                  onClick={() => onNavigate('dashboard')}
-                  className="px-6 py-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-sm sm:text-base flex items-center gap-2.5 shadow-xl shadow-purple-600/30 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-                >
-                  <LayoutDashboard className="w-5 h-5 text-amber-300" />
-                  <span>📊 मेरा 11-बॉक्स डैशबोर्ड</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              )}
-
-              {/* ⚡ Play Live */}
-              <button
-                id="hero-play-live-btn"
-                onClick={() => onNavigate('live')}
-                className="px-6 py-4 rounded-2xl bg-gradient-to-r from-red-600 via-red-500 to-pink-600 hover:from-red-500 hover:to-pink-500 text-white font-black text-sm sm:text-base flex items-center gap-2 shadow-lg shadow-red-600/30 hover:scale-105 transition-all cursor-pointer border border-red-400/40"
-              >
-                <Flame className="w-5 h-5 text-amber-300 animate-bounce" />
-                <span>लाइव रूम में जाएं</span>
-              </button>
-
-              {/* 🎟️ Buy Tickets */}
-              <button
-                id="hero-buy-tickets-btn"
-                onClick={() => onNavigate('buy-ticket')}
-                className="px-5 py-4 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-amber-300 border border-amber-400/50 font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <Ticket className="w-4 h-4 text-amber-400" />
-                <span>टिकट बुक करें (₹10)</span>
-              </button>
-            </div>
-
-            {/* Quick Stat Highlights */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-slate-700/60">
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-slate-900/80 border border-amber-400/40 text-center">
-                <span className="text-[10px] uppercase font-bold text-amber-300 block">कुल प्राइज पूल</span>
-                <span className="text-base sm:text-lg font-black text-amber-200">
-                  ₹{(totalPrizePool || 0).toLocaleString('en-IN')}
-                </span>
-              </div>
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-slate-900/80 border border-purple-400/40 text-center">
-                <span className="text-[10px] uppercase font-bold text-purple-300 block">लाइव एक्टिव खिलाड़ी</span>
-                <span className="text-base sm:text-lg font-black text-purple-200">1,480+ ऑनलाइन</span>
-              </div>
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-slate-900/80 border border-emerald-400/40 text-center">
-                <span className="text-[10px] uppercase font-bold text-emerald-300 block">UPI विथड्रॉल</span>
-                <span className="text-base sm:text-lg font-black text-emerald-200">10-सेकंड इंस्टेंट</span>
-              </div>
-              <div className="p-3 rounded-2xl bg-gradient-to-br from-red-500/20 to-slate-900/80 border border-red-400/40 text-center">
-                <span className="text-[10px] uppercase font-bold text-red-300 block">RNG फेयर ड्रा</span>
-                <span className="text-base sm:text-lg font-black text-red-200">100% सर्टिफाइड</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column: Live Match Arena Spotlight Card */}
-          <div className="lg:col-span-5">
-            {liveGame ? (
-              <div className="relative rounded-3xl bg-gradient-to-b from-amber-500/20 via-slate-900/95 to-[#12182c] p-6 border-2 border-amber-400/60 shadow-2xl space-y-5">
-                {/* Top Badge */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
-                    <span className="bg-red-600 text-white font-black text-xs px-3 py-0.5 rounded-full uppercase tracking-wider shadow">
-                      🔴 लाइव मैच चालू है
-                    </span>
-                  </div>
-                  <span className="font-mono text-xs text-amber-300 font-bold bg-amber-950/80 px-2.5 py-0.5 rounded border border-amber-500/40">
-                    {liveGame.gameCode}
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white">{liveGame.title}</h3>
-                  <p className="text-xs text-amber-200/90 font-medium mt-0.5">
-                    ग्रैंड बंपर प्राइज पूल: <strong className="text-amber-400 text-sm">₹{(liveGame?.prizePool || 0).toLocaleString('en-IN')}</strong>
-                  </p>
-                </div>
-
-                {/* Big 3D Ball Caller Visual */}
-                <div className="p-4 rounded-2xl bg-slate-950/90 border border-amber-400/40 flex items-center justify-between shadow-inner">
-                  <div className="flex items-center gap-3.5">
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-full bg-amber-400/20 animate-pulse-ring absolute inset-0 -m-1" />
-                      <div className={`tambola-ball-3d ${getBallClass(liveGame.currentNumber || 47)} w-16 h-16 text-2xl font-black`}>
-                        {liveGame.currentNumber || '47'}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-black text-amber-400 block tracking-wider">वर्तमान नंबर (CALL)</span>
-                      <span className="text-sm font-bold text-slate-100">
-                        {TAMBOLA_NICKNAMES[liveGame.currentNumber || 47] || `नंबर #${liveGame.currentNumber || 47}`}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">हाल ही के नंबर</span>
-                    <div className="flex items-center gap-1.5 mt-1.5">
-                      {liveGame.previousNumbers.slice(0, 4).map((n, i) => (
-                        <div key={i} className={`tambola-ball-3d ${getBallClass(n)} w-7 h-7 text-[11px]`}>
-                          {n}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Prizes Grid */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-400/30 flex justify-between items-center">
-                    <span className="text-slate-300 font-bold">1st Full House</span>
-                    <span className="text-amber-400 font-black">₹4,500</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-400/30 flex justify-between items-center">
-                    <span className="text-slate-300 font-bold">Early 5</span>
-                    <span className="text-purple-300 font-black">₹500</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/30 flex justify-between items-center">
-                    <span className="text-slate-300 font-bold">Top Line</span>
-                    <span className="text-emerald-300 font-black">₹1,200</span>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex justify-between items-center">
-                    <span className="text-slate-300 font-bold">Bottom Line</span>
-                    <span className="text-cyan-300 font-black">₹1,200</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => onNavigate('live', liveGame.id)}
-                  className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-amber-500/40 hover:scale-[1.02] transition-all cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-slate-950" />
-                  <span>लाइव एरीना में प्रवेश करें (Enter Match)</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="glass-panel rounded-3xl p-8 text-center space-y-4 border border-amber-400/30">
-                <Clock className="w-12 h-12 text-amber-400 mx-auto" />
-                <h3 className="text-lg font-bold text-white">अगला ग्रैंड टूर्नामेंट जल्द शुरू होगा</h3>
                 <button
                   onClick={() => onNavigate('buy-ticket')}
-                  className="px-6 py-3 rounded-xl bg-amber-500 text-slate-950 font-black text-xs"
+                  className="px-5 py-3.5 rounded-2xl bg-slate-900/90 text-amber-300 border border-amber-400/50 font-bold text-sm flex items-center gap-2 cursor-pointer transition-all"
                 >
-                  एडवांस में टिकट खरीदें
+                  <Ticket className="w-4 h-4 text-amber-400" />
+                  <span>टिकट बुक करें (₹10)</span>
                 </button>
               </div>
-            )}
+            </div>
+            {/* Visual Box */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-gradient-to-b from-amber-500/20 via-slate-950/95 to-[#12182c] border-2 border-amber-400/60 shadow-2xl space-y-4 text-center">
+                <div className={`tambola-ball-3d ${getBallClass(liveGame?.currentNumber || 47)} w-16 h-16 text-2xl font-black mx-auto`}>
+                  {liveGame?.currentNumber || 47}
+                </div>
+                <h4 className="font-black text-base text-white">
+                  {liveGame ? liveGame.title : 'दैनिक ग्रैंड टूर्नामेंट'}
+                </h4>
+                <p className="text-xs text-amber-300">
+                  प्राइज पूल: ₹{(liveGame?.prizePool || 10000).toLocaleString('en-IN')}
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">Full House</span>
+                    <span className="font-bold text-amber-400">₹4,500</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">Early 5</span>
+                    <span className="font-bold text-purple-400">₹500</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        )}
+
+        {currentSlide === 5 && (
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-fadeIn">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="px-3 py-1 rounded-full bg-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow">
+                  👥 8-LEVEL AGENT PROGRAM
+                </span>
+                <span className="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 font-extrabold text-xs">
+                  आजीवन 4.6% पैसिव कमीशन
+                </span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-black text-white leading-tight tracking-tight">
+                एजेंट बनें, रोज कमाएं! <br />
+                <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-blue-400 bg-clip-text text-transparent drop-shadow">
+                  बिना खेले आजीवन कमीशन!
+                </span>
+              </h1>
+              <p className="text-slate-300 text-xs sm:text-base leading-relaxed">
+                अपने दोस्तों को रेफर करें और उनके प्रत्येक गेम पर 8 लेवल्स (Level 1: 2%, Level 2: 1%, Level 3-8: 0.5%–0.1%) तक तुरंत कमीशन अपने वॉलेट में पाएं!
+              </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <button
+                  onClick={() => onNavigate('referral')}
+                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black text-sm flex items-center gap-2 shadow-xl shadow-cyan-500/30 hover:scale-105 cursor-pointer transition-all"
+                >
+                  <Share2 className="w-5 h-5 text-slate-950" />
+                  <span>👥 मेरा रेफरल लिंक देखें</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Visual Box */}
+            <div className="lg:col-span-5 flex justify-center">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-gradient-to-b from-cyan-950/80 via-slate-950/95 to-[#091522] border-2 border-cyan-400/60 shadow-2xl space-y-4 text-center">
+                <div className="text-4xl">💰 📈 🎁</div>
+                <div className="text-2xl font-black text-cyan-300">
+                  8-LEVEL MLM COMMISSION
+                </div>
+                <p className="text-xs text-slate-300">
+                  तुरंत कमीशन क्रेडिट • कोई लॉक-इन अवधि नहीं • 10-सेकंड UPI निकासी
+                </p>
+                <div className="p-3 rounded-2xl bg-slate-900/90 border border-cyan-500/30 flex justify-between text-xs">
+                  <span className="text-slate-400">अनुमानित मासिक कमाई:</span>
+                  <span className="text-emerald-400 font-black">₹30,000+</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Carousel Slide Indicators & Arrows */}
+        <div className="relative z-20 flex items-center justify-between pt-6 border-t border-slate-800/80 mt-6">
+          <div className="flex items-center gap-2">
+            {[0, 1, 2, 3, 4, 5].map((idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentSlide(idx)}
+                className={`h-2.5 rounded-full transition-all cursor-pointer ${
+                  currentSlide === idx ? 'w-8 bg-amber-400' : 'w-2.5 bg-slate-700 hover:bg-slate-500'
+                }`}
+              />
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentSlide((prev) => (prev === 0 ? 5 : prev - 1))}
+              className="w-9 h-9 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center justify-center cursor-pointer transition-all"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setCurrentSlide((prev) => (prev === 5 ? 0 : prev + 1))}
+              className="w-9 h-9 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 flex items-center justify-center cursor-pointer transition-all"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* 📢 APNA WIN RUNNING NOTICE BAR */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-amber-500/20 via-slate-900 to-purple-500/20 border border-amber-400/40 p-2.5 shadow-lg flex items-center gap-3">
+        <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500 text-slate-950 font-black text-xs shrink-0 shadow">
+          <Bell className="w-3.5 h-3.5" />
+          <span>आधिकारिक सूचना</span>
+        </div>
+        <div className="overflow-x-auto text-xs text-slate-200 whitespace-nowrap font-medium flex items-center gap-6">
+          <span>📢 [APNA WIN] सदस्य 98***34 ने अपना विन गो (Win Go) 1-Min में ₹64,250 जीते!</span>
+          <span className="text-slate-600">•</span>
+          <span>🚀 सदस्य 70***12 ने अपना एविएटर (Apna Aviator) 48.5X पर ₹1,20,000 जीते!</span>
+          <span className="text-slate-600">•</span>
+          <span>💸 सदस्य 88***90 ने तुरंत ₹35,000 UPI निकासी की!</span>
+          <span className="text-slate-600">•</span>
+          <span>🐔 सदस्य 94***77 ने अपना चिकन रोड पर 15.00X गोल्डन एग जीता!</span>
+          <span className="text-slate-600">•</span>
+          <span>🎰 सदस्य 81***22 ने अपना सुपर ऐस स्लॉट्स में ₹85,000 जैकपॉट जीता!</span>
+          <span className="text-slate-600">•</span>
+          <span>💎 सभी नए UPI डिपॉजिट पर 100% अतिरिक्त बोनस लाइव है!</span>
+        </div>
+      </div>
+
+      {/* 💰 APNA WIN MEGA PROGRESSIVE JACKPOT METER */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-950/60 via-[#18112c] to-amber-950/60 border-2 border-amber-400/70 p-6 sm:p-8 shadow-2xl text-center space-y-3">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-400/20 border border-amber-400/50 text-amber-300 font-black text-xs uppercase tracking-widest">
+          <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
+          <span>APNA WIN MEGA PROGRESSIVE JACKPOT</span>
+        </div>
+        <div className="text-4xl sm:text-6xl font-black bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500 bg-clip-text text-transparent font-mono tracking-tight drop-shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+          ₹ {jackpotAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        <p className="text-xs sm:text-sm text-amber-200/90 font-medium max-w-xl mx-auto">
+          अपना विन गो, अपना एविएटर, अपना चिकन रोड, अपना स्लॉट्स और अपना तंबोला के प्रत्येक खेल से जैकपॉट पूल बढ़ता है।
+        </p>
+      </section>
+
+      {/* 🎮 APNA WIN GAME CATEGORY FILTER BAR */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Flame className="w-6 h-6 text-red-500 animate-bounce" />
+            <h2 className="text-2xl sm:text-3xl font-black text-white">
+              अपना गेम लॉबी (Apna Games)
+            </h2>
+          </div>
+          <span className="text-xs text-amber-300 font-bold hidden sm:block">
+            8+ असली रियल-मनी व मिनी गेम्स
+          </span>
+        </div>
+
+        {/* Category Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {[
+            { id: 'all', label: '🌟 सभी खेल (All Games)' },
+            { id: 'lottery', label: '🔮 अपना विन गो' },
+            { id: 'crash', label: '🚀 अपना एविएटर' },
+            { id: 'mini', label: '🐔 अपना चिकन रोड' },
+            { id: 'tambola', label: '🎯 अपना तंबोला' },
+            { id: 'slots', label: '🎰 अपना स्लॉट्स' },
+            { id: 'casino', label: '🃏 अपना ड्रैगन टाइगर' },
+            { id: 'vip', label: '🎁 अपना डेली बोनस' },
+          ].map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs whitespace-nowrap cursor-pointer transition-all border ${
+                selectedCategory === cat.id
+                  ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20 scale-105'
+                  : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-800'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* 🎲 FEATURED GAME CARDS GRID */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* 1. Apna Win Go (Color Prediction) Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'lottery') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-purple-950/80 via-slate-900 to-[#100b20] border-2 border-purple-500/60 p-5 shadow-xl hover:shadow-2xl hover:border-purple-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500 text-white font-black text-[10px] uppercase tracking-wider">
+                    HOT LOTTERY
+                  </span>
+                  <span className="text-xs font-black text-amber-300">🔥 9X RETURN</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-emerald-900/60 via-purple-900/60 to-rose-900/60 border border-purple-500/30 flex flex-col items-center justify-center p-3 text-center space-y-2 group-hover:scale-[1.02] transition-transform">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-emerald-500 shadow-md shadow-emerald-500/50" />
+                    <span className="w-5 h-5 rounded-full bg-purple-500 shadow-md shadow-purple-500/50" />
+                    <span className="w-5 h-5 rounded-full bg-rose-500 shadow-md shadow-rose-500/50" />
+                  </div>
+                  <span className="text-lg font-black text-white">अपना विन गो (Apna Win Go)</span>
+                  <span className="text-[10px] text-amber-300 font-bold">हरा, बैंगनी, लाल या 0-9 नंबर</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना विन गो (Win Go)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    हर मिनट नया ड्रा। 2X से 9X तक तुरंत रिटर्न और पारदर्शी चार्ट।
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('color-prediction')}
+                className="mt-4 w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/30 cursor-pointer transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>अपना विन गो खेलें (PLAY)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* 2. Apna Aviator Crash Game Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'crash') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-red-950/80 via-slate-900 to-[#180a0f] border-2 border-red-500/60 p-5 shadow-xl hover:shadow-2xl hover:border-red-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white font-black text-[10px] uppercase tracking-wider">
+                    CRASH GAME
+                  </span>
+                  <span className="text-xs font-black text-red-400">🚀 100X MAX</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-red-950 via-slate-950 to-red-900/60 border border-red-500/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <span className="text-3xl animate-bounce">✈️</span>
+                  <span className="text-2xl font-black text-red-400 font-mono">1.01x ➔ 100x</span>
+                  <span className="text-[10px] text-slate-300 font-bold">उड़ने से पहले कैशआउट</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना एविएटर (Apna Aviator)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    रियल-टाइम मल्टीप्लायर कर्व, दोहरे बेट्स और ऑटोमैटिक कैशआउट।
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('aviator')}
+                className="mt-4 w-full py-3 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer transition-all"
+              >
+                <Rocket className="w-4 h-4 text-amber-300" />
+                <span>अपना एविएटर खेलें (PLAY)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* 3. Apna Chicken Road Mini Game Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'mini') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-amber-950/80 via-slate-900 to-[#181105] border-2 border-amber-500/60 p-5 shadow-xl hover:shadow-2xl hover:border-amber-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider">
+                    MINI GAME
+                  </span>
+                  <span className="text-xs font-black text-amber-300">🐔 15.00X EGG</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-amber-950 via-slate-950 to-orange-900/60 border border-amber-500/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <span className="text-3xl">🐔 🛣️ 🥚</span>
+                  <span className="text-xl font-black text-amber-400">अपना चिकन रोड (Highway)</span>
+                  <span className="text-[10px] text-amber-200/90 font-bold">लेन पार करें और कैशआउट करें</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना चिकन रोड (Chicken Road)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    सड़क पार करने का मजेदार खेल। हर लेन पर बढ़ता हुआ नकद इनाम।
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('chicken-road')}
+                className="mt-4 w-full py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/30 cursor-pointer transition-all"
+              >
+                <Gamepad2 className="w-4 h-4" />
+                <span>अपना चिकन रोड खेलें (PLAY)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* 4. Apna Tambola Live Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'tambola') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-blue-950/80 via-slate-900 to-[#0c1424] border-2 border-blue-500/60 p-5 shadow-xl hover:shadow-2xl hover:border-blue-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white font-black text-[10px] uppercase tracking-wider animate-pulse">
+                    🔴 LIVE MATCH
+                  </span>
+                  <span className="text-xs font-black text-amber-300">₹4,500 FULL HOUSE</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-blue-950 via-slate-950 to-indigo-900/60 border border-blue-500/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <div className={`tambola-ball-3d ${getBallClass(liveGame?.currentNumber || 47)} w-12 h-12 text-lg font-black`}>
+                    {liveGame?.currentNumber || 47}
+                  </div>
+                  <span className="text-base font-black text-white">अपना तंबोला (Housie)</span>
+                  <span className="text-[10px] text-blue-300 font-bold">1 से 90 वॉइस कॉलिंग</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना तंबोला (Live Housie)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    असली खिलाड़ियों के साथ फुल हाउस, अर्ली 5 व लाइन्स जीतें।
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('live')}
+                className="mt-4 w-full py-3 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/30 cursor-pointer transition-all"
+              >
+                <Flame className="w-4 h-4 text-amber-300" />
+                <span>अपना तंबोला खेलें (PLAY)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* 5. Apna Super Ace Slot Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'slots') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-amber-950/60 via-slate-900 to-[#151006] border-2 border-amber-500/50 p-5 shadow-xl hover:shadow-2xl hover:border-amber-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider">
+                    JILI SLOTS
+                  </span>
+                  <span className="text-xs font-black text-amber-300">🎰 500X JACKPOT</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-amber-900/60 via-slate-950 to-yellow-900/60 border border-amber-500/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <span className="text-3xl">👑 7️⃣ 💎</span>
+                  <span className="text-xl font-black text-amber-300">अपना सुपर ऐस</span>
+                  <span className="text-[10px] text-slate-300 font-bold">गोल्डन कार्ड्स व फ्री स्पिन्स</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना सुपर ऐस (Super Ace Slots)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    क्लासिक कार्ड्स और मल्टीप्लायर के साथ विशाल जैकपॉट जीतें।
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-1.5">
+                <button
+                  onClick={() => onNavigate('apna-slots')}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/30 cursor-pointer transition-all"
+                >
+                  <span>🎰 असली खेलें (PLAY REAL SLOTS)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setDemoModal({ isOpen: true, name: 'अपना सुपर ऐस', type: 'slot' })}
+                  className="w-full py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-amber-300 font-bold text-[10px] cursor-pointer"
+                >
+                  ⚡ क्विक डेमो चलाएं
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 6. Apna Fortune Gems Slot Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'slots') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-emerald-950/60 via-slate-900 to-[#07150e] border-2 border-emerald-500/50 p-5 shadow-xl hover:shadow-2xl hover:border-emerald-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider">
+                    POPULAR SLOT
+                  </span>
+                  <span className="text-xs font-black text-emerald-300">💎 15X MULTIPLIER</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-emerald-900/60 via-slate-950 to-teal-900/60 border border-emerald-500/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <span className="text-3xl">💎 🟢 🔮</span>
+                  <span className="text-xl font-black text-emerald-300">अपना फॉर्च्यून जेम्स</span>
+                  <span className="text-[10px] text-slate-300 font-bold">स्पिन करें और रत्न जोड़ें</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना फॉर्च्यून जेम्स (Fortune Gems)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    तीसरे रील पर लकी मल्टीप्लायर व्हील के साथ लगातार जीत।
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-1.5">
+                <button
+                  onClick={() => onNavigate('apna-slots')}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/30 cursor-pointer transition-all"
+                >
+                  <span>💎 असली खेलें (PLAY REAL GEMS)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setDemoModal({ isOpen: true, name: 'अपना फॉर्च्यून जेम्स', type: 'slot' })}
+                  className="w-full py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-emerald-300 font-bold text-[10px] cursor-pointer"
+                >
+                  ⚡ क्विक डेमो चलाएं
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 7. Apna Dragon Tiger Casino Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'casino') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-rose-950/60 via-slate-900 to-[#18080c] border-2 border-rose-500/50 p-5 shadow-xl hover:shadow-2xl hover:border-rose-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-red-600 text-white font-black text-[10px] uppercase tracking-wider">
+                    LIVE CASINO
+                  </span>
+                  <span className="text-xs font-black text-amber-300">🐉 VS 🐯</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-rose-950 via-slate-950 to-amber-950 border border-rose-500/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <span className="text-3xl">🐉 ⚔️ 🐯</span>
+                  <span className="text-xl font-black text-rose-300">अपना ड्रैगन टाइगर</span>
+                  <span className="text-[10px] text-slate-300 font-bold">1 कार्ड पर त्वरित परिणाम (2X)</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना ड्रैगन टाइगर (Dragon Tiger Live)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    ड्रैगन या टाइगर में से किसका कार्ड बड़ा होगा? 8X टाई रिवॉर्ड।
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-col gap-1.5">
+                <button
+                  onClick={() => onNavigate('apna-dragon-tiger')}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-red-600/30 cursor-pointer transition-all"
+                >
+                  <span>🃏 असली खेलें (PLAY REAL LIVE)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setDemoModal({ isOpen: true, name: 'अपना ड्रैगन टाइगर', type: 'dragontiger' })}
+                  className="w-full py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-rose-300 font-bold text-[10px] cursor-pointer"
+                >
+                  ⚡ क्विक डेमो चलाएं
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 8. Apna Daily VIP Rewards & Check-in Card */}
+          {(selectedCategory === 'all' || selectedCategory === 'vip') && (
+            <div className="group relative rounded-3xl overflow-hidden bg-gradient-to-b from-amber-500/20 via-slate-900 to-[#12182c] border-2 border-amber-400/60 p-5 shadow-xl hover:shadow-2xl hover:border-amber-400 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px] uppercase tracking-wider">
+                    DAILY CHECK-IN
+                  </span>
+                  <span className="text-xs font-black text-emerald-400">🎁 ₹500 तक</span>
+                </div>
+                <div className="h-32 rounded-2xl bg-gradient-to-br from-amber-900/40 via-slate-950 to-purple-950 border border-amber-400/30 flex flex-col items-center justify-center p-3 text-center space-y-1 group-hover:scale-[1.02] transition-transform">
+                  <span className="text-3xl">🎁 📅 ⭐</span>
+                  <span className="text-xl font-black text-amber-300">अपना डेली बोनस</span>
+                  <span className="text-[10px] text-amber-200/90 font-bold">लगातार लॉगिन करें व पाएं बोनस</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white">अपना डेली चेक-इन (Daily Bonus)</h3>
+                  <p className="text-xs text-slate-300 mt-1">
+                    दिन 1 से दिन 7 तक बढ़ता हुआ कैश रिवॉर्ड और लकी स्पिन।
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate('daily-bonus')}
+                className="mt-4 w-full py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/30 cursor-pointer transition-all"
+              >
+                <span>🎁 अपना बोनस क्लेम करें</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1378,6 +1954,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Casino Demo Modal */}
+      <CasinoDemoModal
+        gameName={demoModal.name}
+        gameType={demoModal.type}
+        isOpen={demoModal.isOpen}
+        onClose={() => setDemoModal((prev) => ({ ...prev, isOpen: false }))}
+        onNavigate={onNavigate}
+      />
     </div>
   );
 };

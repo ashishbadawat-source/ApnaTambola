@@ -245,6 +245,24 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   // 11 Distinct Dashboard Options with High-Contrast, Vibrant, Beautiful Color Themes
   const DASHBOARD_MODULES = [
     {
+      id: 'color-prediction',
+      name: 'Color Prediction (Win Go)',
+      nameHi: '🎨 कलर प्रेडिक्शन & विन गो (2X–9X)',
+      desc: '30 सेकंड, 1 मिनट व 3 मिनट में हरा 🟢 (2X), बैंगनी 🟣 (4.5X), लाल 🔴 (2X) और नंबर 0–9 (9X) चुनकर तुरंत जैकपॉट जीतें!',
+      icon: Sparkles,
+      themeName: 'Win Go Spectrum (मल्टीकलर)',
+      colorTitle: 'स्पेक्ट्रम थीम',
+      bgGradient: 'from-[#1e0738] via-[#100324] to-[#080112]',
+      borderColor: 'border-emerald-400 hover:border-amber-300',
+      textColor: 'text-amber-300',
+      headerBg: 'bg-gradient-to-r from-emerald-500/20 via-purple-500/20 to-rose-500/20 text-amber-300 border-amber-400/40',
+      badgeBg: 'bg-gradient-to-r from-emerald-500 via-purple-500 to-rose-500 text-white font-black shadow-md animate-pulse',
+      badgeText: '🔥 2X से 9X इंस्टेंट पे-आउट',
+      iconBg: 'bg-gradient-to-br from-emerald-400 via-purple-500 to-rose-500 text-white shadow-lg shadow-purple-500/40',
+      actionText: 'कलर ट्रेडिंग खेलें (Play Win Go)',
+      accentPill: 'bg-purple-950/80 border border-purple-400/40 text-purple-200',
+    },
+    {
       id: 'games',
       name: 'Games Lobby & Schedule',
       nameHi: '1. गेम्स लॉबी & शेड्यूल',
