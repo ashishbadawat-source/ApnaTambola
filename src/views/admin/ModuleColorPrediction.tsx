@@ -25,6 +25,11 @@ import {
   ColorPredictionSelection,
 } from '../../types';
 import { getNumberProps } from '../ColorPredictionView';
+import {
+  getHouseProfitSettings,
+  saveHouseProfitSettings,
+  HouseProfitSettings,
+} from '../../utils/houseProfitEngine';
 
 export const ModuleColorPrediction: React.FC = () => {
   const [adminControl, setAdminControl] = useState<ColorPredictionAdminControl>(() => {
@@ -59,6 +64,30 @@ export const ModuleColorPrediction: React.FC = () => {
   });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [profitSettings, setProfitSettings] = useState<HouseProfitSettings>(() => getHouseProfitSettings());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setProfitSettings(getHouseProfitSettings());
+    };
+    window.addEventListener('apna_profit_settings_updated', handleUpdate);
+    return () => window.removeEventListener('apna_profit_settings_updated', handleUpdate);
+  }, []);
+
+  const handleUpdateMargin = (margin: number, autoMinPayout: boolean) => {
+    const updated: HouseProfitSettings = {
+      ...profitSettings,
+      colorPrediction: {
+        ...profitSettings.colorPrediction,
+        marginPercent: margin,
+        autoMinPayoutMode: autoMinPayout,
+      },
+    };
+    setProfitSettings(updated);
+    saveHouseProfitSettings(updated);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2000);
+  };
 
   const handleSaveControl = (newControl: ColorPredictionAdminControl) => {
     setAdminControl(newControl);
@@ -278,6 +307,84 @@ export const ModuleColorPrediction: React.FC = () => {
             </button>
           </div>
         )}
+      </div>
+
+      {/* 🛡️ House Profit Margin & Auto Lowest Payout Engine */}
+      <div className="p-6 rounded-3xl bg-slate-900 border-2 border-emerald-500/40 text-white space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xl border border-emerald-500/40">
+              💰
+            </div>
+            <div>
+              <h3 className="font-black text-base text-white">
+                कलर प्रेडिक्शन एडमिन बचत (House Edge &amp; Lowest Payout)
+              </h3>
+              <p className="text-xs text-slate-400">
+                ऑटोमैटिक मोड में न्यूनतम पे-आउट वाला नंबर चुनकर एडमिन के लिए अधिकतम बचत सुनिश्चित करता है।
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950 px-3 py-1 rounded-full border border-emerald-500/40">
+              {profitSettings.colorPrediction.marginPercent}% बचत सक्रिय
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+            <div className="flex justify-between text-xs text-slate-300 font-bold">
+              <span>एडमिन बचत दर (House Profit Margin):</span>
+              <span className="text-amber-400 font-mono text-sm">{profitSettings.colorPrediction.marginPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min="10"
+              max="50"
+              step="5"
+              value={profitSettings.colorPrediction.marginPercent}
+              onChange={(e) =>
+                handleUpdateMargin(
+                  Number(e.target.value),
+                  profitSettings.colorPrediction.autoMinPayoutMode
+                )
+              }
+              className="w-full accent-emerald-400 cursor-pointer"
+            />
+            <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+              <span>10% (कम बचत)</span>
+              <span>25% (संतुलित)</span>
+              <span>50% (अधिकतम बचत)</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold text-white">
+                न्यूनतम पे-आउट ऑटो सेलेक्टर (Auto Lowest Payout Mode)
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                दांव लगने के बाद वह नंबर निकालता है जिसमें कम से कम खिलाड़ी जीते हों।
+              </p>
+            </div>
+            <button
+              onClick={() =>
+                handleUpdateMargin(
+                  profitSettings.colorPrediction.marginPercent,
+                  !profitSettings.colorPrediction.autoMinPayoutMode
+                )
+              }
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
+                profitSettings.colorPrediction.autoMinPayoutMode
+                  ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20'
+                  : 'bg-slate-800 text-slate-400'
+              }`}
+            >
+              {profitSettings.colorPrediction.autoMinPayoutMode ? 'चालू (ON)' : 'बंद (OFF)'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 📜 Recent Game History Audit */}

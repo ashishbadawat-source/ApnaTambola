@@ -18,6 +18,11 @@ import {
 } from 'lucide-react';
 import { User } from '../types';
 import { playWinningFanfare } from '../utils/audio';
+import {
+  determineSlotSpinOutcome,
+  determineDragonTigerDeal,
+  getHouseProfitSettings,
+} from '../utils/houseProfitEngine';
 
 interface ApnaCasinoViewProps {
   currentUser: User | null;
@@ -160,24 +165,25 @@ export const ApnaCasinoView: React.FC<ApnaCasinoViewProps> = ({
   };
 
   const finalizeSlots = async () => {
-    // 35% chance 2 match, 15% chance 3 match
-    const rand = Math.random();
-    let r1 = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)].icon;
-    let r2 = r1;
-    let r3 = r1;
+    const houseSettings = getHouseProfitSettings();
+    const spinResult = determineSlotSpinOutcome(betAmount, houseSettings);
 
-    if (rand < 0.15) {
+    let r1 = SLOT_SYMBOLS[0].icon;
+    let r2 = SLOT_SYMBOLS[1].icon;
+    let r3 = SLOT_SYMBOLS[2].icon;
+
+    if (spinResult.outcome === 'jackpot') {
       // 3 match JACKPOT
       const luckySym = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
       r1 = luckySym.icon;
       r2 = luckySym.icon;
       r3 = luckySym.icon;
-      const payout = betAmount * luckySym.mult;
+      const payout = spinResult.payout > 0 ? spinResult.payout : betAmount * luckySym.mult;
       setReels([r1, r2, r3]);
       setIsSpinning(false);
       setWinMessage(`🎉 जैकपॉट! 3X ${luckySym.name} मैच हुआ! +₹${payout.toLocaleString('en-IN')}`);
       await creditWin(payout, `अपना सुपर ऐस स्लॉट जैकपॉट जीत (${luckySym.name} 3X)`);
-    } else if (rand < 0.50) {
+    } else if (spinResult.outcome === 'match2') {
       // 2 match
       const sym1 = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
       let sym2 = SLOT_SYMBOLS[Math.floor(Math.random() * SLOT_SYMBOLS.length)];
@@ -187,7 +193,7 @@ export const ApnaCasinoView: React.FC<ApnaCasinoViewProps> = ({
       r1 = sym1.icon;
       r2 = sym1.icon;
       r3 = sym2.icon;
-      const payout = Math.floor(betAmount * 2.2);
+      const payout = spinResult.payout > 0 ? spinResult.payout : Math.floor(betAmount * 2.2);
       setReels([r1, r2, r3]);
       setIsSpinning(false);
       setWinMessage(`✨ बढ़िया! 2X ${sym1.name} मैच! +₹${payout.toLocaleString('en-IN')}`);
@@ -241,7 +247,10 @@ export const ApnaCasinoView: React.FC<ApnaCasinoViewProps> = ({
   };
 
   const finalizeGems = async () => {
-    const isWin = Math.random() < 0.42;
+    const houseSettings = getHouseProfitSettings();
+    // House Profit Engine target RTP control (e.g., 75% RTP -> win chance ~38%)
+    const winProbability = (houseSettings.fortuneGems.targetRtpPercent / 100) * 0.50;
+    const isWin = Math.random() < winProbability;
     const finalMult = GEMS_MULTIPLIERS[Math.floor(Math.random() * GEMS_MULTIPLIERS.length)];
     setGemsWheelMult(finalMult);
 
@@ -275,17 +284,17 @@ export const ApnaCasinoView: React.FC<ApnaCasinoViewProps> = ({
     setDtCards(null);
 
     setTimeout(async () => {
-      const dVal = Math.floor(Math.random() * 13) + 1;
-      const tVal = Math.floor(Math.random() * 13) + 1;
-      let winner: 'dragon' | 'tiger' | 'tie' = 'tie';
-      if (dVal > tVal) winner = 'dragon';
-      else if (tVal > dVal) winner = 'tiger';
+      const houseSettings = getHouseProfitSettings();
+      const dealResult = determineDragonTigerDeal(dtBetTarget, betAmount, houseSettings);
+      const dVal = dealResult.dragonCard;
+      const tVal = dealResult.tigerCard;
+      const winner = dealResult.winner;
 
       setDtCards({ dragon: dVal, tiger: tVal, winner });
       setDtHistory((prev) => [{ winner, dragonVal: dVal, tigerVal: tVal }, ...prev.slice(0, 19)]);
       setIsProcessing(false);
 
-      if (winner === dtBetTarget) {
+      if (dealResult.didPlayerWin) {
         const mult = winner === 'tie' ? 8 : 2;
         const wonAmt = betAmount * mult;
         setWinMessage(`👑 बधाई हो! ${winner === 'dragon' ? '🐉 ड्रैगन' : winner === 'tiger' ? '🐯 टाइगर' : '🤝 टाई'} जीत गया! +₹${wonAmt.toLocaleString('en-IN')}`);
@@ -307,12 +316,27 @@ export const ApnaCasinoView: React.FC<ApnaCasinoViewProps> = ({
 
     setIsWheelSpinning(true);
     setTimeout(async () => {
-      const randNum = Math.floor(Math.random() * 37); // 0 to 36
+      const houseSettings = getHouseProfitSettings();
+      // Apply House edge on roulette
+      const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+      const blackNumbers = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+      let randNum = Math.floor(Math.random() * 37); // 0 to 36
+
+      if (houseSettings.guaranteedAdminProfit && Math.random() < (houseSettings.globalMarginPercent / 100)) {
+        // Favor house: pick 0 (green) or opposite color
+        if (rouletteBet === 'red') {
+          randNum = Math.random() < 0.15 ? 0 : blackNumbers[Math.floor(Math.random() * blackNumbers.length)];
+        } else if (rouletteBet === 'black') {
+          randNum = Math.random() < 0.15 ? 0 : redNumbers[Math.floor(Math.random() * redNumbers.length)];
+        } else if (rouletteBet === 'green') {
+          randNum = redNumbers[Math.floor(Math.random() * redNumbers.length)];
+        }
+      }
+
       setRouletteNum(randNum);
       setIsWheelSpinning(false);
 
       let color = 'black';
-      const redNumbers = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
       if (randNum === 0) color = 'green';
       else if (redNumbers.includes(randNum)) color = 'red';
 

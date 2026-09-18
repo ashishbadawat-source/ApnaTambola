@@ -14,6 +14,10 @@ import {
 } from 'lucide-react';
 import { User } from '../types';
 import { playWinningFanfare } from '../utils/audio';
+import {
+  checkChickenRoadCollision,
+  getHouseProfitSettings,
+} from '../utils/houseProfitEngine';
 
 interface ChickenRoadViewProps {
   currentUser?: User | null;
@@ -88,8 +92,11 @@ export const ChickenRoadView: React.FC<ChickenRoadViewProps> = ({
     const nextLane = currentLane + 1;
     const laneConfig = LANES[nextLane - 1];
 
-    // Crash roll
-    if (Math.random() < laneConfig.danger) {
+    // Crash roll with House Edge Engine (गारंटीड एडमिन बचत)
+    const houseSettings = getHouseProfitSettings();
+    const isCollision = checkChickenRoadCollision(nextLane, laneConfig.danger, betAmount, houseSettings);
+
+    if (isCollision) {
       // Hit by car!
       setIsCrashed(true);
       setIsPlaying(false);

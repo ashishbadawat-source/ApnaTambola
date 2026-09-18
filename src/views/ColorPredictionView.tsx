@@ -38,6 +38,10 @@ import {
   ColorPredictionAdminControl,
   WalletTransaction,
 } from '../types';
+import {
+  calculateOptimalColorPredictionNumber,
+  getHouseProfitSettings,
+} from '../utils/houseProfitEngine';
 import { playWinningFanfare } from '../utils/audio';
 
 interface ColorPredictionViewProps {
@@ -239,26 +243,30 @@ export const ColorPredictionView: React.FC<ColorPredictionViewProps> = ({
   const handleResolveRound = (period: string, mode: ColorPredictionMode) => {
     setIsSpinningResult(true);
 
-    // Determine Result: Check if admin set a forced number
-    let resultNumber = 0;
-    if (adminControl.nextTargetNumber !== null && adminControl.nextTargetNumber !== undefined) {
-      resultNumber = adminControl.nextTargetNumber;
-    } else if (adminControl.nextTargetColor) {
-      if (adminControl.nextTargetColor === 'green') {
-        const greenNums = [1, 3, 7, 9];
-        resultNumber = greenNums[Math.floor(Math.random() * greenNums.length)];
-      } else if (adminControl.nextTargetColor === 'red') {
-        const redNums = [2, 4, 6, 8];
-        resultNumber = redNums[Math.floor(Math.random() * redNums.length)];
-      } else if (adminControl.nextTargetColor === 'violet') {
-        resultNumber = Math.random() > 0.5 ? 0 : 5;
-      }
-    } else {
-      // Fair RNG / Smart distribution
-      resultNumber = Math.floor(Math.random() * 10);
-    }
+    // Collect all bets placed for this completed period
+    const roundBets = userBets.filter(
+      (b) => b.period === period && b.status === 'pending'
+    );
+    const betInputs = roundBets.map((b) => ({
+      selection: String(b.selection),
+      totalAmount: b.totalAmount || 0,
+    }));
 
+    // Determine Result with House Profit Engine (गारंटीड एडमिन बचत)
+    const houseSettings = getHouseProfitSettings();
+    const optimal = calculateOptimalColorPredictionNumber(
+      betInputs,
+      adminControl.nextTargetNumber,
+      adminControl.nextTargetColor,
+      houseSettings
+    );
+
+    const resultNumber = optimal.resultNumber;
     const { color, size } = getNumberProps(resultNumber);
+
+    const baseTurnover = Math.floor(Math.random() * 25000) + 12000;
+    const totalBetsAmount = optimal.totalCollected + baseTurnover;
+    const totalPayout = optimal.totalPayout + Math.floor(baseTurnover * (1 - (houseSettings.colorPrediction.marginPercent / 100)));
 
     const newCompletedRound: ColorPredictionRound = {
       id: `rnd_${period}`,
@@ -271,8 +279,8 @@ export const ColorPredictionView: React.FC<ColorPredictionViewProps> = ({
       resultNumber,
       resultColor: color,
       resultSize: size,
-      totalBetsAmount: Math.floor(Math.random() * 40000) + 10000,
-      totalPayout: Math.floor(Math.random() * 35000) + 8000,
+      totalBetsAmount,
+      totalPayout,
       createdAt: new Date().toISOString(),
     };
 

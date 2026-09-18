@@ -22,6 +22,11 @@ import {
 } from 'lucide-react';
 import { User, AviatorBet, AviatorHistoryItem } from '../types';
 import { playWinningFanfare } from '../utils/audio';
+import {
+  generateAviatorCrashPointWithMargin,
+  getHouseProfitSettings,
+  AviatorActiveBet,
+} from '../utils/houseProfitEngine';
 
 interface AviatorViewProps {
   currentUser?: User | null;
@@ -189,7 +194,26 @@ export const AviatorView: React.FC<AviatorViewProps> = ({
 
   // Start Flight
   const startFlight = () => {
-    const targetCrash = generateCrashPoint();
+    // Determine active bets for this flight
+    const willBet1 = isBetPlaced1 || isBetNextRound1;
+    const willBet2 = isBetPlaced2 || isBetNextRound2;
+
+    const activeBets: AviatorActiveBet[] = [];
+    if (willBet1) {
+      activeBets.push({
+        amount: betAmount1,
+        autoCashoutAt: autoCashoutEnabled1 ? autoCashoutValue1 : undefined,
+      });
+    }
+    if (willBet2) {
+      activeBets.push({
+        amount: betAmount2,
+        autoCashoutAt: autoCashoutEnabled2 ? autoCashoutValue2 : undefined,
+      });
+    }
+
+    const houseSettings = getHouseProfitSettings();
+    const targetCrash = generateAviatorCrashPointWithMargin(activeBets, houseSettings);
     crashPointRef.current = targetCrash;
     startTimeRef.current = performance.now();
 
