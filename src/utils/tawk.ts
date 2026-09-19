@@ -177,36 +177,23 @@ export const openTawkChat = () => {
   }
 };
 
-export const syncUserToTawk = (user: User | null) => {
-  if (typeof window === 'undefined' || !window.Tawk_API) return;
-
-  try {
-    if (user) {
-      const userEmail = user.email || `${user.phone}@tambolalive.in`;
-      if (typeof window.Tawk_API.setAttributes === 'function') {
-        window.Tawk_API.setAttributes(
-          {
-            name: user.name,
-            email: userEmail,
-            phone: user.phone,
-            userId: user.id,
-            role: user.role,
-            walletBalance: `₹${user.walletBalance || 0}`,
-            referralCode: user.referralCode || 'N/A',
-          },
-          function (err) {
-            if (err) console.warn('Tawk attribute sync notice:', err);
-          }
-        );
-      }
-      if (window.Tawk_API.visitor) {
-        window.Tawk_API.visitor = {
-          name: user.name,
-          email: userEmail,
-        };
-      }
-    }
-  } catch (e) {
-    console.warn('Tawk sync error:', e);
-  }
+export const syncUserToTawk = (_user: User | null) => {
+  // disabled
 };
+
+export const removeTawkWidget = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (window.Tawk_API && typeof window.Tawk_API.hideWidget === 'function') {
+      window.Tawk_API.hideWidget();
+    }
+    const script = document.getElementById('tawk-script-tag');
+    if (script) script.remove();
+    document.querySelectorAll('[id*="tawk"], [class*="tawk"], iframe[src*="tawk"]').forEach((el) => {
+      try {
+        el.remove();
+      } catch (e) {}
+    });
+  } catch (e) {}
+};
+

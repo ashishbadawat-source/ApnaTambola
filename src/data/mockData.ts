@@ -830,7 +830,7 @@ export const INITIAL_SITE_SETTINGS: SiteSettings = {
   maxDeposit: 100000,
   withdrawalFeePercentage: 15,
   levelPercentages: [2.0, 1.0, 0.5, 0.4, 0.3, 0.2, 0.1, 0.1], // Level 1 to 8 (4.6% Total on ticket play)
-  maintenanceMode: false,
+  maintenanceMode: true,
   announcementText: '🎉 Welcome to TAMBOLA LIVE! Join the 9 PM Mega Bumper Jackpot with ₹12,500 Prize Pool!',
   responsibleGamingInfo: 'Tambola Live is intended for entertainment purposes for players 18 years of age and older. Please play responsibly.',
   termsAndConditions: 'All ticket sales are final once the game begins. Real-time verification applies to all prize claims. Duplicate claims on the same ticket will be rejected automatically.',

@@ -21,13 +21,14 @@ import { ChickenRoadView } from './views/ChickenRoadView';
 import { AdminDashboardView } from './views/AdminDashboardView';
 import { AdminLoginModal } from './views/AdminLoginModal';
 import { AuthModal } from './views/AuthModal';
+import { MaintenanceView } from './views/MaintenanceView';
 import { ProtectedViewGate } from './components/ProtectedViewGate';
 import { UserNotificationsDrawer, UserNotificationItem } from './components/UserNotificationsDrawer';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { AllOptionsModal } from './components/AllOptionsModal';
 import { TemplateSelectorModal } from './components/TemplateSelectorModal';
-import { initTawkScript, syncUserToTawk } from './utils/tawk';
-import { initBrevoConversations, syncUserToBrevoConversations } from './utils/brevoConversations';
+import { initTawkScript, syncUserToTawk, removeTawkWidget } from './utils/tawk';
+import { initBrevoConversations, syncUserToBrevoConversations, removeBrevoWidget } from './utils/brevoConversations';
 import { AppTemplateId, getAppTemplate } from './utils/appThemes';
 import { isDirectChildOf, findReferrerInList, extractReferralCode } from './utils/referralMatcher';
 import {
@@ -263,11 +264,32 @@ export function App() {
       const saved = localStorage.getItem('apna_tambola_site_settings');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return { ...INITIAL_SITE_SETTINGS, ...parsed };
+        if (parsed && typeof parsed === 'object') {
+          const maintenanceOverride = sessionStorage.getItem('apna_maintenance_user_toggled') === 'true'
+            ? parsed.maintenanceMode
+            : true;
+          return { ...INITIAL_SITE_SETTINGS, ...parsed, maintenanceMode: maintenanceOverride };
+        }
       }
     } catch (e) {}
-    return INITIAL_SITE_SETTINGS;
+    return { ...INITIAL_SITE_SETTINGS, maintenanceMode: true };
   });
+
+  // Ensure maintenanceMode is synced to Firestore & LocalStorage on initialization
+  useEffect(() => {
+    const hasApplied = sessionStorage.getItem('apna_maintenance_applied_v1');
+    if (!hasApplied) {
+      sessionStorage.setItem('apna_maintenance_applied_v1', 'true');
+      setSiteSettings((prev) => {
+        const updated = { ...prev, maintenanceMode: true };
+        try {
+          localStorage.setItem('apna_tambola_site_settings', JSON.stringify(updated));
+          setDoc(doc(db, 'system', 'site_settings'), { maintenanceMode: true, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+        } catch (e) {}
+        return updated;
+      });
+    }
+  }, []);
   const [userNotifications, setUserNotifications] = useState<UserNotificationItem[]>(INITIAL_USER_NOTIFICATIONS);
   const [showNotificationsDrawer, setShowNotificationsDrawer] = useState<boolean>(false);
   const [showFirebaseModal, setShowFirebaseModal] = useState<boolean>(false);
@@ -488,25 +510,40 @@ export function App() {
     window.addEventListener('hashchange', checkUrlParams);
     window.addEventListener('keydown', handleKeyDown);
     
-    // Safely load live chat widgets in background
-    try {
-      initTawkScript();
-      initBrevoConversations();
-    } catch (e) {
-      console.warn('Chat init deferred:', e);
+    // Live chat widgets: completely disabled during maintenance mode
+    if (!siteSettings.maintenanceMode) {
+      try {
+        initTawkScript();
+        initBrevoConversations();
+      } catch (e) {
+        console.warn('Chat init deferred:', e);
+      }
+    } else {
+      removeTawkWidget();
+      removeBrevoWidget();
     }
 
     return () => {
       window.removeEventListener('hashchange', checkUrlParams);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [siteSettings.maintenanceMode]);
 
-  // Sync visitor profile with Live Chat
+  // Clean up and suppress Live Chat widgets during maintenance mode
   useEffect(() => {
-    syncUserToTawk(currentUser);
-    syncUserToBrevoConversations(currentUser);
-  }, [currentUser]);
+    if (siteSettings.maintenanceMode) {
+      removeTawkWidget();
+      removeBrevoWidget();
+      const interval = setInterval(() => {
+        removeTawkWidget();
+        removeBrevoWidget();
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      syncUserToTawk(currentUser);
+      syncUserToBrevoConversations(currentUser);
+    }
+  }, [currentUser, siteSettings.maintenanceMode]);
 
   // Real-time Firestore synchronizer for users across multiple devices and browsers
   useEffect(() => {
@@ -7244,6 +7281,11 @@ export function App() {
 
     // 20. Admin Site Settings Update
   const handleUpdateSettings = async (updates: Partial<SiteSettings>): Promise<boolean> => {
+    if (updates.maintenanceMode !== undefined) {
+      try {
+        sessionStorage.setItem('apna_maintenance_user_toggled', 'true');
+      } catch (e) {}
+    }
     setSiteSettings((prev) => {
       const nextSettings = { ...prev, ...updates };
       try {
@@ -7337,9 +7379,64 @@ export function App() {
   };
 
   const currentTemplate = getAppTemplate(activeTemplateId);
+  const isUserAdmin = currentUser?.role === 'admin' || currentUser?.email === 'ashishbadawat@gmail.com';
+
+  // 🚧 Website Under Maintenance: The website DOES NOT OPEN when maintenance mode is active!
+  if (siteSettings.maintenanceMode) {
+    return (
+      <div className={`min-h-screen ${currentTemplate.bodyBgClass} text-slate-100 flex flex-col font-sans selection:bg-amber-400 selection:text-slate-950 transition-colors duration-500`}>
+        <MaintenanceView
+          isUserAdmin={isUserAdmin}
+          onMakeLive={() => handleUpdateSettings({ maintenanceMode: false })}
+          onOpenAdminLogin={handleOpenAdminLogin}
+        />
+        {/* Admin Login Modal so Admin can login directly while in maintenance mode */}
+        <AdminLoginModal
+          isOpen={showAdminLoginModal}
+          onClose={() => setShowAdminLoginModal(false)}
+          onAdminLoginSuccess={handleAdminLoginSuccess}
+          allUsers={users}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen ${currentTemplate.bodyBgClass} text-slate-100 flex flex-col font-sans selection:bg-amber-400 selection:text-slate-950 transition-colors duration-500`}>
+      {/* ⚠️ Maintenance Mode Sticky Warning for Admin */}
+      {siteSettings.maintenanceMode && isUserAdmin && (
+        <div className="sticky top-0 z-50 bg-gradient-to-r from-red-600 via-amber-600 to-red-600 text-white px-4 py-2.5 shadow-2xl border-b-2 border-amber-300 flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm font-bold">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+            </span>
+            <span>
+              ⚠️ <strong>वेबसाइट मेंटनेंस मोड में है (MAINTENANCE MODE ACTIVE):</strong> सभी सामान्य यूजर्स को मेंटनेंस स्क्रीन दिख रही है। आप एडमिन के रूप में लाइव हैं।
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleUpdateSettings({ maintenanceMode: false })}
+              className="bg-white hover:bg-slate-100 text-red-700 font-black px-3.5 py-1.5 rounded-xl shadow cursor-pointer text-xs transition-all flex items-center gap-1.5"
+            >
+              <span>✅ मेंटनेंस बंद करें (Make Live)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('admin');
+                setAdminActiveModule('settings');
+              }}
+              className="bg-black/40 hover:bg-black/60 text-white font-bold px-3 py-1.5 rounded-xl cursor-pointer text-xs transition-all"
+            >
+              सेटिंग्स
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Navigation */}
       <Navbar
         currentUser={currentUser}

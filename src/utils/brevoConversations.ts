@@ -54,25 +54,21 @@ export const openBrevoChat = () => {
   }
 };
 
-// Synchronize current logged-in player / user info with Brevo Conversations
-export const syncUserToBrevoConversations = (user: User | null) => {
-  if (typeof window === 'undefined' || typeof window.BrevoConversations !== 'function') return;
-
-  try {
-    if (user) {
-      const userEmail = user.email || `${user.phone}@apnatambola.com`;
-      window.BrevoConversations('setUser', {
-        id: user.id,
-        email: userEmail,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-        walletBalance: `₹${user.walletBalance || 0}`,
-        winningBalance: `₹${user.winningBalance || 0}`,
-        referralCode: user.referralCode || 'N/A',
-      });
-    }
-  } catch (e) {
-    console.warn('Error syncing user to Brevo conversations:', e);
-  }
+export const syncUserToBrevoConversations = (_user: User | null) => {
+  // disabled
 };
+
+// Remove Brevo widget elements completely
+export const removeBrevoWidget = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    const script = document.getElementById('brevo-conversations-script');
+    if (script) script.remove();
+    document.querySelectorAll('[id*="brevo"], [class*="brevo"], iframe[src*="brevo"], #chat-widget-container').forEach((el) => {
+      try {
+        el.remove();
+      } catch (e) {}
+    });
+  } catch (e) {}
+};
+
