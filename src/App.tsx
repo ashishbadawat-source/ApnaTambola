@@ -7385,18 +7385,7 @@ export function App() {
   if (siteSettings.maintenanceMode) {
     return (
       <div className={`min-h-screen ${currentTemplate.bodyBgClass} text-slate-100 flex flex-col font-sans selection:bg-amber-400 selection:text-slate-950 transition-colors duration-500`}>
-        <MaintenanceView
-          isUserAdmin={isUserAdmin}
-          onMakeLive={() => handleUpdateSettings({ maintenanceMode: false })}
-          onOpenAdminLogin={handleOpenAdminLogin}
-        />
-        {/* Admin Login Modal so Admin can login directly while in maintenance mode */}
-        <AdminLoginModal
-          isOpen={showAdminLoginModal}
-          onClose={() => setShowAdminLoginModal(false)}
-          onAdminLoginSuccess={handleAdminLoginSuccess}
-          allUsers={users}
-        />
+        <MaintenanceView />
       </div>
     );
   }
