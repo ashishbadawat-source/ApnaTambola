@@ -348,7 +348,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
       textColor: 'text-cyan-300',
       headerBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40',
       badgeBg: 'bg-gradient-to-r from-cyan-500 to-teal-500 text-slate-950 font-black shadow-md',
-      badgeText: `₹${(currentUser?.walletBalance || 0).toLocaleString('en-IN')} कुल बैलेंस`,
+      badgeText: `₹${((Number(currentUser?.depositBalance) || 0) + (Number(currentUser?.winningBalance) || 0) + (Number(currentUser?.referralBalance) || 0)).toLocaleString('en-IN')} कुल बैलेंस`,
       iconBg: 'bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/30',
       actionText: 'डिपॉजिट / निकासी (Wallet)',
       accentPill: 'bg-cyan-950/80 border border-cyan-400/40 text-cyan-200',
@@ -504,13 +504,28 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                   {currentUser ? (currentUser.role === 'admin' ? '⭐ MASTER ADMIN' : '🎮 VERIFIED PLAYER') : '🎁 ₹10 FREE BONUS'}
                 </span>
               </div>
-              <p className="text-xs text-slate-300 font-mono">
+              <div className="text-xs text-slate-300 font-mono flex flex-wrap items-center gap-2 pt-0.5">
                 {currentUser ? (
-                  <>Player ID: <span className="text-amber-300 font-bold">{currentUser.id}</span> • {currentUser.phone || currentUser.email}</>
+                  <>
+                    <div className="flex items-center gap-1 bg-slate-950/80 px-2.5 py-1 rounded-lg border border-amber-400/30">
+                      <span className="text-slate-400">Player ID:</span>
+                      <strong className="text-amber-300 font-bold select-all">{currentUser.id}</strong>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/50 px-3 py-1 rounded-lg text-emerald-300 shadow-sm">
+                      <span className="text-emerald-400 font-bold text-[11px]">वॉलेट पेमेंट:</span>
+                      <strong className="text-emerald-300 font-black text-xs">
+                        ₹{((Number(currentUser.depositBalance) || 0) + (Number(currentUser.winningBalance) || 0) + (Number(currentUser.referralBalance) || 0)).toLocaleString('en-IN')}
+                      </strong>
+                      <span className="text-[10px] text-slate-400 font-normal pl-0.5 hidden sm:inline">
+                        (डिपॉजिट: ₹{currentUser.depositBalance || 0} • विनिंग: ₹{currentUser.winningBalance || 0} • रेफरल: ₹{currentUser.referralBalance || 0})
+                      </span>
+                    </div>
+                    <span className="text-slate-400 hidden md:inline">• {currentUser.phone || currentUser.email}</span>
+                  </>
                 ) : (
-                  'नया खाता बनाएं और ₹10 मुफ्त विथड्रॉल बोनस सीधे अपने वॉलेट में पाएं!'
+                  <span>नया खाता बनाएं और ₹10 मुफ्त विथड्रॉल बोनस सीधे अपने वॉलेट में पाएं!</span>
                 )}
-              </p>
+              </div>
               <div className="flex items-center gap-2 pt-1 flex-wrap">
                 {currentUser ? (
                   <>

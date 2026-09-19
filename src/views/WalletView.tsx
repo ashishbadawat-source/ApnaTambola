@@ -373,6 +373,18 @@ export const WalletView: React.FC<WalletViewProps> = ({
               Wallet &amp; Financials (वॉलेट व वित्तीय सेवाएं)
             </h1>
           </div>
+          <div className="flex flex-wrap items-center gap-2 mt-1.5">
+            <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-amber-400/40 text-xs font-mono">
+              <span className="text-slate-400">User ID:</span>
+              <strong className="text-amber-300 font-bold select-all">{currentUser.id}</strong>
+            </div>
+            <div className="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/50 px-3 py-1 rounded-xl text-xs font-mono shadow-sm">
+              <span className="text-emerald-400 font-bold">सटीक पेमेंट (उपलब्ध):</span>
+              <strong className="text-emerald-300 font-black text-sm">
+                ₹{((Number(currentUser.depositBalance) || 0) + (Number(currentUser.winningBalance) || 0) + (Number(currentUser.referralBalance) || 0)).toLocaleString('en-IN')}
+              </strong>
+            </div>
+          </div>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
             2-वॉलेट सिस्टम: 🎟️ टिकट वॉलेट (Deposit) + 💰 विथड्रॉल वॉलेट (Winnings) | आसान निकासी व आंतरिक ट्रांसफर
           </p>
@@ -500,10 +512,10 @@ export const WalletView: React.FC<WalletViewProps> = ({
             <span>कुल वॉलेट बैलेंस</span>
             <WalletIcon className="w-4 h-4 text-amber-400" />
           </span>
-          <div className="text-2xl sm:text-3xl font-black text-amber-400 text-glow-gold">
-            ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+          <div className="text-2xl sm:text-3xl font-black text-amber-400 text-glow-gold font-mono">
+            ₹{((Number(currentUser?.depositBalance) || 0) + (Number(currentUser?.winningBalance) || 0) + (Number(currentUser?.referralBalance) || 0)).toLocaleString('en-IN')}
           </div>
-          <p className="text-[10px] text-slate-300">डिपोजिट + विनिंग + रेफरल का योग</p>
+          <p className="text-[10px] text-slate-300">डिपॉजिट (₹{currentUser?.depositBalance || 0}) + विनिंग (₹{currentUser?.winningBalance || 0}) + रेफरल (₹{currentUser?.referralBalance || 0}) का सटीक योग</p>
           <div className="pt-1 flex items-center gap-1 text-[10px] text-slate-400 border-t border-amber-500/20">
             <span>Ready for tickets</span>
           </div>

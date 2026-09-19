@@ -541,8 +541,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                   <div className="text-left">
                     <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none">Wallet</span>
-                    <span className="text-xs sm:text-sm font-black text-amber-300 group-hover:text-amber-200">
-                      ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+                    <span className="text-xs sm:text-sm font-black text-amber-300 group-hover:text-amber-200 font-mono">
+                      ₹{((Number(currentUser?.depositBalance) || 0) + (Number(currentUser?.winningBalance) || 0) + (Number(currentUser?.referralBalance) || 0)).toLocaleString('en-IN')}
                     </span>
                   </div>
                   <button
@@ -575,19 +575,29 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                   {/* Profile Dropdown Menu */}
                   {userDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-[#111628] border-2 border-purple-500/40 p-2 shadow-2xl z-50 space-y-1 animate-in zoom-in-95">
-                      <div className="p-2.5 border-b border-slate-800">
-                        <p className="text-xs font-black text-white truncate">{currentUser.name}</p>
-                        <p className="text-[10px] text-amber-300 font-mono font-bold">
-                          {currentUser.phone || currentUser.email}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1.5">
+                    <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-[#111628] border-2 border-purple-500/40 p-2.5 shadow-2xl z-50 space-y-1.5 animate-in zoom-in-95">
+                      <div className="p-2 border-b border-slate-800 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-black text-white truncate">{currentUser.name}</p>
                           <span className="bg-purple-600/30 border border-purple-400/40 text-[9px] font-bold text-purple-200 px-2 py-0.5 rounded-full capitalize">
                             {currentUser.role === 'admin' ? '👑 Admin' : '⭐ Player'}
                           </span>
-                          <span className="bg-emerald-600/30 border border-emerald-400/40 text-[9px] font-bold text-emerald-300 px-2 py-0.5 rounded-full">
-                            ₹{currentUser.winningBalance} निकासी योग्य
-                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] font-mono bg-slate-950/80 px-2 py-1 rounded-lg border border-slate-800">
+                          <span className="text-slate-400">User ID: <strong className="text-amber-300 font-bold select-all">{currentUser.id}</strong></span>
+                        </div>
+                        <div className="bg-slate-950 p-2 rounded-xl border border-emerald-500/30 space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-emerald-400 font-bold">सटीक पेमेंट:</span>
+                            <strong className="text-emerald-300 font-black font-mono text-sm">
+                              ₹{((Number(currentUser.depositBalance) || 0) + (Number(currentUser.winningBalance) || 0) + (Number(currentUser.referralBalance) || 0)).toLocaleString('en-IN')}
+                            </strong>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono pt-0.5 border-t border-slate-800/80">
+                            <span>डिपॉजिट: ₹{currentUser.depositBalance || 0}</span>
+                            <span>विनिंग: ₹{currentUser.winningBalance || 0}</span>
+                            <span>रेफरल: ₹{currentUser.referralBalance || 0}</span>
+                          </div>
                         </div>
                       </div>
 

@@ -531,19 +531,26 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                     <span className="text-amber-300/90 font-medium">{formatUserRegistrationTime(u)}</span>
                   </div>
 
-                  <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">वॉलेट: <strong className="text-emerald-400 font-bold">₹{u.walletBalance || 0}</strong></span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAdjustingUser(u);
-                        setAdjustAmount(100);
-                        setAdjustType('credit');
-                      }}
-                      className="text-[10px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                    >
-                      एडिट बैलेंस
-                    </button>
+                  <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">कुल पेमेंट: <strong className="text-emerald-400 font-black font-mono">₹{((Number(u.depositBalance) || 0) + (Number(u.winningBalance) || 0) + (Number(u.referralBalance) || 0)).toLocaleString('en-IN')}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdjustingUser(u);
+                          setAdjustAmount(100);
+                          setAdjustType('credit');
+                        }}
+                        className="text-[10px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                      >
+                        एडिट बैलेंस
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono">
+                      <span className="text-blue-300">डिपॉजिट: ₹{u.depositBalance || 0}</span>
+                      <span className="text-emerald-300">विनिंग: ₹{u.winningBalance || 0}</span>
+                      <span className="text-purple-300">रेफरल: ₹{u.referralBalance || 0}</span>
+                    </div>
                   </div>
                 </div>
               );
@@ -672,7 +679,7 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                               ) : null}
                             </div>
                             <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                              <span>ID: {user.id}</span>
+                              <span>ID: <strong className="text-amber-300 font-bold select-all">{user.id}</strong></span>
                               <button
                                 type="button"
                                 onClick={() => handleCopyUserId(user.id)}
@@ -681,6 +688,9 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                               >
                                 <Copy className="w-2.5 h-2.5" />
                               </button>
+                              <span className="text-emerald-400 font-bold ml-1">
+                                • पेमेंट: ₹{((Number(user.depositBalance) || 0) + (Number(user.winningBalance) || 0) + (Number(user.referralBalance) || 0)).toLocaleString('en-IN')}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -732,15 +742,15 @@ export const ModuleUsers: React.FC<ModuleUsersProps> = ({
                         </div>
                       </td>
 
-                      {/* Wallet Balances */}
+                      {/* Wallet Balances - Exact Payment (कम नहीं ज्यादा नहीं) */}
                       <td className="px-4 py-3.5 space-y-0.5">
-                        <div className="text-amber-300 font-black text-xs">
-                          ₹{((user?.walletBalance ?? ((user?.depositBalance || 0) + (user?.winningBalance || 0) + (user?.referralBalance || 0))) || 0).toLocaleString('en-IN')}
+                        <div className="text-emerald-400 font-black text-xs font-mono">
+                          ₹{((Number(user?.depositBalance) || 0) + (Number(user?.winningBalance) || 0) + (Number(user?.referralBalance) || 0)).toLocaleString('en-IN')}
                         </div>
-                        <div className="text-[10px] text-slate-400 flex items-center gap-2">
-                          <span>Dep: ₹{user.depositBalance || 0}</span>
-                          <span>Win: ₹{user.winningBalance || 0}</span>
-                          <span>Ref: ₹{user.referralBalance || 0}</span>
+                        <div className="text-[10px] text-slate-400 flex items-center gap-2 font-mono">
+                          <span className="text-blue-300">डिपॉजिट: ₹{user.depositBalance || 0}</span>
+                          <span className="text-emerald-300">विनिंग: ₹{user.winningBalance || 0}</span>
+                          <span className="text-purple-300">रेफरल: ₹{user.referralBalance || 0}</span>
                         </div>
                       </td>
 

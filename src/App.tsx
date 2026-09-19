@@ -776,38 +776,22 @@ export function App() {
             return merged;
           });
 
-          // Instantly sync active currentUser wallet if any deposit has been approved
+          // Maintain exact currentUser balance synced with verified sub-balances
           setCurrentUser((prevUser) => {
             if (!prevUser) return null;
-            const cleanPrevPhone = prevUser.phone ? prevUser.phone.replace(/\D/g, '').slice(-10) : '';
-            const myApprovedDeps = firestoreDeps.filter((d) => {
-              if (d.status !== 'approved') return false;
-              if (d.userId === prevUser.id) return true;
-              const cleanDPhone = d.userPhone ? d.userPhone.replace(/\D/g, '').slice(-10) : '';
-              if (cleanPrevPhone && cleanDPhone && cleanPrevPhone === cleanDPhone) return true;
-              if (prevUser.email && d.userEmail && prevUser.email.toLowerCase() === d.userEmail.toLowerCase()) return true;
-              return false;
-            });
-
-            if (myApprovedDeps.length > 0) {
-              let totalApprovedDeposit = 0;
-              myApprovedDeps.forEach((d) => {
-                totalApprovedDeposit += (d.amount + (d.registrationBonus || 0));
-              });
-
-              if ((prevUser.depositBalance || 0) < totalApprovedDeposit) {
-                const updated = {
-                  ...prevUser,
-                  depositBalance: totalApprovedDeposit,
-                  hasDeposited: true,
-                  firstDepositBonusClaimed: true,
-                  walletBalance: totalApprovedDeposit + (prevUser.winningBalance || 0) + (prevUser.referralBalance || 0),
-                };
-                try {
-                  localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
-                } catch (e) {}
-                return updated;
-              }
+            const currentDep = Number(prevUser.depositBalance) || 0;
+            const currentWin = Number(prevUser.winningBalance) || 0;
+            const currentRef = Number(prevUser.referralBalance) || 0;
+            const exactWallet = currentDep + currentWin + currentRef;
+            if (prevUser.walletBalance !== exactWallet) {
+              const updated = {
+                ...prevUser,
+                walletBalance: exactWallet,
+              };
+              try {
+                localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+              } catch (e) {}
+              return updated;
             }
             return prevUser;
           });
@@ -1282,11 +1266,12 @@ export function App() {
                   ...prev,
                   ...remote,
                   role: isMasterAdmin ? 'admin' : (remote.role || prev.role || 'user'),
-                  // Ensure balances never drop unexpectedly
-                  depositBalance: Math.max(prev.depositBalance || 0, remote.depositBalance || 0),
-                  winningBalance: Math.max(prev.winningBalance || 0, remote.winningBalance || 0),
-                  referralBalance: Math.max(prev.referralBalance || 0, remote.referralBalance || 0),
-                  walletBalance: Math.max(prev.walletBalance || 0, remote.walletBalance || 0),
+                  depositBalance: remote.depositBalance !== undefined ? remote.depositBalance : (prev.depositBalance || 0),
+                  winningBalance: remote.winningBalance !== undefined ? remote.winningBalance : (prev.winningBalance || 0),
+                  referralBalance: remote.referralBalance !== undefined ? remote.referralBalance : (prev.referralBalance || 0),
+                  walletBalance: (Number(remote.depositBalance !== undefined ? remote.depositBalance : prev.depositBalance) || 0) +
+                                 (Number(remote.winningBalance !== undefined ? remote.winningBalance : prev.winningBalance) || 0) +
+                                 (Number(remote.referralBalance !== undefined ? remote.referralBalance : prev.referralBalance) || 0),
                 };
                 try {
                   localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
@@ -1372,42 +1357,24 @@ export function App() {
                 localStorage.setItem('apna_tambola_deposits', JSON.stringify(merged));
               } catch (e) {}
 
-              // Also check if currentUser has any approved deposit and update depositBalance immediately
-              setCurrentUser((prevUser) => {
-                if (!prevUser) return null;
-                const cleanPrevPhone = prevUser.phone ? prevUser.phone.replace(/\D/g, '').slice(-10) : '';
-                const myApproved = merged.filter((d) => {
-                  if (d.status !== 'approved') return false;
-                  if (d.userId === prevUser.id) return true;
-                  const cleanDPhone = d.userPhone ? d.userPhone.replace(/\D/g, '').slice(-10) : '';
-                  if (cleanPrevPhone && cleanDPhone && cleanPrevPhone === cleanDPhone) return true;
-                  if (prevUser.email && d.userEmail && prevUser.email.toLowerCase() === d.userEmail.toLowerCase()) return true;
-                  return false;
-                });
-
-                if (myApproved.length > 0) {
-                  let totalApproved = 0;
-                  myApproved.forEach((d) => {
-                    totalApproved += (d.amount + (d.registrationBonus || 0));
-                  });
-                  if ((prevUser.depositBalance || 0) < totalApproved) {
-                    const updated = {
-                      ...prevUser,
-                      depositBalance: totalApproved,
-                      hasDeposited: true,
-                      firstDepositBonusClaimed: true,
-                      walletBalance: totalApproved + (prevUser.winningBalance || 0) + (prevUser.referralBalance || 0),
-                    };
-                    try {
-                      localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
-                    } catch (e) {}
-                    return updated;
-                  }
-                }
-                return prevUser;
-              });
-
               return merged;
+            });
+
+            // Keep currentUser wallet mathematically exact (deposit + winning + referral)
+            setCurrentUser((prevUser) => {
+              if (!prevUser) return null;
+              const curDep = Number(prevUser.depositBalance) || 0;
+              const curWin = Number(prevUser.winningBalance) || 0;
+              const curRef = Number(prevUser.referralBalance) || 0;
+              const exactBal = curDep + curWin + curRef;
+              if (prevUser.walletBalance !== exactBal) {
+                const updated = { ...prevUser, walletBalance: exactBal };
+                try {
+                  localStorage.setItem('apna_tambola_auth_user', JSON.stringify(updated));
+                } catch (e) {}
+                return updated;
+              }
+              return prevUser;
             });
           }
           if (Array.isArray(data.withdrawals) && data.withdrawals.length > 0) {
@@ -2532,11 +2499,10 @@ export function App() {
         mergedUser = {
           ...existing,
           ...user,
-          // CRITICAL: Preserve higher balances so approved deposit funds are NEVER wiped out
-          depositBalance: Math.max(existing.depositBalance || 0, user.depositBalance || 0),
-          winningBalance: Math.max(existing.winningBalance || 0, user.winningBalance || 0),
-          referralBalance: Math.max(existing.referralBalance || 0, user.referralBalance || 0),
-          bonusRewardBalance: user.bonusRewardBalance !== undefined ? user.bonusRewardBalance : (existing.bonusRewardBalance || 0),
+          depositBalance: existing.depositBalance !== undefined ? existing.depositBalance : (user.depositBalance || 0),
+          winningBalance: existing.winningBalance !== undefined ? existing.winningBalance : (user.winningBalance || 0),
+          referralBalance: existing.referralBalance !== undefined ? existing.referralBalance : (user.referralBalance || 0),
+          bonusRewardBalance: existing.bonusRewardBalance !== undefined ? existing.bonusRewardBalance : (user.bonusRewardBalance || 0),
           hasDeposited: existing.hasDeposited || user.hasDeposited || false,
           firstDepositBonusClaimed: existing.firstDepositBonusClaimed || user.firstDepositBonusClaimed || false,
           referredBy: user.referredBy || existing.referredBy || '',
@@ -2544,34 +2510,11 @@ export function App() {
           referralCode: user.referralCode || existing.referralCode,
           role: user.role || existing.role || 'user',
         };
-        mergedUser.walletBalance = (mergedUser.depositBalance || 0) + (mergedUser.winningBalance || 0) + (mergedUser.referralBalance || 0);
+        mergedUser.walletBalance = (Number(mergedUser.depositBalance) || 0) + (Number(mergedUser.winningBalance) || 0) + (Number(mergedUser.referralBalance) || 0);
         updated = prev.map((u) => (u.id === existing.id ? mergedUser : u));
       } else {
+        mergedUser.walletBalance = (Number(mergedUser.depositBalance) || 0) + (Number(mergedUser.winningBalance) || 0) + (Number(mergedUser.referralBalance) || 0);
         updated = [mergedUser, ...prev];
-      }
-
-      // Check if user has any approved deposits in deposits state and ensure funds are credited
-      const userApprovedDeps = (deposits || []).filter((d) => {
-        if (d.status !== 'approved') return false;
-        if (d.userId === mergedUser.id) return true;
-        const cleanDPhone = d.userPhone ? d.userPhone.replace(/\D/g, '').slice(-10) : '';
-        if (cleanUserPhone && cleanDPhone && cleanUserPhone === cleanDPhone) return true;
-        if (mergedUser.email && d.userEmail && mergedUser.email.toLowerCase() === d.userEmail.toLowerCase()) return true;
-        return false;
-      });
-
-      if (userApprovedDeps.length > 0) {
-        let totalApprovedDeposit = 0;
-        userApprovedDeps.forEach((d) => {
-          totalApprovedDeposit += (d.amount + (d.registrationBonus || 0));
-        });
-        if ((mergedUser.depositBalance || 0) < totalApprovedDeposit) {
-          mergedUser.depositBalance = totalApprovedDeposit;
-          mergedUser.hasDeposited = true;
-          mergedUser.firstDepositBonusClaimed = true;
-          mergedUser.walletBalance = totalApprovedDeposit + (mergedUser.winningBalance || 0) + (mergedUser.referralBalance || 0);
-          updated = updated.map((u) => (u.id === mergedUser.id ? mergedUser : u));
-        }
       }
 
       try {
@@ -3577,11 +3520,7 @@ export function App() {
         newReferral = 0;
       }
 
-      const newWallet = Math.max(0, currentWal - totalCost);
-      const subTotal = newDeposit + newWinning + newReferral;
-      if (subTotal !== newWallet) {
-        newDeposit = Math.max(0, newWallet - (newWinning + newReferral));
-      }
+      const newWallet = newDeposit + newWinning + newReferral;
 
       const updatedCurrentUser: User = {
         ...currentUser,

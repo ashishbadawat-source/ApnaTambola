@@ -385,11 +385,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     VIP Level {currentUser.level || 1}
                   </span>
                 </h1>
-                <p className="text-xs text-slate-400 mt-0.5 flex items-center justify-center sm:justify-start gap-3">
-                  <span>ID: <strong className="text-slate-200 font-mono">{currentUser.id}</strong></span>
-                  <span>•</span>
-                  <span>Ref: <strong className="text-amber-400 font-mono">{currentUser.referralCode || 'TB999'}</strong></span>
-                </p>
+                
+                {/* User ID with Exact Payment / Wallet Display (कम नहीं ज्यादा नहीं) */}
+                <div className="mt-1.5 flex flex-wrap items-center justify-center sm:justify-start gap-2 font-mono text-xs">
+                  <div className="flex items-center gap-1.5 bg-slate-950/90 border border-amber-400/40 px-2.5 py-1 rounded-xl text-xs">
+                    <span className="text-slate-400">यूजर ID:</span>
+                    <strong className="text-amber-300 font-bold select-all">{currentUser.id}</strong>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-emerald-950/90 border border-emerald-500/50 px-3 py-1 rounded-xl text-xs shadow-sm">
+                    <span className="text-emerald-400 font-bold">पेमेंट (उपलब्ध):</span>
+                    <strong className="text-emerald-300 font-black text-sm">
+                      ₹{((Number(currentUser?.depositBalance) || 0) + (Number(currentUser?.winningBalance) || 0) + (Number(currentUser?.referralBalance) || 0)).toLocaleString('en-IN')}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-700/80 px-2.5 py-1 rounded-xl text-[11px] text-slate-300">
+                    <span className="text-slate-400">Ref:</span>
+                    <strong className="text-amber-400">{currentUser.referralCode || 'TB999'}</strong>
+                  </div>
+                </div>
               </div>
 
               {/* Photo Upload Action Buttons & Logout Button */}
@@ -439,30 +452,30 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               </div>
             )}
 
-            {/* Wallet Overview Summary Cards */}
+            {/* Wallet Overview Summary Cards - Exact Balances (कम नहीं ज्यादा नहीं) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Wallet</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">कुल वॉलेट (Total)</span>
                 <span className="text-base sm:text-lg font-black text-amber-400">
-                  ₹{(currentUser?.walletBalance || 0).toLocaleString('en-IN')}
+                  ₹{((Number(currentUser?.depositBalance) || 0) + (Number(currentUser?.winningBalance) || 0) + (Number(currentUser?.referralBalance) || 0)).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Winnings</span>
+                <span className="text-[10px] uppercase font-bold text-blue-400 block">डिपॉजिट (Deposit)</span>
+                <span className="text-base sm:text-lg font-black text-blue-400">
+                  ₹{(Number(currentUser?.depositBalance) || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-emerald-400 block">विनिंग (Winnings)</span>
                 <span className="text-base sm:text-lg font-black text-emerald-400">
-                  ₹{(currentUser?.winningBalance || 0).toLocaleString('en-IN')}
+                  ₹{(Number(currentUser?.winningBalance) || 0).toLocaleString('en-IN')}
                 </span>
               </div>
               <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Tickets Played</span>
+                <span className="text-[10px] uppercase font-bold text-purple-400 block">रेफरल (Referral)</span>
                 <span className="text-base sm:text-lg font-black text-purple-400">
-                  {currentUser?.gamesPlayed || 42}
-                </span>
-              </div>
-              <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Won</span>
-                <span className="text-base sm:text-lg font-black text-amber-300">
-                  ₹{(currentUser?.totalWinnings || 18500).toLocaleString('en-IN')}
+                  ₹{(Number(currentUser?.referralBalance) || 0).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>

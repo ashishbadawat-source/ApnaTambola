@@ -895,6 +895,9 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                           <Copy className="w-3 h-3" />
                         </button>
                       </div>
+                      <div className="text-[10px] font-mono text-emerald-400 font-bold mt-1">
+                        पेमेंट: ₹{((Number(u.depositBalance) || 0) + (Number(u.winningBalance) || 0) + (Number(u.referralBalance) || 0)).toLocaleString('en-IN')}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -906,10 +909,10 @@ export const ModuleWallets: React.FC<ModuleWalletsProps> = ({
                       </div>
                     </td>
                     <td className="px-4 py-3 font-mono text-blue-300">₹{u.depositBalance || 0}</td>
-                    <td className="px-4 py-3 font-mono text-pink-300 font-bold">₹{u.winningBalance || 0}</td>
-                    <td className="px-4 py-3 font-mono text-emerald-400 font-bold">₹{u.referralBalance || 0}</td>
-                    <td className="px-4 py-3 font-black text-amber-300 text-sm">
-                      ₹{((u?.walletBalance ?? ((u?.depositBalance || 0) + (u?.winningBalance || 0) + (u?.referralBalance || 0))) || 0).toLocaleString('en-IN')}
+                    <td className="px-4 py-3 font-mono text-emerald-300 font-bold">₹{u.winningBalance || 0}</td>
+                    <td className="px-4 py-3 font-mono text-purple-300 font-bold">₹{u.referralBalance || 0}</td>
+                    <td className="px-4 py-3 font-black text-emerald-400 text-sm font-mono">
+                      ₹{((Number(u.depositBalance) || 0) + (Number(u.winningBalance) || 0) + (Number(u.referralBalance) || 0)).toLocaleString('en-IN')}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
